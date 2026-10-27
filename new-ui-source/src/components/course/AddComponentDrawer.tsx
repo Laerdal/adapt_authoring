@@ -5,9 +5,23 @@ import {
 } from "../../api/adaptAuthoring";
 import { StructureIcon, STRUCTURE_ICON_COLOR_CLASS } from "./StructureIcons";
 
-// Best-effort category grouping for the picker. Unknown component keys fall
-// into "Other". Keyed by the engine `_component` name (lower-cased).
+// Category grouping for the picker, matching the spec's 4 groups. Unknown
+// component keys fall into "Other" (a safety net, not one of the spec's own
+// groups) so an installed component this map doesn't recognise still shows
+// up somewhere instead of silently disappearing. Keyed by the engine
+// `_component` name (lower-cased) — verified against each plugin's own
+// bower.json `component` field in the sibling adapt-framework-plugins repo
+// where possible; core Adapt framework contrib components (text, graphic,
+// mcq, narrative, hotgraphic, slider, etc.) aren't in that repo at all, so
+// their keys follow the community's standard naming convention.
+//
+// IMPORTANT: every key here MUST be all-lowercase. categoryOf() always does
+// `key.toLowerCase()` before looking it up, so a mixed-case key (e.g. a
+// bower.json `component` value with camelCase, like "lottieInteractivity")
+// silently never matches and the component falls through to "Other" with no
+// error — confirmed as a real mistake made twice when adding new entries.
 const CATEGORY_BY_COMPONENT: Record<string, string> = {
+  // Content — presenting information, media, or embedded content.
   text: "Content",
   graphic: "Content",
   image: "Content",
@@ -16,21 +30,84 @@ const CATEGORY_BY_COMPONENT: Record<string, string> = {
   audio: "Content",
   code: "Content",
   blank: "Content",
-  mcq: "Interactive",
-  gmcq: "Interactive",
-  matching: "Interactive",
-  textinput: "Interactive",
-  slider: "Interactive",
+  "laerdal-imageslider": "Content", // adapt-laerdal-image-slider
+  "laerdal-iframe": "Content",
+  "animation-frame": "Content", // adapt-laerdal-animation-frame
+  "manifest": "Content", // adapt-laerdal-lottie
+  "laerdal-media-playlist": "Content", // adapt-laerdal-lottie
+  "laerdal-text": "Content", // adapt-laerdal-lottie
+  "laerdal-media": "Content", // adapt-laerdal-quiz
+  "talk": "Content", // adapt-laerdal-quiz
+
+  // Interactive — requires learner interaction to explore/reveal information.
   accordion: "Interactive",
-  hotgrid: "Interactive",
   narrative: "Interactive",
+  "laerdal-narrative": "Interactive",
+  hotgraphic: "Interactive", // core adapt-contrib-hotgraphic ("Hot Graphic")
+  "laerdal-hotgraphic": "Interactive", // adapt-laerdal-hotgraphic ("Laerdal Hot Graphic")
+  hotgrid: "Interactive",
+  "laerdal-h5p": "Interactive",
   tabs: "Interactive",
   reveal: "Interactive",
-};
-const CATEGORY_ORDER = ["Content", "Interactive", "Other"];
+  "laerdal-flipcard": "Interactive",
+  "laerdal-tabs": "Interactive",
+  "actionplan": "Interactive",
+  "laerdal-lottieinteractivity": "Interactive",
+  "cards": "Interactive",
 
-function categoryOf(key: string): string {
-  return CATEGORY_BY_COMPONENT[key.toLowerCase()] ?? "Other";
+  // Questions — capturing or evaluating a learner response.
+  mcq: "Questions",
+  gmcq: "Questions",
+  matching: "Questions",
+  sentenceordering: "Questions", // adapt-laerdal-sentenceOrdering
+  slider: "Questions",
+  assessmentresults: "Questions", // core adapt-contrib-assessmentResults
+  diagnosticresults: "Questions", // adapt-diagnosticResults
+  "laerdal-slider": "Questions",
+  textinput: "Questions",
+  "draganddropzone": "Questions",
+  "laerdal-checklist": "Questions",
+
+  // Survey — collecting learner feedback/input that isn't assessment-based.
+  "laerdal-user-feedback": "Survey",
+  "laerdal-form": "Survey",
+};
+
+// Fallback for components whose exact engine key isn't confirmed above —
+// matched against a normalized (lower-cased, non-alphanumeric stripped)
+// displayName substring, since that's more likely to stay stable across
+// plugin versions than guessing the internal `_component` string.
+const CATEGORY_BY_DISPLAY_NAME_CONTAINS: Array<{ needle: string; category: string }> = [
+  { needle: "imageslider", category: "Content" },
+  { needle: "assessmentresults", category: "Questions" },
+];
+
+const CATEGORY_DESCRIPTIONS: Record<string, string> = {
+  Content: "For presenting information, media, or embedded content.",
+  Interactive: "For content that requires learner interaction to explore or reveal information.",
+  Questions: "For capturing or evaluating a learner response.",
+  Survey: "For collecting learner feedback or input that isn't primarily assessment-based.",
+};
+
+const CATEGORY_ORDER = ["Content", "Interactive", "Questions", "Survey", "Other"];
+
+function normalize(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+// Normalizes CATEGORY_BY_COMPONENT's own keys to lowercase once, so a
+// contributor accidentally typing a mixed-case key there (has happened twice)
+// still works instead of silently falling through to "Other".
+const NORMALIZED_CATEGORY_BY_COMPONENT: Record<string, string> = Object.fromEntries(
+  Object.entries(CATEGORY_BY_COMPONENT).map(([key, category]) => [key.toLowerCase(), category])
+);
+
+function categoryOf(key: string, displayName: string): string {
+  const byKey = NORMALIZED_CATEGORY_BY_COMPONENT[key.toLowerCase()];
+  if (byKey) return byKey;
+  const normalizedName = normalize(displayName);
+  const match = CATEGORY_BY_DISPLAY_NAME_CONTAINS.find((m) => normalizedName.includes(m.needle));
+  return match ? match.category : "Other";
 }
 
 interface AddComponentDrawerProps {
@@ -84,7 +161,7 @@ export default function AddComponentDrawer({ onSelect, onClose }: AddComponentDr
     });
     const groups: Record<string, ComponentTypeOption[]> = {};
     for (const c of filtered) {
-      const cat = categoryOf(c.component);
+      const cat = categoryOf(c.component, c.displayName);
       (groups[cat] ||= []).push(c);
     }
     return CATEGORY_ORDER.filter((cat) => groups[cat]?.length).map((cat) => ({
@@ -161,9 +238,16 @@ export default function AddComponentDrawer({ onSelect, onClose }: AddComponentDr
           ) : (
             grouped.map(({ category, items }) => (
               <div key={category} className="mb-4">
-                <p className="px-2 pb-1.5 text-[10px] font-semibold uppercase tracking-widest text-[#9ca3af]">
-                  {category}
-                </p>
+                <div className="px-2 pb-1.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-[#9ca3af]">
+                    {category}
+                  </p>
+                  {CATEGORY_DESCRIPTIONS[category] && (
+                    <p className="mt-0.5 text-[11px] normal-case tracking-normal text-[#9ca3af]">
+                      {CATEGORY_DESCRIPTIONS[category]}
+                    </p>
+                  )}
+                </div>
                 <div className="space-y-1">
                   {items.map((c) => (
                     <button

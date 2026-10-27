@@ -916,6 +916,10 @@ define(function(require) {
       if (!fieldView) {
         return;
       }
+      if (fieldView.editor.hasNestedForm) {
+        fieldView.setValue(value || {});
+        return;
+      }
       var inputType = fieldView.schema.inputType.type || fieldView.schema.inputType;
       // Colour picker
       if (inputType === 'ColourPicker') {
@@ -1343,5 +1347,3 @@ define(function(require) {
   return ThemingView;
 
 });
-
-

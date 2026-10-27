@@ -352,7 +352,28 @@ html, body {
   min-width: 0;
 }
 .rich-text-editor-field .ck.ck-editor {
+  --ck-color-focus-border: var(--ck-color-base-border);
   width: 100%;
+}
+.rich-text-editor-field .ck.ck-editor__main,
+.rich-text-editor-field .ck.ck-editor__editable,
+.rich-text-editor-field .ck-source-editing-area,
+.rich-text-editor-field .ck-source-editing-area textarea {
+  border-radius: 0 !important;
+}
+.rich-text-editor-field .ck.ck-editor__editable.ck-focused:not(.ck-editor__nested-editable) {
+  border-color: var(--ck-color-base-border) !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+/* Right-panel editors live inside the panel's own scroll container. Keep the
+   toolbar in normal flow so focusing the editable area cannot make it detach
+   and pin itself while the panel scrolls. */
+.rich-text-editor-field .ck-sticky-panel,
+.rich-text-editor-field .ck-sticky-panel__content {
+  position: static !important;
+  top: auto !important;
+  width: 100% !important;
 }
 .rich-text-editor-field .ck.ck-toolbar {
   width: 100%;
@@ -367,6 +388,8 @@ html, body {
 .rich-text-editor-field .ck.ck-toolbar .ck-button {
   border-radius: 4px;
   color: var(--life-primary-700);
+  min-height: 26px;
+  padding: 2px 4px;
 }
 .rich-text-editor-field .ck.ck-toolbar .ck-button:hover:not(.ck-disabled),
 .rich-text-editor-field .ck.ck-toolbar .ck-button.ck-on {
@@ -374,8 +397,8 @@ html, body {
   color: var(--life-primary-700) !important;
 }
 .rich-text-editor-field .ck.ck-toolbar .ck-button__icon {
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
 }
 .rich-text-editor-field .ck.ck-toolbar .ck-button__icon[viewBox="0 0 20 20"],
 .rich-text-editor-field .ck.ck-toolbar .ck-button__icon[viewBox="0 0 115.28 122.88"] {
@@ -398,6 +421,12 @@ html, body {
 .rich-text-editor-field .ck.ck-button.ck-button_with-text .ck-button__label {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Extension setting fields use one compact 12px scale, but CKEditor's own
+   toolbar/content styles must remain in control of the editor surface. */
+.extension-settings-content *:not(.rich-text-editor-field):not(.rich-text-editor-field *) {
+  font-size: 12px !important;
 }
 
 /* ────────────────────────────────────────────────────────────────────
@@ -590,6 +619,18 @@ html, body {
 }
 .sb-panel-collapse-btn:hover {
   background: var(--life-color-bg-surface-hover);
+}
+
+.sb-storyboard-focus-target {
+  border-radius: 12px;
+  outline: 2px solid color-mix(in oklab, var(--life-primary-500) 70%, white);
+  outline-offset: 6px;
+  background: color-mix(in oklab, var(--life-primary-500) 6%, transparent);
+  transition: outline-color 0.18s ease, background 0.18s ease;
+}
+
+.bn-side-menu > :not([data-test="dragHandle"]) {
+  display: none !important;
 }
 
 /* Storyboard card — comment threads, activity rows, generation results. */

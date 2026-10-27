@@ -1,9 +1,14 @@
-import { useEffect, useState, useCallback, useRef } from "react";
-import { saveThemeForCourse, saveThemeVariables, getThemePresets, saveThemePreset, applyThemePreset, getThemePresetParentTheme, renameThemePreset, deleteThemePreset, type ThemePreset } from "../../api/adaptAuthoring";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
+import { saveThemeForCourse, saveThemeVariables, getThemePresets, saveThemePreset, applyThemePreset, getThemePresetParentTheme, renameThemePreset, deleteThemePreset, getThemeTypeVariablesSchemaByLabel, type ThemePreset } from "../../api/adaptAuthoring";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
 import InfoIcon, { InfoFieldLabel } from "../../components/common/InfoIcon";
+import { SaveChangesButton } from "./SaveChangesButton";
+import { SaveStatusToast } from "./SaveStatusToast";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
+import { ON_SCREEN_CLASS_OPTIONS } from "../../helpers/onScreenSettings";
+import { updateCustomThemeSetting } from "./customThemeSettings";
 
 // Extracted from SetupPage to keep select-theme feature isolated with no behavior changes.
 
@@ -50,6 +55,16 @@ const PREVIEW_TITLE_SIZE: Record<string, string | null> = {
 
 const PAGE_TITLE_SIZE_REM: Record<string, number> = {
   H1: 3.5, H2: 3, H3: 2.5, H4: 2, H5: 1.5, Paragraph: 1.125,
+};
+
+export const THEME_PREVIEW_INFO = {
+  title: "Info",
+  livePreviewLabel: "Live Preview",
+  livePreviewText:
+    "The live preview shows how heading and paragraph fonts, text colours (including font, heading, instruction, and link styles), and background colours for pages, articles, blocks, and components will appear. It also reflects navigation background settings and progress fill colours. Please note that preview colours may differ slightly from the final rendered output, as text colours are adjusted during course preview to ensure optimal visual consistency.",
+  accessibilityLabel: "Accessibility",
+  accessibilityText:
+    "Colour contrast is automatically checked across navigation elements, menus, notify pop‑ups, and drawers to ensure accessibility compliance. During course preview, text colours may be modified to maintain proper contrast ratios, which can result in slight variations from the initial preview.",
 };
 
 function calcDesktopSizes(baseRem: number) {
@@ -193,7 +208,7 @@ function FontSelect({ label, value, onChange }: { label: string; value: string; 
 function Accordion({ title, icon, children, defaultOpen = false }: { title: string; icon: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border border-[#e5e7eb] rounded-xl overflow-hidden bg-white">
+    <div className="border border-[#e5e7eb] rounded-xl overflow-visible bg-white">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -300,6 +315,35 @@ function ThemePreview({ cfg }: { cfg: CustomThemeValues }) {
               <button type="button" className="px-4 py-1.5 rounded text-xs font-medium border" style={{ borderColor: cfg.primaryColor, color: cfg.primaryColor, fontFamily: cfg.paragraphFont }}>Previous</button>
               <button type="button" className="px-4 py-1.5 rounded text-xs font-semibold text-white" style={{ backgroundColor: cfg.primaryColor, fontFamily: cfg.paragraphFont }}>Next</button>
             </div>
+          </div>
+        </div>
+
+        <div
+          className="mt-4 rounded-xl p-4 shadow-sm"
+          style={{
+            background: '#FFFBEB',
+            border: '1px solid #FEE685',
+            color: '#973C00',
+          }}
+        >
+          <div className="flex items-center gap-2 mb-3">
+            <div
+              className="flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold"
+              style={{ background: '#FDE68A', color: '#973C00' }}
+            >
+              i
+            </div>
+            <span className="text-sm font-bold" style={{ color: '#973C00' }}>{THEME_PREVIEW_INFO.title}</span>
+          </div>
+
+          <div className="mb-4">
+            <div className="text-sm font-semibold mb-1.5" style={{ color: '#7A3000' }}>{THEME_PREVIEW_INFO.livePreviewLabel}</div>
+            <p className="text-xs leading-relaxed" style={{ color: '#973C00' }}>{THEME_PREVIEW_INFO.livePreviewText}</p>
+          </div>
+
+          <div>
+            <div className="text-sm font-semibold mb-1.5" style={{ color: '#7A3000' }}>{THEME_PREVIEW_INFO.accessibilityLabel}</div>
+            <p className="text-xs leading-relaxed" style={{ color: '#973C00' }}>{THEME_PREVIEW_INFO.accessibilityText}</p>
           </div>
         </div>
       </div>
@@ -548,6 +592,22 @@ function normalizeName(v?: string): string {
   return (v ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+export function getThemeSchemaDefaults(fields: Record<string, unknown>): Record<string, unknown> {
+  const defaults: Record<string, unknown> = {};
+  Object.entries(fields).forEach(([key, value]) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+    const field = value as Record<string, unknown>;
+    if (field.default !== undefined) {
+      defaults[key] = structuredClone(field.default);
+    } else if (field.properties && typeof field.properties === 'object' && !Array.isArray(field.properties)) {
+      defaults[key] = getThemeSchemaDefaults(field.properties as Record<string, unknown>);
+    } else if (field.type === 'array') {
+      defaults[key] = [];
+    }
+  });
+  return defaults;
+}
+
 function mapThemeNameToId(themeName?: string): string | null {
   const n = normalizeName(themeName);
   if (!n) return null;
@@ -664,6 +724,74 @@ const CUSTOM_ACCORDION_DEFS: CustomSectionDef[] = [
   },
 ];
 
+function getSchemaText(schema: Record<string, unknown> | null | undefined, key: string): string | undefined {
+  const value = schema?.[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
+function getSchemaSections(
+  schema: Record<string, unknown> | null | undefined,
+): Record<string, unknown> | null | undefined {
+  const variables = schema?.variables;
+  return variables && typeof variables === 'object' && !Array.isArray(variables)
+    ? variables as Record<string, unknown>
+    : schema;
+}
+
+function getSchemaField(
+  sections: Record<string, unknown> | null | undefined,
+  sectionId: string,
+  fieldKey?: string,
+): Record<string, unknown> | undefined {
+  const section = sections?.[sectionId] as Record<string, unknown> | undefined;
+  if (!section) return undefined;
+  if (!fieldKey) return section;
+  const properties = section.properties as Record<string, unknown> | undefined;
+  const field = properties?.[fieldKey] as Record<string, unknown> | undefined;
+  return field;
+}
+
+function getSchemaNestedFieldText(
+  fieldSchema: Record<string, unknown> | null | undefined,
+  nestedKey: string,
+  textKey: string,
+): string | undefined {
+  const nestedFields = fieldSchema?.properties as Record<string, unknown> | undefined;
+  const nestedField = nestedFields?.[nestedKey] as Record<string, unknown> | undefined;
+  return getSchemaText(nestedField, textKey);
+}
+
+function getSchemaArrayItemField(
+  fieldSchema: Record<string, unknown> | null | undefined,
+  nestedKey: string,
+): Record<string, unknown> | undefined {
+  const items = fieldSchema?.items as Record<string, unknown> | undefined;
+  const nestedFields = items?.properties as Record<string, unknown> | undefined;
+  return nestedFields?.[nestedKey] as Record<string, unknown> | undefined;
+}
+
+function getSchemaArrayItemFieldText(
+  fieldSchema: Record<string, unknown> | null | undefined,
+  nestedKey: string,
+  textKey: string,
+): string | undefined {
+  return getSchemaText(getSchemaArrayItemField(fieldSchema, nestedKey), textKey);
+}
+
+function getThemeComponentSectionSchema(
+  schema: Record<string, unknown> | null | undefined,
+): Record<string, unknown> | undefined {
+  return getSchemaField(schema, '_componentConfig') ?? getSchemaField(schema, '_components');
+}
+
+function getSchemaPropertyField(
+  sectionSchema: Record<string, unknown> | null | undefined,
+  fieldKey: string,
+): Record<string, unknown> | undefined {
+  const properties = sectionSchema?.properties as Record<string, unknown> | undefined;
+  return properties?.[fieldKey] as Record<string, unknown> | undefined;
+}
+
 const CUSTOM_FIELD_DEFAULTS: Record<string, string> = {
   '_global::_primaryBrandColor': '#2e7fa1',
   '_global::_secondaryBrandColor': '#25837e',
@@ -700,13 +828,6 @@ const CUSTOM_FIELD_DEFAULTS: Record<string, string> = {
   '_notify::notify': '#ffffff',
   '_notify::drawer': '#ffffff',
   '_notify::notify-title-color': '',
-};
-
-// Mirrors linkedProperties in custom-theme properties.schema.
-// Format uses UI keys: "sectionId::fieldKey".
-const CUSTOM_LINKED_PROPERTY_MAP: Record<string, string[]> = {
-  '_global::_primaryBrandColor': ['_progress::progress', '_global::link', '_nav::nav', '_pageStructure::page-header-background-color'],
-  '_progress::progress': ['_nav::nav-progress', '_menu::menu-item-progress'],
 };
 
 const VANILLA_ACCORDION_DEFS: { id: string; label: string; fields: { key: string; label: string }[] }[] = [
@@ -944,7 +1065,7 @@ type LifeBlocksConfig = {
   _paddingBottom: string;
 };
 
-type OnScreenLevelKey = 'page' | 'section' | 'contentGroup' | 'content';
+type OnScreenLevelKey = 'page' | 'article' | 'block' | 'component';
 type OnScreenLevelConfig = {
   _classes: string;
   _percentInviewVertical: number;
@@ -953,8 +1074,6 @@ type OnScreenLevelsConfig = Record<OnScreenLevelKey, OnScreenLevelConfig>;
 
 type OnScreenConfig = {
   _isEnabled: boolean;
-  _classes: string;
-  _percentInviewVertical: number;
   _levels: OnScreenLevelsConfig;
 };
 
@@ -975,37 +1094,25 @@ const DEFAULT_LIFE_BLOCKS_CONFIG: LifeBlocksConfig = {
 
 const DEFAULT_ON_SCREEN_CONFIG: OnScreenConfig = {
   _isEnabled: false,
-  _classes: "",
-  _percentInviewVertical: 50,
   _levels: {
     page: { _classes: '', _percentInviewVertical: 50 },
-    section: { _classes: '', _percentInviewVertical: 50 },
-    contentGroup: { _classes: '', _percentInviewVertical: 50 },
-    content: { _classes: '', _percentInviewVertical: 50 },
+    article: { _classes: '', _percentInviewVertical: 50 },
+    block: { _classes: '', _percentInviewVertical: 50 },
+    component: { _classes: '', _percentInviewVertical: 50 },
   },
 };
 
 const ON_SCREEN_ROW_DEFS: Array<{ key: OnScreenLevelKey; label: string }> = [
-  { key: 'page', label: 'Topic' },
-  { key: 'section', label: 'Section' },
-  { key: 'contentGroup', label: 'Content Group' },
-  { key: 'content', label: 'Component' },
+  { key: 'page', label: 'Topic (Page)' },
+  { key: 'article', label: 'Section (Article)' },
+  { key: 'block', label: 'Content Group (Block)' },
+  { key: 'component', label: 'Component' },
 ];
 
-const ON_SCREEN_CLASS_OPTIONS = [
-  '',
-  'fade-in',
-  'fade-in-left',
-  'fade-in-right',
-  'fade-in-top',
-  'fade-in-bottom',
-  'fade-out',
-];
 
 function LifeListField({
   title,
   description,
-  titleHint,
   items,
   errors,
   onAdd,
@@ -1013,10 +1120,12 @@ function LifeListField({
   onChange,
   idLabel,
   idKey,
+  idHint,
+  sourceLabel,
+  sourceHint,
 }: {
   title: string;
   description: string;
-  titleHint?: string;
   items: Array<LifeSpriteSheet | LifeSingleIcon>;
   errors: LifeListItemErrors[];
   onAdd: () => void;
@@ -1024,16 +1133,18 @@ function LifeListField({
   onChange: (index: number, key: string, value: string) => void;
   idLabel: string;
   idKey: '_spriteSheetId' | 'iconId';
+  idHint?: string;
+  sourceLabel: string;
+  sourceHint?: string;
 }) {
   return (
     <div className="space-y-3">
       <div>
         <InfoFieldLabel
           label={title}
-          hint={titleHint}
+          hint={description}
           className="mb-1.5"
         />
-        <p className="text-xs text-[#6b7280] leading-relaxed">{description}</p>
       </div>
       <div className="space-y-3">
         {items.map((item, index) => {
@@ -1044,7 +1155,11 @@ function LifeListField({
           <div key={`${idKey}-${index}`} className="border border-[#e5e7eb] rounded-lg p-3 space-y-3 bg-[#fafafa]">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <p className="text-xs font-semibold text-[#111827] mb-2">{idLabel}</p>
+                <InfoFieldLabel
+                  label={idLabel}
+                  hint={idHint}
+                  className="mb-2"
+                />
                 <input
                   type="text"
                   value={idKey === '_spriteSheetId' ? (item as LifeSpriteSheet)._spriteSheetId : (item as LifeSingleIcon).iconId}
@@ -1055,7 +1170,11 @@ function LifeListField({
                 {idError && <p className="mt-1 text-xs text-[#ef4444]">{idError}</p>}
               </div>
               <div>
-                <p className="text-xs font-semibold text-[#111827] mb-2">External Source</p>
+                <InfoFieldLabel
+                  label={sourceLabel}
+                  hint={sourceHint}
+                  className="mb-2"
+                />
                 <input
                   type="text"
                   value={item.src}
@@ -1087,15 +1206,16 @@ function LifeListField({
   );
 }
 
-export default function SelectThemePage({ initialThemeName, initialThemeVariables, initialPresetId, courseId, onNavigationRequest, pendingNavigation, onPendingNavigationHandled, onThemeSaved }: {
+export default function SelectThemePage({ initialThemeName, initialThemeVariables, initialThemeSettings, initialPresetId, courseId, onNavigationRequest, pendingNavigation, onPendingNavigationHandled, onThemeSaved }: {
   initialThemeName?: string;
   initialThemeVariables?: Record<string, unknown>;
+  initialThemeSettings?: Record<string, unknown>;
   initialPresetId?: string;
   courseId?: string;
   onNavigationRequest?: (nav: string) => void;
   pendingNavigation?: string | null;
   onPendingNavigationHandled?: () => void;
-  onThemeSaved?: (payload: { themeName: string; themeVariables: Record<string, unknown>; themePresetId: string }) => void;
+  onThemeSaved?: (payload: { themeName: string; themeVariables: Record<string, unknown>; themeSettings: Record<string, unknown>; themePresetId: string }) => void;
 }) {
   const initialSelectedThemeId = mapThemeNameToId(initialThemeName);
   const [selected, setSelected] = useState<string | null>(initialSelectedThemeId);
@@ -1196,7 +1316,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
   }
 
   async function handleSave() {
-    if (!courseId || !selected) return;
+    if (!courseId || !selected || selectedThemeSchemaFamily !== selected) return;
     const labelMap: Record<string, string> = { life: 'LIFE Theme', vanilla: 'Vanilla Theme', custom: 'Custom Theme' };
     const themeLabel = labelMap[selected];
     if (!themeLabel) return;
@@ -1224,10 +1344,16 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       }
       // Build themeVariables payload - keep schema nesting to preserve old/new UI parity.
       let vars: Record<string, unknown> = {};
-      if (selected === 'custom') vars = buildMergedCustomThemeVariables(dbThemeVariables);
-      else if (selected === 'vanilla') vars = buildMergedVanillaThemeVariables(dbThemeVariables);
+      const baseVariables = selected === initialSelectedThemeId
+        ? dbThemeVariables
+        : {
+            ...getThemeSchemaDefaults(selectedThemeSchema ?? {}),
+            ...(presets.find((preset) => preset._id === selectedPresetId)?.properties ?? {}),
+          };
+      if (selected === 'custom') vars = buildMergedCustomThemeVariables(baseVariables);
+      else if (selected === 'vanilla') vars = buildMergedVanillaThemeVariables(baseVariables);
       else if (selected === 'life') {
-        vars = buildMergedLifeThemeVariables(dbThemeVariables);
+        vars = buildMergedLifeThemeVariables(baseVariables);
       }
       // LIFE uses _components; Custom uses _componentConfig (handled in builder).
       if (selected === 'life') {
@@ -1238,11 +1364,12 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           _hidePartiallyFeedback: checkHidePartial,
         };
       }
-      await saveThemeVariables(courseId, vars);
+      await saveThemeVariables(courseId, vars, selected === 'life' || selected === 'custom' ? onScreenConfig : undefined);
       setDbThemeVariables(vars);
       onThemeSaved?.({
         themeName: themeLabel,
         themeVariables: vars,
+        themeSettings: { ...initialThemeSettings, _onScreen: onScreenConfig },
         themePresetId: selectedPresetId,
       });
       setLastSavedStateSnapshot(buildUnsavedStateSnapshot());
@@ -1268,6 +1395,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     setSelected(mapThemeNameToId(initialThemeName));
     setSelectedPresetId(initialPresetId ?? '');
     hydrateThemeVariablesIntoEditors(dbThemeVariables);
+    hydrateOnScreenSettings(initialThemeSettings);
     // Re-anchor the snapshot so hasChanges becomes false
     setLastSavedStateSnapshot('');
   }
@@ -1331,6 +1459,55 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
   const [vanillaColors, setVanillaColors] = useState<Record<string, string>>({});
   const [activeCustomAccordion, setActiveCustomAccordion] = useState<string | null>('_global');
   const [customSettings, setCustomSettings] = useState<Record<string, string>>(CUSTOM_FIELD_DEFAULTS);
+  const [selectedThemeSchema, setSelectedThemeSchema] = useState<Record<string, unknown> | undefined>(undefined);
+  const [selectedThemeSchemaFamily, setSelectedThemeSchemaFamily] = useState<string | null>(null);
+  const initializedThemeFamilyRef = useRef<string | null>(null);
+  const isLifeTheme = selected === 'life';
+
+  useEffect(() => {
+    let cancelled = false;
+    setSelectedThemeSchemaFamily(null);
+    if (!selected) {
+      setSelectedThemeSchema(undefined);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const themeLabelMap: Record<string, string> = {
+      life: 'LIFE Theme',
+      vanilla: 'Vanilla Theme',
+      custom: 'Custom Theme',
+    };
+    const themeLabel = themeLabelMap[selected];
+    if (!themeLabel) {
+      setSelectedThemeSchema(undefined);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void getThemeTypeVariablesSchemaByLabel(themeLabel)
+      .then((schema) => {
+        if (!cancelled) {
+          setSelectedThemeSchema(schema ?? undefined);
+          if (schema) setSelectedThemeSchemaFamily(selected);
+        }
+      })
+      .catch((error) => {
+        console.warn('Failed to load theme type schema', error);
+        if (!cancelled) setSelectedThemeSchema(undefined);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selected]);
+
+  const selectedThemeComponentSchema = useMemo(
+    () => getThemeComponentSectionSchema(selectedThemeSchema),
+    [selectedThemeSchema],
+  );
 
   const clearLifeCourseValidation = useCallback(() => {
     setLifeCourseConfigErrors(DEFAULT_LIFE_COURSE_CONFIG_ERRORS);
@@ -1389,35 +1566,19 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
         ...prev,
         _levels: nextLevels,
       };
-      if (rowKey === 'content') {
-        next._classes = nextRow._classes;
-        next._percentInviewVertical = nextRow._percentInviewVertical;
-      }
       return next;
     });
   }, []);
+
+  const getCustomSettingDefault = useCallback((key: string): string => {
+    const [sectionId, fieldKey] = key.split('::');
+    const schemaDefault = getSchemaField(selectedThemeSchema, sectionId, fieldKey)?.default;
+    return typeof schemaDefault === 'string' ? schemaDefault : CUSTOM_FIELD_DEFAULTS[key] ?? '';
+  }, [selectedThemeSchema]);
 
   const setCustomSettingWithDependencies = useCallback((key: string, value: string) => {
-    setCustomSettings((prev) => {
-      const next = { ...prev, [key]: value };
-      const visited = new Set<string>();
-      const queue: string[] = [key];
-
-      while (queue.length) {
-        const sourceKey = queue.shift();
-        if (!sourceKey || visited.has(sourceKey)) continue;
-        visited.add(sourceKey);
-
-        const linkedKeys = CUSTOM_LINKED_PROPERTY_MAP[sourceKey] ?? [];
-        linkedKeys.forEach((linkedKey) => {
-          next[linkedKey] = next[sourceKey];
-          queue.push(linkedKey);
-        });
-      }
-
-      return next;
-    });
-  }, []);
+    setCustomSettings((prev) => updateCustomThemeSetting(prev, key, value, getCustomSettingDefault(key)));
+  }, [getCustomSettingDefault]);
 
   const buildUnsavedStateSnapshot = useCallback(() => {
     const normalizeRecord = (record: Record<string, string>) => Object.keys(record)
@@ -1532,22 +1693,9 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       _paddingTop: lifeBlocksConfig._paddingTop,
       _paddingBottom: lifeBlocksConfig._paddingBottom,
     };
-    merged._onScreen = {
-      ...(merged._onScreen && typeof merged._onScreen === 'object' && !Array.isArray(merged._onScreen)
-        ? merged._onScreen as Record<string, unknown>
-        : {}),
-      _isEnabled: onScreenConfig._isEnabled,
-      _classes: onScreenConfig._classes,
-      _percentInviewVertical: onScreenConfig._percentInviewVertical,
-      _levels: {
-        page: { ...onScreenConfig._levels.page },
-        section: { ...onScreenConfig._levels.section },
-        contentGroup: { ...onScreenConfig._levels.contentGroup },
-        content: { ...onScreenConfig._levels.content },
-      },
-    };
+    delete merged._onScreen;
     return merged;
-  }, [lifeBlocksConfig, lifeCourseConfig, onScreenConfig]);
+  }, [lifeBlocksConfig, lifeCourseConfig]);
 
   const buildMergedVanillaThemeVariables = useCallback((baseVars: Record<string, unknown>) => {
     const merged: Record<string, unknown> = { ...(baseVars ?? {}) };
@@ -1580,7 +1728,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
 
       section.fields.forEach((field) => {
         const uiKey = `${section.id}::${field.key}`;
-        existingSection[field.key] = customSettings[uiKey] ?? '';
+        existingSection[field.key] = customSettings[uiKey] || getCustomSettingDefault(uiKey);
       });
 
       merged[section.id] = existingSection;
@@ -1618,23 +1766,10 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       _paddingBottom: lifeBlocksConfig._paddingBottom,
     };
 
-    merged._onScreen = {
-      ...(merged._onScreen && typeof merged._onScreen === 'object' && !Array.isArray(merged._onScreen)
-        ? merged._onScreen as Record<string, unknown>
-        : {}),
-      _isEnabled: onScreenConfig._isEnabled,
-      _classes: onScreenConfig._classes,
-      _percentInviewVertical: onScreenConfig._percentInviewVertical,
-      _levels: {
-        page: { ...onScreenConfig._levels.page },
-        section: { ...onScreenConfig._levels.section },
-        contentGroup: { ...onScreenConfig._levels.contentGroup },
-        content: { ...onScreenConfig._levels.content },
-      },
-    };
+    delete merged._onScreen;
 
     return merged;
-  }, [checkHideFeedback, checkHidePartial, checkNotFinal, checkUnanswered, customSettings, lifeBlocksConfig, lifeCourseConfig, onScreenConfig]);
+  }, [checkHideFeedback, checkHidePartial, checkNotFinal, checkUnanswered, customSettings, getCustomSettingDefault, lifeBlocksConfig, lifeCourseConfig, onScreenConfig]);
 
   useEffect(() => {
     setSelected(mapThemeNameToId(initialThemeName));
@@ -1750,39 +1885,6 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       _paddingBottom: blocks && typeof blocks._paddingBottom === 'string' ? blocks._paddingBottom : '',
     });
 
-    const onScreen = v._onScreen as Record<string, unknown> | undefined;
-    const legacyClasses = onScreen && typeof onScreen._classes === 'string' ? onScreen._classes : '';
-    const legacyPercent =
-      onScreen && typeof onScreen._percentInviewVertical === 'number'
-        ? onScreen._percentInviewVertical
-        : DEFAULT_ON_SCREEN_CONFIG._percentInviewVertical;
-    const levelsSource = onScreen && typeof onScreen._levels === 'object' && !Array.isArray(onScreen._levels)
-      ? onScreen._levels as Record<string, unknown>
-      : undefined;
-    const parseOnScreenLevel = (levelKey: OnScreenLevelKey): OnScreenLevelConfig => {
-      const source = levelsSource && typeof levelsSource[levelKey] === 'object' && !Array.isArray(levelsSource[levelKey])
-        ? levelsSource[levelKey] as Record<string, unknown>
-        : undefined;
-      return {
-        _classes: source && typeof source._classes === 'string' ? source._classes : legacyClasses,
-        _percentInviewVertical:
-          source && typeof source._percentInviewVertical === 'number'
-            ? source._percentInviewVertical
-            : legacyPercent,
-      };
-    };
-    setOnScreenConfig({
-      _isEnabled: !!(onScreen && typeof onScreen._isEnabled === 'boolean' && onScreen._isEnabled),
-      _classes: legacyClasses,
-      _percentInviewVertical: legacyPercent,
-      _levels: {
-        page: parseOnScreenLevel('page'),
-        section: parseOnScreenLevel('section'),
-        contentGroup: parseOnScreenLevel('contentGroup'),
-        content: parseOnScreenLevel('content'),
-      },
-    });
-
     // Component configuration checkboxes: custom uses _componentConfig, LIFE uses _components.
     const comp = (v._componentConfig as Record<string, unknown> | undefined) ?? (v._components as Record<string, unknown> | undefined);
     setCheckNotFinal(!!(comp && typeof comp._canShowFinalMarking === 'boolean' && comp._canShowFinalMarking));
@@ -1792,11 +1894,59 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     setLifeCourseConfigErrors(DEFAULT_LIFE_COURSE_CONFIG_ERRORS);
   }, []);
 
+  const hydrateOnScreenSettings = useCallback((settings?: Record<string, unknown>) => {
+    const onScreen = settings?._onScreen as Record<string, unknown> | undefined;
+    const levelsSource = onScreen && typeof onScreen._levels === 'object' && !Array.isArray(onScreen._levels)
+      ? onScreen._levels as Record<string, unknown>
+      : undefined;
+    const parseOnScreenLevel = (levelKey: OnScreenLevelKey): OnScreenLevelConfig => {
+      const source = levelsSource && typeof levelsSource[levelKey] === 'object' && !Array.isArray(levelsSource[levelKey])
+        ? levelsSource[levelKey] as Record<string, unknown>
+        : undefined;
+      return {
+        _classes: source && typeof source._classes === 'string' ? source._classes : '',
+        _percentInviewVertical:
+          source && typeof source._percentInviewVertical === 'number'
+            ? source._percentInviewVertical
+            : 50,
+      };
+    };
+    setOnScreenConfig({
+      _isEnabled: !!(onScreen && typeof onScreen._isEnabled === 'boolean' && onScreen._isEnabled),
+      _levels: {
+        page: parseOnScreenLevel('page'),
+        article: parseOnScreenLevel('article'),
+        block: parseOnScreenLevel('block'),
+        component: parseOnScreenLevel('component'),
+      },
+    });
+
+  }, []);
+
+  useEffect(() => {
+    hydrateOnScreenSettings(selected === initialSelectedThemeId ? initialThemeSettings : undefined);
+  }, [hydrateOnScreenSettings, initialThemeSettings, initialSelectedThemeId, selected]);
+
   // Load saved themeVariables into customSettings / vanillaColors / checkboxes.
   useEffect(() => {
-    hydrateThemeVariablesIntoEditors(initialThemeVariables ?? {});
+    if (!selected || selectedThemeSchemaFamily !== selected || !selectedThemeSchema) return;
+    const defaults = getThemeSchemaDefaults(selectedThemeSchema);
+    const variables = selected === initialSelectedThemeId ? initialThemeVariables ?? {} : {};
+    const hydrated = { ...defaults };
+    Object.entries(variables).forEach(([key, value]) => {
+      const defaultValue = defaults[key];
+      hydrated[key] = value && typeof value === 'object' && !Array.isArray(value) &&
+        defaultValue && typeof defaultValue === 'object' && !Array.isArray(defaultValue)
+        ? { ...defaultValue as Record<string, unknown>, ...value as Record<string, unknown> }
+        : value;
+    });
+    if (initializedThemeFamilyRef.current !== selected) {
+      initializedThemeFamilyRef.current = selected;
+      setSelectedPresetId(selected === initialSelectedThemeId ? initialPresetId ?? '' : '');
+    }
+    hydrateThemeVariablesIntoEditors(hydrated);
     setInitialHydrationComplete(true);
-  }, [hydrateThemeVariablesIntoEditors, initialThemeVariables]);
+  }, [hydrateThemeVariablesIntoEditors, initialThemeVariables, initialPresetId, initialSelectedThemeId, selected, selectedThemeSchema, selectedThemeSchemaFamily]);
 
   // When selecting a preset, apply that preset's own properties into editor state.
   useEffect(() => {
@@ -1814,24 +1964,25 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
   }, [hydrateThemeVariablesIntoEditors, presets, selectedPresetId]);
 
   // Color Picker Component
-  const ColorPickerField = ({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) => (
+  const ColorPickerField = ({ label, hint, value, onChange }: { label: string; hint?: string; value: string; onChange: (v: string) => void }) => (
     <div>
-      <p className="text-xs font-bold text-[#111827] mb-2">{label}</p>
+      <InfoFieldLabel label={label} hint={hint} className="mb-2" />
       <div className="flex gap-2 items-center">
         <label className="w-8 h-8 rounded border border-[#d1d5db] cursor-pointer flex-shrink-0 block overflow-hidden relative">
-          <span className="block w-full h-full" style={{ backgroundColor: value }} />
-          <input type="color" value={value} onChange={e => onChange(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" />
+          <span className="block w-full h-full" style={{ backgroundColor: value || 'transparent' }} />
+          <input type="color" name={`${label}-picker`} aria-label={`${label} picker`} value={/^#[0-9a-f]{6}$/i.test(value) ? value : '#ffffff'} onChange={e => onChange(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" />
         </label>
-        <input type="text" value={value.toUpperCase()} onChange={e => { const v = e.target.value; if (/^#[0-9A-Fa-f]{0,6}$/.test(v)) onChange(v); }} className="text-xs flex-1 border border-[#d1d5db] rounded px-2 py-1 text-[#111827] focus:border-[var(--life-primary-500)] outline-none" />
+        <input type="text" name={`${label}-hex`} aria-label={`${label} hex value`} value={value.toUpperCase()} placeholder="Inherit" onChange={e => { const v = e.target.value; if (v === '' || /^#[0-9A-Fa-f]{0,6}$/.test(v)) onChange(v); }} className="text-xs min-w-0 flex-1 border border-[#d1d5db] rounded px-2 py-1 text-[#111827] focus:border-[var(--life-primary-500)] outline-none" />
+        <button type="button" title={`Reset ${label} to inherited/default colour`} onClick={() => onChange('')} className="text-xs text-[#374151] underline">Reset</button>
       </div>
     </div>
   );
 
   // Font Dropdown Component
-  const FontDropdownField = ({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) => (
+  const FontDropdownField = ({ label, hint, value, onChange }: { label: string; hint?: string; value: string; onChange: (v: string) => void }) => (
     <div>
-      <p className="text-xs font-bold text-[#111827] mb-2">{label}</p>
-      <select value={value} onChange={e => onChange(e.target.value)} className="text-xs w-full border border-[#d1d5db] rounded px-2 py-1 text-[#111827] bg-white cursor-pointer focus:border-[var(--life-primary-500)] outline-none">
+      <InfoFieldLabel label={label} hint={hint} className="mb-2" />
+      <select name={label} aria-label={label} value={value} onChange={e => onChange(e.target.value)} className="text-xs w-full border border-[#d1d5db] rounded px-2 py-1 text-[#111827] bg-white cursor-pointer focus:border-[var(--life-primary-500)] outline-none">
         {FONT_OPTIONS.map(f => <option key={f} value={f}>{f}</option>)}
       </select>
     </div>
@@ -1839,15 +1990,20 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
 
   const getCustomSetting = (sectionId: string, fieldKey: string): string => {
     const key = `${sectionId}::${fieldKey}`;
-    return customSettings[key] ?? CUSTOM_FIELD_DEFAULTS[key] ?? '';
+    return customSettings[key] || getCustomSettingDefault(key);
   };
 
   // Live Preview Component
   const LivePreview = () => {
-    const [darkMode, setDarkMode] = useState(false);
-    const [isExpanded, setIsExpanded] = useState(false);
+    const [previewDarkMode, setPreviewDarkMode] = useState(false);
+    const [isPreviewExpanded, setIsPreviewExpanded] = useState(false);
+    const triggerRef = useRef<HTMLButtonElement | null>(null);
+    const dialogRef = useRef<HTMLDivElement | null>(null);
+
     const primaryColor = getCustomSetting('_global', '_primaryBrandColor') || '#2e7fa1';
     const secondaryColor = getCustomSetting('_global', '_secondaryBrandColor') || '#25837e';
+    const successColor = getCustomSetting('_validation', 'validation-success') || '#065f28';
+    const errorColor = getCustomSetting('_validation', 'validation-error') || '#ff0000';
     const paragraphFont = getCustomSetting('_global', 'paragraph-font-family') || 'Lato';
     const headingFont = getCustomSetting('_global', 'heading-font-family') || 'Lato';
     const fontColor = getCustomSetting('_global', 'font-color') || '#1f1f1f';
@@ -1856,24 +2012,24 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     const linkColor = getCustomSetting('_global', 'link') || '#2e7fa1';
     const titleSizeRaw = getCustomSetting('_global', 'page-heading-font-size') || '3rem';
     const pageBgColor = getCustomSetting('_pageStructure', 'page-bg-color') || '#f8f8f8';
-    const articleBgColor = getCustomSetting('_pageStructure', 'article-bg-color') || '#ffffff';
-    const blockBgColor = getCustomSetting('_pageStructure', 'block-bg-color') || '#ffffff';
-    const componentBgColor = getCustomSetting('_pageStructure', 'component-bg-color') || '#ffffff';
-    const pageHeaderBg = getCustomSetting('_pageStructure', 'page-header-background-color') || primaryColor;
-    const pageHeaderTitleColor = getCustomSetting('_pageStructure', 'page-header-title-color') || '#ffffff';
-    const pageHeaderSubtitleColor = getCustomSetting('_pageStructure', 'page-header-subtitle-color') || 'rgba(255,255,255,0.8)';
-    const pageHeaderBodyColor = getCustomSetting('_pageStructure', 'page-header-body-color') || 'rgba(255,255,255,0.85)';
+    const articleBgColor = getCustomSetting('_pageStructure', 'article-bg-color') || 'transparent';
+    const blockBgColor = getCustomSetting('_pageStructure', 'block-bg-color') || 'transparent';
+    const componentBgColor = getCustomSetting('_pageStructure', 'component-bg-color') || 'transparent';
+    const pageHeaderBg = getCustomSetting('_pageStructure', 'page-header-background-color') || 'transparent';
+    const pageHeaderTitleColor = getCustomSetting('_pageStructure', 'page-header-title-color') || headingColorTheme;
+    const pageHeaderSubtitleColor = getCustomSetting('_pageStructure', 'page-header-subtitle-color') || headingColorTheme;
+    const pageHeaderBodyColor = getCustomSetting('_pageStructure', 'page-header-body-color') || fontColor;
     const pageHeaderInstructionColor = getCustomSetting('_pageStructure', 'page-header-instruction-color') || instructionColor;
-    const articleTopPadding = getCustomSetting('_pageStructure', 'article-top-padding') || 'standard';
-    const articleBottomPadding = getCustomSetting('_pageStructure', 'article-bottom-padding') || 'standard';
-    const blockTopPadding = getCustomSetting('_pageStructure', 'block-top-padding') || 'standard';
-    const blockBottomPadding = getCustomSetting('_pageStructure', 'block-bottom-padding') || 'standard';
+    const articleTopPadding = getCustomSetting('_pageStructure', 'article-top-padding');
+    const articleBottomPadding = getCustomSetting('_pageStructure', 'article-bottom-padding');
+    const blockTopPadding = getCustomSetting('_pageStructure', 'block-top-padding');
+    const blockBottomPadding = getCustomSetting('_pageStructure', 'block-bottom-padding');
 
     const progressFill = getCustomSetting('_progress', 'progress') || primaryColor;
     const progressBackground = getCustomSetting('_progress', 'progress-inverted') || '#e5e5e5';
     const progressBorder = getCustomSetting('_progress', 'progress-border') || 'transparent';
 
-    const navBg = getCustomSetting('_nav', 'nav') || pageHeaderBg;
+    const navBg = getCustomSetting('_nav', 'nav') || primaryColor;
 
     const spacingScale: Record<string, number> = {
       remove: 0,
@@ -1882,25 +2038,68 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       double: 24,
     };
 
-    const previewBg = darkMode ? '#1a1a1a' : pageBgColor;
-    const canvasBg = darkMode ? '#111827' : '#f0f4f8';
-    const textColor = darkMode ? '#e8e8e8' : fontColor;
-    const headingColor = darkMode ? '#ffffff' : headingColorTheme;
-    const navIconColor = (pageHeaderTitleColor && pageHeaderTitleColor !== 'transparent') ? pageHeaderTitleColor : '#ffffff';
-    const navTextColor = (pageHeaderBodyColor && pageHeaderBodyColor !== 'transparent') ? pageHeaderBodyColor : navIconColor;
+    const previewBg = previewDarkMode ? 'var(--life-base-black)' : pageBgColor;
+    const canvasBg = previewDarkMode ? '#111827' : '#f0f4f8';
+    const textColor = previewDarkMode ? '#e8e8e8' : fontColor;
+    const headingColor = previewDarkMode ? '#ffffff' : headingColorTheme;
+    const instructionPreviewColor = previewDarkMode ? '#f3f4f6' : instructionColor;
+    const articlePreviewBg = previewDarkMode ? '#232323' : articleBgColor;
+    const pageHeaderPreviewBg = previewDarkMode ? '#232323' : pageHeaderBg;
+    const blockPreviewBg = previewDarkMode ? '#2b2b2b' : blockBgColor;
+    const componentPreviewBg = previewDarkMode ? '#333333' : componentBgColor;
+    const itemPreviewBg = previewDarkMode ? '#3a3a3a' : componentBgColor;
+    const infoPanelBg = previewDarkMode ? '#1f2937' : '#FFFBEB';
+    const infoPanelBorder = previewDarkMode ? '#4b5563' : '#FEE685';
+    const infoPanelText = previewDarkMode ? '#f9fafb' : '#973C00';
+    const infoPanelHeading = previewDarkMode ? '#ffffff' : '#7A3000';
+    const navIconColor = '#ffffff';
+    const navTextColor = '#ffffff';
     const titleSize = titleSizeRaw;
     const articleTop = spacingScale[articleTopPadding] ?? spacingScale.standard;
     const articleBottom = spacingScale[articleBottomPadding] ?? spacingScale.standard;
     const blockTop = spacingScale[blockTopPadding] ?? spacingScale.standard;
     const blockBottom = spacingScale[blockBottomPadding] ?? spacingScale.standard;
+    const darkModeLabel = previewDarkMode ? 'Light mode' : 'Dark mode';
+    const darkModeTitle = previewDarkMode ? 'Switch to light mode' : 'Switch to dark mode';
 
     useEffect(() => {
-      if (!isExpanded) return;
+      if (!isPreviewExpanded) return;
 
       const previousOverflow = document.body.style.overflow;
       const onKeyDown = (event: KeyboardEvent) => {
-        if (event.key === 'Escape') setIsExpanded(false);
+        if (event.key === 'Escape') {
+          setIsPreviewExpanded(false);
+          return;
+        }
+
+        const dialog = dialogRef.current;
+        if (!dialog || event.key !== 'Tab') return;
+
+        const focusable = dialog.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+
+        if (!focusable.length) {
+          event.preventDefault();
+          return;
+        }
+
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
       };
+
+      const dialog = dialogRef.current;
+      if (dialog) {
+        dialog.focus();
+      }
 
       document.body.style.overflow = 'hidden';
       window.addEventListener('keydown', onKeyDown);
@@ -1908,15 +2107,15 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       return () => {
         document.body.style.overflow = previousOverflow;
         window.removeEventListener('keydown', onKeyDown);
+        requestAnimationFrame(() => triggerRef.current?.focus());
       };
-    }, [isExpanded]);
+    }, [isPreviewExpanded]);
 
     const previewContent = (
       <div className="min-h-0 flex-1 overflow-y-auto p-0" style={{ fontSize: '13px' }}>
         <div style={{ maxWidth: '760px', margin: '0 auto' }}>
           <div className="overflow-hidden rounded-xl border border-[#e5e7eb]" style={{ backgroundColor: previewBg }}>
-            <div style={{ height: '4px', borderTop: `1px solid ${progressBorder}`, borderBottom: `1px solid ${progressBorder}`, background: `linear-gradient(to right, ${progressFill} 60%, ${progressBackground} 60%)` }} />
-            <div style={{ background: navBg, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '10px', borderBottom: darkMode ? '1px solid #374151' : '1px solid #f3f4f6' }}>
+            <div style={{ background: navBg, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '10px', borderBottom: previewDarkMode ? '1px solid #374151' : '1px solid #f3f4f6' }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={navIconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M19 12H5M12 19l-7-7 7-7" />
               </svg>
@@ -1933,70 +2132,195 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                 <line x1="21" y1="21" x2="16.65" y2="16.65" />
               </svg>
             </div>
+            <div style={{ height: '4px', borderTop: `1px solid ${progressBorder}`, borderBottom: `1px solid ${progressBorder}`, background: `linear-gradient(to right, ${progressFill} 60%, ${progressBackground} 60%)` }} />
             <div style={{ backgroundColor: previewBg, padding: '18px' }}>
               <div style={{ maxWidth: '560px', margin: '0 auto' }}>
-                <div style={{ padding: '6px 0 14px' }}>
-                  <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: titleSize || '3rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '4px' }}>
+                <div style={{ padding: '6px 0 14px', backgroundColor: pageHeaderPreviewBg }}>
+                  <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: titleSize || '3rem', fontWeight: 700, color: previewDarkMode ? '#ffffff' : pageHeaderTitleColor, lineHeight: 1.2, marginBottom: '2rem' }}>
                     New Topic Title
                   </div>
-                  <div style={{ fontFamily: `${paragraphFont}, sans-serif`, color: textColor, fontSize: '0.88rem', lineHeight: 1.45 }}>
+                  <div style={{ fontFamily: `${paragraphFont}, sans-serif`, color: previewDarkMode ? textColor : pageHeaderSubtitleColor, fontSize: '0.88rem', lineHeight: 1.45 }}>
                     Topic subtitle
                   </div>
+                  <div style={{ fontFamily: `${paragraphFont}, sans-serif`, color: previewDarkMode ? textColor : pageHeaderBodyColor, fontSize: '0.88rem', marginTop: '1rem' }}>
+                    Topic introduction
+                  </div>
+                  <div style={{ fontFamily: `${paragraphFont}, sans-serif`, color: previewDarkMode ? instructionPreviewColor : pageHeaderInstructionColor, fontSize: '0.82rem', marginTop: '1rem' }}>
+                    Complete the activities below.
+                  </div>
                 </div>
 
-                <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.84rem', color: linkColor, textDecoration: 'underline', cursor: 'pointer', marginBottom: '12px' }}>
-                  This is a sample link
-                </div>
+                <div style={{ border: `1px solid ${previewDarkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: '10px', background: articlePreviewBg, padding: `${articleTop}px 12px ${articleBottom}px`, marginTop: '10px' }}>
+                  <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '1rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '1rem' }}>
+                    New Article Title
+                  </div>
 
-                <div style={{ border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`, borderRadius: '10px', background: articleBgColor, padding: '12px' }}>
-                  <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '0.9rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '8px' }}>
-                    New Component Title
-                  </div>
-                  <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', color: instructionColor, fontStyle: 'italic', marginBottom: '10px' }}>
-                    Choose one option then select Submit.
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {[{ label: 'Correct', selected: true }, { label: 'Incorrect', selected: false }].map((opt) => (
-                      <div
-                        key={opt.label}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '10px',
-                          border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
-                          borderRadius: '999px',
-                          padding: '8px 12px',
-                          background: opt.selected ? `${secondaryColor}1F` : articleBgColor,
-                        }}
-                      >
-                        <div style={{ width: '18px', height: '18px', borderRadius: '50%', flexShrink: 0, border: `2px solid ${opt.selected ? secondaryColor : (darkMode ? '#6b7280' : '#cbd5e1')}`, display: 'flex', alignItems: 'center', justifyContent: 'center', background: componentBgColor }}>
-                          {opt.selected && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: secondaryColor }} />}
-                        </div>
-                        <span style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.8rem', fontWeight: 600, color: textColor }}>{opt.label}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-start' }}>
-                    <div style={{ display: 'inline-block', background: primaryColor, borderRadius: '6px', padding: '7px 16px', fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', fontWeight: 700, color: '#fff' }}>
-                      Submit
+                  <div style={{ border: `1px solid ${previewDarkMode ? '#4b5563' : '#9fc9dd'}`, borderRadius: '10px', background: blockPreviewBg, padding: `${blockTop}px 12px ${blockBottom}px`, marginTop: '10px' }}>
+                    <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '0.92rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '1rem' }}>
+                      New Block Title
                     </div>
-                  </div>
-                </div>
 
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '14px' }}>
-                  <div style={{ display: 'inline-block', border: `1px solid ${primaryColor}`, borderRadius: '6px', padding: '7px 16px', fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', fontWeight: 600, color: primaryColor }}>
-                    Previous
-                  </div>
-                  <div style={{ display: 'inline-block', background: primaryColor, borderRadius: '6px', padding: '7px 16px', fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', fontWeight: 700, color: '#fff' }}>
-                    Next
+                    <div style={{ border: `1px solid ${previewDarkMode ? '#6b7280' : '#d1d5db'}`, borderRadius: '10px', background: componentPreviewBg, padding: '12px', marginTop: '10px', boxShadow: previewDarkMode ? 'none' : '0 1px 2px rgba(0, 0, 0, 0.05)' }}>
+                      <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '0.9rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '1rem' }}>
+                        New Component Title
+                      </div>
+                      <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', color: textColor, marginBottom: '1rem' }}>
+                        Body text
+                      </div>
+                      <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.84rem', color: linkColor, textDecoration: 'underline', cursor: 'pointer', marginBottom: '1rem' }}>
+                        This is a sample link
+                      </div>
+                      <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', color: instructionPreviewColor, fontStyle: 'italic', marginBottom: '1rem' }}>
+                        Choose one option then select Submit.
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {[{ label: 'Selected', color: secondaryColor }, { label: 'Correct', color: successColor }, { label: 'Incorrect', color: errorColor }].map((opt) => (
+                          <div
+                            key={opt.label}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '10px',
+                              border: `1px solid ${previewDarkMode ? '#9ca3af' : '#e5e7eb'}`,
+                              borderRadius: '999px',
+                              padding: '8px 12px',
+                              background: itemPreviewBg,
+                            }}
+                          >
+                            <div style={{ width: '18px', height: '18px', borderRadius: '50%', flexShrink: 0, border: `2px solid ${opt.color}`, display: 'flex', alignItems: 'center', justifyContent: 'center', background: componentPreviewBg }}>
+                              <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: opt.color }} />
+                            </div>
+                            <span style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.8rem', fontWeight: 600, color: textColor }}>{opt.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-start' }}>
+                        <div style={{ display: 'inline-block', background: primaryColor, borderRadius: '6px', padding: '7px 16px', fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', fontWeight: 700, color: '#fff' }}>
+                          Submit
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '14px' }}>
+                        <div style={{ display: 'inline-block', border: `1px solid ${primaryColor}`, borderRadius: '6px', padding: '7px 16px', fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', fontWeight: 600, color: primaryColor }}>
+                          Previous
+                        </div>
+                        <div style={{ display: 'inline-block', background: primaryColor, borderRadius: '6px', padding: '7px 16px', fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', fontWeight: 700, color: '#fff' }}>
+                          Next
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
+
+          <div
+            className="mt-4 mb-6 rounded-xl p-4 shadow-sm"
+            style={{
+              background: infoPanelBg,
+              border: `1px solid ${infoPanelBorder}`,
+              color: infoPanelText,
+            }}
+          >
+            <div className="flex items-center gap-2 mb-3">
+              <div
+                className="flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold"
+                style={{ background: previewDarkMode ? '#374151' : '#FDE68A', color: infoPanelText }}
+              >
+                i
+              </div>
+              <span className="text-sm font-bold" style={{ color: infoPanelText }}>{THEME_PREVIEW_INFO.title}</span>
+            </div>
+
+            <div className="mb-4">
+              <div className="text-sm font-semibold mb-1.5" style={{ color: infoPanelHeading }}>{THEME_PREVIEW_INFO.livePreviewLabel}</div>
+              <p className="text-xs leading-relaxed" style={{ color: infoPanelText }}>{THEME_PREVIEW_INFO.livePreviewText}</p>
+            </div>
+
+            <div>
+              <div className="text-sm font-semibold mb-1.5" style={{ color: infoPanelHeading }}>{THEME_PREVIEW_INFO.accessibilityLabel}</div>
+              <p className="text-xs leading-relaxed" style={{ color: infoPanelText }}>{THEME_PREVIEW_INFO.accessibilityText}</p>
+            </div>
+          </div>
         </div>
       </div>
     );
+
+    const expandedPreview = isPreviewExpanded && typeof document !== 'undefined'
+      ? createPortal(
+        <div
+          className="fixed inset-0 overflow-y-auto px-4 pb-8"
+          style={{ zIndex: 9999, backgroundColor: 'rgba(248, 250, 252, 0.99)', paddingTop: '72px' }}
+          onClick={() => setIsPreviewExpanded(false)}
+        >
+          <div
+            ref={dialogRef}
+            className="mx-auto flex w-full max-w-6xl min-h-0 flex-col overflow-hidden rounded-2xl border border-[#e5e7eb] bg-white shadow-2xl"
+            style={{ position: 'relative', zIndex: 10000 }}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Live Preview"
+            tabIndex={-1}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-[#e5e7eb] shrink-0 sticky top-0 z-10">
+              <div className="flex items-center gap-2">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill={primaryColor} stroke="none">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                </svg>
+                <span className="text-sm font-semibold text-[#111827]">Live Preview</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-[#6b7280] mr-1">Press Esc to close</span>
+                <button
+                  onClick={() => setPreviewDarkMode(!previewDarkMode)}
+                  className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#d1d5db] bg-white px-3 text-sm font-medium text-[#374151] shadow-sm hover:bg-[#f9fafb]"
+                  title={darkModeTitle}
+                  aria-label={darkModeTitle}
+                  type="button"
+                >
+                  {previewDarkMode ? (
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="4" />
+                      <path d="M12 2v2" />
+                      <path d="M12 20v2" />
+                      <path d="m4.93 4.93 1.41 1.41" />
+                      <path d="m17.66 17.66 1.41 1.41" />
+                      <path d="M2 12h2" />
+                      <path d="M20 12h2" />
+                      <path d="m6.34 17.66-1.41 1.41" />
+                      <path d="m19.07 4.93-1.41 1.41" />
+                    </svg>
+                  ) : (
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                    </svg>
+                  )}
+                  <span>{darkModeLabel}</span>
+                </button>
+                <button
+                  onClick={() => setIsPreviewExpanded(false)}
+                  className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#d1d5db] bg-white px-3 text-sm font-medium text-[#374151] shadow-sm hover:bg-[#f9fafb]"
+                  title="Minimize preview"
+                  aria-label="Minimize preview"
+                  type="button"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                  <span>Minimize</span>
+                </button>
+              </div>
+            </div>
+            <div className="min-h-0 flex-1" style={{ backgroundColor: canvasBg }}>
+              {previewContent}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )
+      : null;
 
     return (
       <>
@@ -2010,18 +2334,34 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
             </div>
             <div className="flex gap-1.5">
               <button
-                onClick={() => setDarkMode(!darkMode)}
+                ref={triggerRef}
+                onClick={() => setPreviewDarkMode(!previewDarkMode)}
                 className="w-8 h-8 flex items-center justify-center bg-transparent border border-[#e5e7eb] rounded-lg text-[#6b7280] hover:bg-[#f9fafb]"
-                title="Toggle dark mode"
-                aria-label="Toggle dark mode"
+                title={darkModeTitle}
+                aria-label={darkModeTitle}
                 type="button"
               >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-                </svg>
+                {previewDarkMode ? (
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="4" />
+                    <path d="M12 2v2" />
+                    <path d="M12 20v2" />
+                    <path d="m4.93 4.93 1.41 1.41" />
+                    <path d="m17.66 17.66 1.41 1.41" />
+                    <path d="M2 12h2" />
+                    <path d="M20 12h2" />
+                    <path d="m6.34 17.66-1.41 1.41" />
+                    <path d="m19.07 4.93-1.41 1.41" />
+                  </svg>
+                ) : (
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                  </svg>
+                )}
               </button>
               <button
-                onClick={() => setIsExpanded(true)}
+                ref={triggerRef}
+                onClick={() => setIsPreviewExpanded(true)}
                 className="w-8 h-8 flex items-center justify-center bg-transparent border border-[#e5e7eb] rounded-lg text-[#6b7280] hover:bg-[#f9fafb]"
                 title="Expand preview"
                 aria-label="Expand preview"
@@ -2039,56 +2379,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           {previewContent}
         </div>
 
-        {isExpanded && (
-          <div className="fixed inset-x-0 top-14 bottom-0 z-50 overflow-y-auto bg-black/50 p-4" onClick={() => setIsExpanded(false)}>
-            <div
-              className="mx-auto flex min-h-full w-full max-w-6xl min-h-0 flex-col overflow-hidden rounded-2xl border border-[#e5e7eb] bg-white shadow-2xl"
-              role="dialog"
-              aria-modal="true"
-              aria-label="Live Preview"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-[#e5e7eb] shrink-0">
-                <div className="flex items-center gap-2">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill={primaryColor} stroke="none">
-                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-                  </svg>
-                  <span className="text-sm font-semibold text-[#111827]">Live Preview</span>
-                </div>
-                <div className="flex gap-1.5">
-                  <button
-                    onClick={() => setDarkMode(!darkMode)}
-                    className="w-9 h-9 flex items-center justify-center bg-transparent border border-[#e5e7eb] rounded-lg text-[#6b7280] hover:bg-[#f9fafb]"
-                    title="Toggle dark mode"
-                    aria-label="Toggle dark mode"
-                    type="button"
-                  >
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={() => setIsExpanded(false)}
-                    className="w-9 h-9 flex items-center justify-center bg-transparent border border-[#e5e7eb] rounded-lg text-[#6b7280] hover:bg-[#f9fafb]"
-                    title="Collapse preview"
-                    aria-label="Collapse preview"
-                    type="button"
-                  >
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="9 3 3 3 3 9" />
-                      <polyline points="15 21 21 21 21 15" />
-                      <line x1="3" y1="3" x2="10" y2="10" />
-                      <line x1="14" y1="14" x2="21" y2="21" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-              <div className="min-h-0 flex-1" style={{ backgroundColor: canvasBg }}>
-                {previewContent}
-              </div>
-            </div>
-          </div>
-        )}
+        {expandedPreview}
       </>
     );
   };
@@ -2111,7 +2402,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           {CUSTOM_ACCORDION_DEFS.map((acc) => {
             const isOpen = activeCustomAccordion === acc.id;
             return (
-              <div key={acc.id} className="border border-[#e5e7eb] rounded-xl overflow-hidden bg-white">
+              <div key={acc.id} className="border border-[#e5e7eb] rounded-lg overflow-visible bg-white">
                 <button
                   onClick={() => setActiveCustomAccordion(isOpen ? null : acc.id)}
                   className="group w-full flex items-center justify-between gap-3 px-5 py-4 !h-[56px] text-left bg-white text-[#111827] hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] transition-colors"
@@ -2166,9 +2457,15 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
   return (
     // <div className="max-w-3xl w-full px-6 py-6">
     <div className="flex flex-col h-full w-full bg-[#f7f9fb] font-[var(--font-family-primary)]">
-      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb]">
-        <h2 className="text-xl font-bold text-[var(--life-base-black)] m-0">Theme</h2>
-        <p className="text-sm text-[#6b7280] mt-0.5 mb-0">Choose and configure the visual theme for your course.</p>
+      <SaveStatusToast toast={saveSuccess ? { type: "success", message: "Changes saved successfully" } : null} onDismiss={() => setSaveSuccess(false)} />
+      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-center gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-[var(--life-base-black)] m-0">Theme</h2>
+          <p className="text-sm text-[#6b7280] mt-0.5 mb-0">Choose and configure the visual theme for your course.</p>
+        </div>
+        <div className="ml-auto">
+          <SaveChangesButton dirty={hasChanges} saving={saving} disabled={!courseId || !selected || selectedThemeSchemaFamily !== selected} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
+        </div>
       </div>
       <div className="flex-1 overflow-y-auto min-h-0">
       <div className="w-full px-6 py-6">
@@ -2177,7 +2474,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           <h2 className="text-base font-semibold text-[var(--life-base-black)]">
             Select Theme <span className="text-red-500">*</span>
           </h2>
-          <p className="text-sm text-[var(--life-neutral-300)] mt-0.5"> Select the base theme for your course </p>
+          <p className="text-sm text-[var(--life-neutral-300)] mt-0.5"> Changing the theme options will replace any unsaved selections you've made in the form below; make sure there's nothing you want to keep! </p>
         </div>
       </div>
 
@@ -2301,21 +2598,26 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
         {/* Configuration: Course - LIFE and Custom */}
         {selected !== "vanilla" && (
           <ThemeAccordion
-            label="Configuration: Course"
+            label={getSchemaText(getSchemaField(selectedThemeSchema, '_course'), 'title') ?? 'Configuration: Course'}
+            hint={getSchemaText(getSchemaField(selectedThemeSchema, '_course'), 'help')}
             isOpen={activeAccordion === "Configuration: Course"}
-            onToggle={() => setActiveAccordion(activeAccordion === "Configuration: Course" ? null : "Configuration: Course")}
+            onToggle={() => {
+              setActiveAccordion((current) => current === "Configuration: Course" ? null : "Configuration: Course");
+            }}
           >
             <div className="space-y-6">
               {selected === 'life' || selected === 'custom' ? (
                 <>
                   <LifeListField
-                    title="Custom Icons: Sprite Sheets"
-                    description="Add a reference to an external sprite sheet with icons that can be used in the course."
-                    titleHint="Add a reference to an external sprite sheet with icons that can be used in the course."
+                    title={getSchemaText(getSchemaField(selectedThemeSchema, '_course', '_svgSpriteSheets'), 'title') ?? 'Custom Icons: Sprite Sheets'}
+                    description={getSchemaText(getSchemaField(selectedThemeSchema, '_course', '_svgSpriteSheets'), 'help') ?? 'Add a reference to an external sprite sheet with icons that can be used in the course.'}
                     items={lifeCourseConfig._svgSpriteSheets}
                     errors={lifeCourseConfigErrors._svgSpriteSheets}
-                    idLabel="Icon Set Name"
+                    idLabel={getSchemaArrayItemFieldText(getSchemaField(selectedThemeSchema, '_course', '_svgSpriteSheets'), '_spriteSheetId', 'title') ?? 'Icon Set Name'}
+                    idHint={getSchemaArrayItemFieldText(getSchemaField(selectedThemeSchema, '_course', '_svgSpriteSheets'), '_spriteSheetId', 'help')}
                     idKey="_spriteSheetId"
+                    sourceLabel={getSchemaArrayItemFieldText(getSchemaField(selectedThemeSchema, '_course', '_svgSpriteSheets'), 'src', 'title') ?? 'External Source'}
+                    sourceHint={getSchemaArrayItemFieldText(getSchemaField(selectedThemeSchema, '_course', '_svgSpriteSheets'), 'src', 'help')}
                     onAdd={() => {
                       clearLifeCourseValidation();
                       setLifeCourseConfig((prev) => ({
@@ -2341,13 +2643,15 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                     }}
                   />
                   <LifeListField
-                    title="Custom Icons: Single Icons"
-                    description="Add a reference to an external individual icon that can be used in the course."
-                    titleHint="Add a reference to an external individual icon that can be used in the course."
+                    title={getSchemaText(getSchemaField(selectedThemeSchema, '_course', '_singleIcons'), 'title') ?? 'Custom Icons: Single Icons'}
+                    description={getSchemaText(getSchemaField(selectedThemeSchema, '_course', '_singleIcons'), 'help') ?? 'Add a reference to an external individual icon that can be used in the course.'}
                     items={lifeCourseConfig._singleIcons}
                     errors={lifeCourseConfigErrors._singleIcons}
-                    idLabel="Icon Id"
+                    idLabel={getSchemaArrayItemFieldText(getSchemaField(selectedThemeSchema, '_course', '_singleIcons'), 'iconId', 'title') ?? 'Icon Id'}
+                    idHint={getSchemaArrayItemFieldText(getSchemaField(selectedThemeSchema, '_course', '_singleIcons'), 'iconId', 'help')}
                     idKey="iconId"
+                    sourceLabel={getSchemaArrayItemFieldText(getSchemaField(selectedThemeSchema, '_course', '_singleIcons'), 'src', 'title') ?? 'External Source'}
+                    sourceHint={getSchemaArrayItemFieldText(getSchemaField(selectedThemeSchema, '_course', '_singleIcons'), 'src', 'help')}
                     onAdd={() => {
                       clearLifeCourseValidation();
                       setLifeCourseConfig((prev) => ({
@@ -2378,23 +2682,31 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           </ThemeAccordion>
         )}
 
-        {/* Configuration: Content Groups - LIFE and Custom */}
-        {selected !== "vanilla" && (
+        {/* Configuration: Content Groups - LIFE only */}
+        {isLifeTheme && (
           <ThemeAccordion
             label="Configuration: Content Groups"
+            hint={getSchemaText(getSchemaField(selectedThemeSchema, '_blocks'), 'help')}
             isOpen={activeAccordion === "Configuration: Content Groups"}
-            onToggle={() => setActiveAccordion(activeAccordion === "Configuration: Content Groups" ? null : "Configuration: Content Groups")}
+            onToggle={() => {
+              setActiveAccordion((current) => current === "Configuration: Content Groups" ? null : "Configuration: Content Groups");
+            }}
           >
             <div className="space-y-5">
+              <p className="text-xs text-[#6b7280] leading-relaxed" >
+                Content Groups - Adjust the spacing above and below the content group: Double, Standard, Half, or Remove.
+              </p>
               <div>
-                <p className="text-xs font-semibold text-[#111827] mb-2">Spacing top</p>
+                <InfoFieldLabel
+                  label={getSchemaText(getSchemaField(selectedThemeSchema, '_blocks', '_paddingTop'), 'title') ?? 'Spacing top'}
+                  className="mb-2"
+                />
                 <select
                   value={lifeBlocksConfig._paddingTop}
                   onChange={(e) => setLifeBlocksConfig((prev) => ({ ...prev, _paddingTop: e.target.value }))}
                   className="text-xs px-2.5 py-1.5 border border-[#d1d5db] rounded-md bg-white text-[#111827] cursor-pointer outline-none focus:border-[var(--life-primary-500)]"
                   style={{ minWidth: "110px" }}
                 >
-                  <option value=""></option>
                   <option value="double">Double</option>
                   <option value="half">Half</option>
                   <option value="remove">Remove</option>
@@ -2402,14 +2714,16 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                 </select>
               </div>
               <div>
-                <p className="text-xs font-semibold text-[#111827] mb-2">Spacing bottom</p>
+                <InfoFieldLabel
+                  label={getSchemaText(getSchemaField(selectedThemeSchema, '_blocks', '_paddingBottom'), 'title') ?? 'Spacing bottom'}
+                  className="mb-2"
+                />
                 <select
                   value={lifeBlocksConfig._paddingBottom}
                   onChange={(e) => setLifeBlocksConfig((prev) => ({ ...prev, _paddingBottom: e.target.value }))}
                   className="text-xs px-2.5 py-1.5 border border-[#d1d5db] rounded-md bg-white text-[#111827] cursor-pointer outline-none focus:border-[var(--life-primary-500)]"
                   style={{ minWidth: "110px" }}
                 >
-                  <option value=""></option>
                   <option value="double">Double</option>
                   <option value="half">Half</option>
                   <option value="remove">Remove</option>
@@ -2423,11 +2737,16 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
         {/* Configuration: Components - LIFE and Custom only */}
         {selected !== "vanilla" && (
           <ThemeAccordion
-            label="Configuration: Components"
+            label={getSchemaText(selectedThemeComponentSchema, 'title') ?? 'Configuration: Components'}
             isOpen={activeAccordion === "Configuration: Components"}
-            onToggle={() => setActiveAccordion(activeAccordion === "Configuration: Components" ? null : "Configuration: Components")}
+            onToggle={() => {
+              setActiveAccordion((current) => current === "Configuration: Components" ? null : "Configuration: Components");
+            }}
           >
             <div className="space-y-5">
+              <p className="text-xs text-[#6b7280] leading-relaxed">
+                {getSchemaText(selectedThemeComponentSchema, 'help') ?? 'Component-level behavior and feedback configuration.'}
+              </p>
               <div className="flex items-center gap-3 cursor-pointer" onClick={() => setCheckNotFinal(!checkNotFinal)}>
                 <div 
                   style={{
@@ -2449,13 +2768,11 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                     </svg>
                   )}
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-[#111827] leading-normal">Display marking for not-final attempts</span>
-                  <InfoIcon
-                    label="Display marking for not-final attempts"
-                    hint="Non-final question attempts are marked the same way as final attempts. Applies to all question components except H5P and Laerdal Drag and Drop"
-                  />
-                </div>
+                <InfoFieldLabel
+                  label={getSchemaText(getSchemaPropertyField(selectedThemeComponentSchema, '_canShowFinalMarking'), 'title') ?? 'Display marking for not-final attempts'}
+                  hint={getSchemaText(getSchemaPropertyField(selectedThemeComponentSchema, '_canShowFinalMarking'), 'help')}
+                  className="leading-normal"
+                />
               </div>
 
               <div className="flex items-center gap-3 cursor-pointer" onClick={() => setCheckUnanswered(!checkUnanswered)}>
@@ -2479,13 +2796,11 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                     </svg>
                   )}
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-[#111827] leading-normal">Display marking for unanswered responses</span>
-                  <InfoIcon
-                    label="Display marking for unanswered responses"
-                    hint="Shows or hides markings for partially correct answers according to the “Show Marking” setting under the article-level Assessment settings."
-                  />
-                </div>
+                <InfoFieldLabel
+                  label={getSchemaText(getSchemaPropertyField(selectedThemeComponentSchema, '_hidePartiallyDisplayMarking'), 'title') ?? 'Display marking for unanswered correct responses'}
+                  hint={getSchemaText(getSchemaPropertyField(selectedThemeComponentSchema, '_hidePartiallyDisplayMarking'), 'help')}
+                  className="leading-normal"
+                />
               </div>
 
               <div className="flex items-center gap-3 cursor-pointer" onClick={() => setCheckHideFeedback(!checkHideFeedback)}>
@@ -2509,13 +2824,11 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                     </svg>
                   )}
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-[#111827] leading-normal">Hide feedback on first attempt on assessments</span>
-                  <InfoIcon
-                    label="Hide feedback on first attempt on assessments"
-                    hint="Controls whether feedback is hidden on the first attempt in assessment courses."
-                  />
-                </div>
+                <InfoFieldLabel
+                  label={getSchemaText(getSchemaPropertyField(selectedThemeComponentSchema, '_hideFeedbackFirstAttempt'), 'title') ?? 'Hide feedback on first attempt on assessments'}
+                  hint={getSchemaText(getSchemaPropertyField(selectedThemeComponentSchema, '_hideFeedbackFirstAttempt'), 'help')}
+                  className="leading-normal"
+                />
               </div>
 
               <div className="flex items-center gap-3 cursor-pointer" onClick={() => setCheckHidePartial(!checkHidePartial)}>
@@ -2539,19 +2852,17 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                     </svg>
                   )}
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-[#111827] leading-normal">Hide partially correct feedback on the question and result topic</span>
-                  <InfoIcon
-                    label="Hide partially correct feedback on the question and result topic"
-                    hint="Controls whether feedback for partially correct answers is hidden on the question and results pages in assessments."
-                  />
-                </div>
+                <InfoFieldLabel
+                  label={getSchemaText(getSchemaPropertyField(selectedThemeComponentSchema, '_hidePartiallyFeedback'), 'title') ?? 'Hide partially correct feedback on the question and result page'}
+                  hint={getSchemaText(getSchemaPropertyField(selectedThemeComponentSchema, '_hidePartiallyFeedback'), 'help')}
+                  className="leading-normal"
+                />
               </div>
             </div>
           </ThemeAccordion>
         )}
 
-        {/* On Screen Classes - always visible */}
+        {selected !== "vanilla" && (
         <ThemeAccordion
           label="On Screen Classes"
           isOpen={activeAccordion === "On Screen Classes"}
@@ -2561,6 +2872,8 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
             <p className="text-xs text-[#6b7280] leading-relaxed">
               These settings allow you to attach classes when content is within the browser viewport.
               Supported classes include fade-in, fade-in-left, fade-in-right, fade-in-top, and fade-in-bottom.
+              {" "}A configured local class uses that item's settings; an empty local class uses the course defaults.
+              {" "}Use 1-100 for an explicit viewport percentage; the current framework treats 0 as 33%.
             </p>
 
             <div className="flex items-center gap-3">
@@ -2618,7 +2931,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                               const parsed = Number(e.target.value);
                               const safeValue = Number.isFinite(parsed)
                                 ? Math.max(0, Math.min(100, parsed))
-                                : DEFAULT_ON_SCREEN_CONFIG._percentInviewVertical;
+                                : DEFAULT_ON_SCREEN_CONFIG._levels[row.key]._percentInviewVertical;
                               updateOnScreenRow(row.key, { _percentInviewVertical: safeValue });
                             }}
                             className="text-xs w-full border border-[#d1d5db] rounded-md px-2.5 py-1.5 text-[#111827] bg-white focus:border-[var(--life-primary-500)] outline-none"
@@ -2632,6 +2945,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
             )}
           </div>
         </ThemeAccordion>
+        )}
       </div>
 
       {/* Vanilla Theme Settings - only shown when Vanilla is selected */}
@@ -2641,13 +2955,19 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           <div className="space-y-2">
             {VANILLA_ACCORDION_DEFS.map((acc) => {
               const isOpen = activeVanillaAccordion === acc.id;
+              const sectionSchema = getSchemaField(selectedThemeSchema, acc.id);
+              const sectionLabel = getSchemaText(sectionSchema, 'title') ?? acc.label;
+              const sectionHint = getSchemaText(sectionSchema, 'help');
               return (
-                <div key={acc.id} className="border border-[#e5e7eb] rounded-xl overflow-hidden bg-white">
+                <div key={acc.id} className="border border-[#e5e7eb] rounded-lg overflow-visible bg-white">
                   <button
                     onClick={() => setActiveVanillaAccordion(isOpen ? null : acc.id)}
                     className="group w-full flex items-center justify-between gap-3 px-5 py-4 !h-[56px] text-left bg-white text-[#111827] hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] transition-colors"
                   >
-                    <span className="text-sm font-bold text-current">{acc.label}</span>
+                    <span className="flex items-center gap-1.5 text-sm font-bold text-current">
+                      {sectionLabel}
+                      {sectionHint && <InfoIcon label={sectionLabel} hint={sectionHint} />}
+                    </span>
                     <svg
                       className="shrink-0 ml-auto text-current"
                       width="18"
@@ -2667,9 +2987,16 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                           const key = `${acc.id}::${field.key}`;
                           const colorVal = vanillaColors[key] ?? '';
                           const isEmpty = !colorVal;
+                          const fieldSchema = getSchemaField(selectedThemeSchema, acc.id, field.key);
+                          const fieldLabel = getSchemaText(fieldSchema, 'title') ?? field.label;
+                          const fieldHint = getSchemaText(fieldSchema, 'help');
                           return (
                             <div key={field.key}>
-                              <p className="text-xs text-[#111827] mb-2 leading-snug">{field.label}</p>
+                              <InfoFieldLabel
+                                label={fieldLabel}
+                                hint={fieldHint}
+                                className="mb-2 text-[#111827]"
+                              />
                               <label
                                 style={{
                                   display: 'block',
@@ -2722,13 +3049,18 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
               <div className="space-y-2">
                 {CUSTOM_ACCORDION_DEFS.map((acc) => {
                   const isOpen = activeCustomAccordion === acc.id;
+                  const sectionHint = getSchemaText(getSchemaField(selectedThemeSchema, acc.id), 'help');
+                  const sectionSchema = getSchemaField(selectedThemeSchema, acc.id);
                   return (
-                    <div key={acc.id} className="border border-[#e5e7eb] rounded-xl overflow-hidden bg-white">
+                    <div key={acc.id} className="border border-[#e5e7eb] rounded-lg overflow-visible bg-white">
                       <button
                         onClick={() => setActiveCustomAccordion(isOpen ? null : acc.id)}
                         className="group w-full flex items-center justify-between gap-3 px-5 py-4 !h-[56px] text-left bg-white text-[#111827] hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] transition-colors"
                       >
-                        <span className="text-sm font-bold text-current">{acc.label}</span>
+                        <span className="flex items-center gap-1.5 text-sm font-bold text-curren">
+                          {getSchemaText(sectionSchema, 'title') ?? acc.label}
+                          <InfoIcon label={getSchemaText(sectionSchema, 'title') ?? acc.label} hint={sectionHint} />
+                        </span>
                         <svg
                           className="shrink-0 ml-auto text-current"
                           width="18"
@@ -2746,16 +3078,20 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                           <div className="grid grid-cols-2 gap-x-4 gap-y-4">
                             {acc.fields.map((field) => {
                               const key = `${acc.id}::${field.key}`;
-                              const value = customSettings[key] ?? CUSTOM_FIELD_DEFAULTS[key] ?? '';
-
+                              const value = customSettings[key] || getCustomSettingDefault(key);
+                              const hint = getSchemaNestedFieldText(sectionSchema, field.key, 'help');
+                              const fieldLabel = getSchemaText(getSchemaField(selectedThemeSchema, acc.id, field.key), 'title') ?? field.label;
                               if (field.inputType === 'select') {
                                 return (
                                   <div
                                     key={field.key}
                                     className={acc.id === '_global' && field.key === 'page-heading-font-size' ? 'col-span-2' : ''}
                                   >
-                                    <p className="text-xs font-bold text-[#111827] mb-2">{field.label}</p>
+                                    <InfoFieldLabel label={fieldLabel} hint={hint} className="mb-2" />
                                     <select
+                                      id={`custom-theme-${acc.id}-${field.key}`}
+                                      name={key}
+                                      aria-label={fieldLabel}
                                       value={value}
                                       onChange={(e) => setCustomSettingWithDependencies(key, e.target.value)}
                                       className="text-xs w-full border border-[#d1d5db] rounded px-2 py-1 text-[#111827] bg-white cursor-pointer focus:border-[var(--life-primary-500)] outline-none"
@@ -2772,8 +3108,9 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                               return (
                                 <ColorPickerField
                                   key={field.key}
-                                  label={field.label}
-                                  value={value || '#ffffff'}
+                                  label={fieldLabel}
+                                  hint={hint}
+                                  value={value}
                                   onChange={(nextValue) => setCustomSettingWithDependencies(key, nextValue)}
                                 />
                               );
@@ -2796,6 +3133,15 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           </div>
         </div>
       )}
+
+      <div className="mt-6 w-full">
+        <div className="flex items-start gap-2.5 rounded-lg bg-[#fff7ed] border border-[#fed7aa] px-4 py-3 mb-5">
+          <span className="text-base leading-none mt-0.5" aria-hidden="true">💡</span>
+          <p className="text-sm text-[#9a3412] leading-snug">
+            <span className="font-semibold">Tip:</span> Once you’ve set up your theme, choose the menu you want to use for your course.
+          </p>
+        </div>
+      </div>
       </div>
       </div>
 
@@ -2811,41 +3157,6 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
         onClose={clearPendingNavigation}
       />
 
-      {/* Floating "Unsaved changes" bar — only while the form is dirty */}
-      {hasChanges && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-4 py-3 rounded-xl bg-white border border-[var(--life-warning-100)] shadow-lg animate-fade-in-down">
-          <span className="flex items-center gap-2 text-sm text-[#374151]">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-warning-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
-            </svg>
-            Unsaved changes
-          </span>
-          {saveError && <span className="text-xs text-[#ef4444] max-w-[180px] truncate">{saveError}</span>}
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleDiscardChanges}
-              disabled={saving}
-              className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] disabled:opacity-50 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving || !selected || !courseId}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-[var(--life-base-white)] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] disabled:opacity-50 rounded-lg transition-colors"
-            >
-              {saving && (
-                <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-                </svg>
-              )}
-              {saving ? "Saving…" : "Save Changes"}
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -3038,7 +3349,7 @@ function ManagePresetsModal({
       <ConfirmDialog
         open
         title="Delete Preset"
-        message={<>Are you sure you want to delete <span className="font-medium text-[#111827]">"{confirmDeleteTarget.displayName}"</span>?</>}
+        message="Are you sure you want to delete this preset?"
         note="This will affect any existing courses using this preset."
         onCancel={() => setConfirmDeleteTarget(null)}
         onConfirm={() => confirmDelete(confirmDeleteTarget)}
@@ -3052,20 +3363,25 @@ function ThemeAccordion({
   label,
   children,
   isOpen,
-  onToggle
+  onToggle,
+  hint
 }: {
   label: string;
   children: React.ReactNode;
   isOpen: boolean;
   onToggle: () => void;
+  hint?: string;
 }) {
   return (
-    <div className="border border-[#e5e7eb] rounded-xl overflow-hidden bg-white">
+    <div className="border border-[#e5e7eb] rounded-lg overflow-visible bg-white">
       <button
         onClick={onToggle}
         className="group w-full flex items-center justify-between gap-3 px-5 py-4 !h-[56px] text-left bg-white text-[#111827] hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] transition-colors"
       >
-        <span className="text-sm font-bold text-current">{label}</span>
+        <span className="flex items-center gap-1.5 text-sm font-bold text-current">
+          {label}
+          {hint && <InfoIcon label={label} hint={hint} />}
+        </span>
         <svg
           className="shrink-0 ml-auto text-current"
           width="18"
@@ -3086,4 +3402,3 @@ function ThemeAccordion({
     </div>
   );
 }
-

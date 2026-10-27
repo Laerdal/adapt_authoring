@@ -48,6 +48,7 @@ export default function CourseStructureMapView(props: Props) {
   const { structure, labels } = props;
   const [inlineId, setInlineId] = useState<string | null>(null);
   const [inlineValue, setInlineValue] = useState("");
+  const [inlineOriginalValue, setInlineOriginalValue] = useState("");
   const [fullscreen, setFullscreen] = useState(false);
 
   useEffect(() => {
@@ -57,13 +58,30 @@ export default function CourseStructureMapView(props: Props) {
     return () => document.removeEventListener("keyup", onKey);
   }, [fullscreen]);
 
-  function startRename(id: string, title: string) { setInlineId(id); setInlineValue(title); }
+  function startRename(id: string, title: string) {
+    setInlineId(id);
+    setInlineValue(title);
+    setInlineOriginalValue(title);
+  }
+  function handleInlineChange(level: StructureLevel, id: string, value: string) {
+    setInlineValue(value);
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    props.onRename(level, id, trimmed);
+  }
   function commitRename(level: StructureLevel) {
     if (!inlineId) return;
     const v = inlineValue.trim();
     const id = inlineId;
     setInlineId(null);
+    setInlineOriginalValue("");
     if (v) props.onRename(level, id, v);
+  }
+  function cancelRename(level: StructureLevel, id: string) {
+    props.onRename(level, id, inlineOriginalValue);
+    setInlineId(null);
+    setInlineValue("");
+    setInlineOriginalValue("");
   }
 
   const levelTone = (level: StructureLevel | "course") => {
@@ -101,9 +119,9 @@ export default function CourseStructureMapView(props: Props) {
               <input
                 autoFocus
                 value={inlineValue}
-                onChange={(e) => setInlineValue(e.target.value)}
+                onChange={(e) => handleInlineChange(level as StructureLevel, id, e.target.value)}
                 onClick={(e) => e.stopPropagation()}
-                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commitRename(level as StructureLevel); } else if (e.key === "Escape") { e.preventDefault(); setInlineId(null); } }}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commitRename(level as StructureLevel); } else if (e.key === "Escape") { e.preventDefault(); cancelRename(level as StructureLevel, id); } }}
                 onBlur={() => commitRename(level as StructureLevel)}
                 aria-label="Edit title"
                 className="w-full text-xs border border-[#2d6fa8] rounded px-1 py-0.5 focus:outline-none focus:ring-2 focus:ring-blue-500"

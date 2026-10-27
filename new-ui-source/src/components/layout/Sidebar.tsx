@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { canAccessDashboardSection, type DashboardSection, useAuth } from "@/context/AuthContext";
+import EditorMaskIcon from "@/components/editor/EditorMaskIcon";
 
 const navMain = [
   {
@@ -35,30 +36,17 @@ const navSecondary: Array<{ label: string; sectionKey: DashboardSection; icon: R
   {
     label: "Template Management",
     sectionKey: "template-management",
-    icon: (
-      <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
-      </svg>
-    ),
+    icon: <EditorMaskIcon file="templateMngt-icon.svg" className="block w-[18px] h-[18px] shrink-0 bg-current" />,
   },
   {
     label: "User Management",
     sectionKey: "user-management",
-    icon: (
-      <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m9-4a4 4 0 11-8 0 4 4 0 018 0zm6 4a3 3 0 00-3-3m-12 3a3 3 0 013-3" />
-      </svg>
-    ),
+    icon: <EditorMaskIcon file="user-icon.svg" className="block w-[18px] h-[18px] shrink-0 bg-current" />,
   },
   {
     label: "Plugin Management",
     sectionKey: "plugin-management",
-    icon: (
-      <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M11 4H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2v-5M16 4l4 4-8 8H8v-4l8-8z" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M18 2l4 4" />
-      </svg>
-    ),
+    icon: <EditorMaskIcon file="plugin-icon.svg" className="block w-[18px] h-[18px] shrink-0 bg-current" />,
   },
 ];
 
@@ -72,14 +60,23 @@ export default function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
   const location = useLocation();
   const { user } = useAuth();
   const visibleSecondaryNav = navSecondary.filter((item) => canAccessDashboardSection(user, item.sectionKey));
-  const [active, setActive] = useState(
-    location.pathname === "/users" ? "User Management" :
-    location.pathname === "/plugins" ? "Plugin Management" :
-    location.pathname === "/assets" ? "Asset Management" :
-    location.pathname === "/templates" ? "Template Management" :
-    location.pathname === "/shared" ? "Shared with Me" :
-    "My Courses"
-  );
+
+  const getActiveLabel = (pathname: string): string => {
+    const normalizedPath = pathname.replace(/\/+$/, "") || "/";
+
+    if (normalizedPath === "/users") return "User Management";
+    if (normalizedPath === "/plugins") return "Plugin Management";
+    if (normalizedPath === "/assets") return "Asset Management";
+    if (normalizedPath === "/templates") return "Template Management";
+    if (normalizedPath === "/shared") return "Shared with Me";
+    return "My Courses";
+  };
+
+  const [active, setActive] = useState(() => getActiveLabel(location.pathname));
+
+  useEffect(() => {
+    setActive(getActiveLabel(location.pathname));
+  }, [location.pathname]);
 
   // Close drawer on route change / escape key
   useEffect(() => {
@@ -101,7 +98,7 @@ export default function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
   }, [mobileOpen]);
 
   const NAV_ROUTES: Record<string, string> = {
-    "My Courses": "/my-courses",
+    "My Courses": "/dashboard",
     "Shared with Me": "/shared",
     "User Management": "/users",
     "Plugin Management": "/plugins",

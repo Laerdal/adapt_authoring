@@ -36,12 +36,14 @@ interface CommentThreadProps {
   top: StoryboardComment;
   replies: StoryboardComment[];
   label: string;
+  authorLabel: string;
+  replyAuthorLabel: (comment: StoryboardComment) => string;
   onReply: (parentId: string, blockId: string, body: string) => void;
   onResolve: (id: string, resolved: boolean) => void;
   onDelete: (id: string) => void;
 }
 
-function CommentThread({ top, replies, label, onReply, onResolve, onDelete }: CommentThreadProps) {
+function CommentThread({ top, replies, label, authorLabel, replyAuthorLabel, onReply, onResolve, onDelete }: CommentThreadProps) {
   const [reply, setReply] = useState('');
   return (
     <div className="sb-card" style={{ fontFamily: 'var(--font-family-primary)' }}>
@@ -85,7 +87,7 @@ function CommentThread({ top, replies, label, onReply, onResolve, onDelete }: Co
         {top.body}
       </p>
       <p style={{ marginTop: 2, fontSize: 11, color: 'var(--life-color-text-subtle)' }}>
-        {timeAgo(top.createdAt)}
+        {authorLabel} · {timeAgo(top.createdAt)}
       </p>
 
       {replies.map((r) => (
@@ -106,7 +108,7 @@ function CommentThread({ top, replies, label, onReply, onResolve, onDelete }: Co
               {r.body}
             </p>
             <p style={{ marginTop: 2, fontSize: 11, color: 'var(--life-color-text-subtle)' }}>
-              {timeAgo(r.createdAt)}
+              {replyAuthorLabel(r)} · {timeAgo(r.createdAt)}
             </p>
           </div>
         </div>
@@ -194,6 +196,12 @@ export default function ReviewCenter({
     
   ];
 
+  const authorLabelFor = (comment: StoryboardComment): string => {
+    const user = comment.createdBy ? review.commentAuthors[comment.createdBy] : null;
+    const name = [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim();
+    return name || user?.email || 'Unknown user';
+  };
+
   const addTopLevel = () => {
     if (!activeBlock || !draft.trim()) return;
     review.addComment(activeBlock.id, draft, courseId);
@@ -208,6 +216,7 @@ export default function ReviewCenter({
           <button
             type="button"
             aria-label="Collapse review center"
+            title="Collapse review center"
             onClick={onCollapse}
             className="sb-panel-collapse-btn"
           >
@@ -335,6 +344,8 @@ export default function ReviewCenter({
                   top={c}
                   replies={repliesOf(c._id)}
                   label={labelFor(c.blockId)}
+                  authorLabel={authorLabelFor(c)}
+                  replyAuthorLabel={authorLabelFor}
                   onReply={(parentId, blockId, body) => review.addComment(blockId, body, courseId, parentId)}
                   onResolve={review.setResolved}
                   onDelete={review.removeComment}
@@ -359,6 +370,8 @@ export default function ReviewCenter({
                 top={c}
                 replies={repliesOf(c._id)}
                 label={labelFor(c.blockId)}
+                authorLabel={authorLabelFor(c)}
+                replyAuthorLabel={authorLabelFor}
                 onReply={(parentId, blockId, body) => review.addComment(blockId, body, courseId, parentId)}
                 onResolve={review.setResolved}
                 onDelete={review.removeComment}

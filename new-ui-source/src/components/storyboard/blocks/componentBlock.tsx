@@ -20,6 +20,7 @@ import {
   ClipboardList,
   Award,
   RefreshCw,
+  Pencil,
   Sparkles,
   Trash2,
   Check,
@@ -34,9 +35,13 @@ import { storyboardActions } from '../storyboardActions';
 import { resolveCommentAnchor } from '../commentAnchor';
 import type { AssetKind } from '@/api/adaptAuthoring';
 import AssetPickerModal from '@/components/common/AssetPickerModal';
+import ConfirmDialog from '@/components/common/ConfirmDialog';
+import { BasicRichTextEditor } from '@/components/common';
+import { sanitizeEditorHtml } from '@/components/common/BasicRichTextEditor';
 import { CheckboxIndicator } from '@/components/common/Checkbox';
-import { emptyMediaData, safePreviewSrc, toEmbedUrl, type AssetRef, type ImageData, type MediaData } from '../mediaMapping';
+import { emptyMediaData, h5pEmbedUrl, safePreviewSrc, toEmbedUrl, type AssetRef, type ImageData, type MediaData, type MediaSourceKey } from '../mediaMapping';
 import SamaritanIcon from '../SamaritanIcon';
+import H5pPreview from '../H5pPreview';
 
 // YouTube/Vimeo → iframe embed; direct file URLs → <video>. Matches Lovable.
 function VideoView({ src, poster, className }: { src: string; poster?: string; className?: string }) {
@@ -80,7 +85,7 @@ export const COMPONENT_KINDS: ComponentKind[] = [
   'assessmentResult',
 ];
 
-const META: Record<ComponentKind, { badge: string; Icon: typeof Type; comp: string; suggest: ComponentKind[] }> = {
+export const COMPONENT_META: Record<ComponentKind, { badge: string; Icon: typeof Type; comp: string; suggest: ComponentKind[] }> = {
   text: { badge: 'Text', Icon: Type, comp: 'text', suggest: ['groupedContent', 'image'] },
   groupedContent: { badge: 'Grouped Content', Icon: Layers, comp: 'text', suggest: ['image', 'text'] },
   image: { badge: 'Image', Icon: ImageIcon, comp: 'graphic', suggest: ['groupedContent', 'video'] },
@@ -92,7 +97,7 @@ const META: Record<ComponentKind, { badge: string; Icon: typeof Type; comp: stri
 };
 
 const LABEL_TO_KIND: Record<string, ComponentKind> = Object.fromEntries(
-  COMPONENT_KINDS.map((k) => [META[k].badge, k])
+  COMPONENT_KINDS.map((k) => [COMPONENT_META[k].badge, k])
 ) as Record<string, ComponentKind>;
 
 // ── Data model ───────────────────────────────────────────────────────────────
@@ -178,7 +183,7 @@ export function makeComponentBlock(
   const data = { ...defaultComponentData(kind), ...(opts?.data as Partial<ComponentData>) };
   return {
     type: 'sbComponent',
-    props: { kind, title: opts?.title ?? '', adaptComponent: META[kind].comp, data: JSON.stringify(data) },
+    props: { kind, title: opts?.title ?? '', adaptComponent: COMPONENT_META[kind].comp, data: JSON.stringify(data) },
   };
 }
 
@@ -192,6 +197,21 @@ function parseData(kind: ComponentKind, raw: string): ComponentData {
     /* fall through */
   }
   return defaultComponentData(kind);
+}
+
+export type RichTextEditableField =
+  | 'description'
+  | 'instruction'
+  | 'itemBody'
+  | 'completionBody'
+  | 'bandFeedback';
+
+export function getRichTextEditableFields(kind: ComponentKind): RichTextEditableField[] {
+  const fields: RichTextEditableField[] = ['instruction'];
+  if (kind === 'text') fields.unshift('description');
+  if (kind === 'groupedContent') fields.push('itemBody');
+  if (kind === 'assessmentResult') fields.push('completionBody', 'bandFeedback');
+  return fields;
 }
 
 // A component with real content (loaded from an existing document/course)
@@ -239,23 +259,53 @@ function HeaderBtn({ onClick, active, children, title }: { onClick: () => void; 
   );
 }
 
+function instructionPlaceholder(kind: ComponentKind): string {
+  switch (kind) {
+    case 'image':
+      return 'e.g. Study the image before continuing.';
+    case 'video':
+      return 'e.g. Watch the video before continuing.';
+    case 'audio':
+      return 'e.g. Listen to the audio before continuing.';
+    case 'h5p':
+      return 'e.g. Complete the interactive activity before continuing.';
+    case 'laerdalForm':
+      return 'e.g. Complete the form before continuing.';
+    case 'groupedContent':
+      return 'e.g. Explore each content item before continuing.';
+    case 'assessmentResult':
+      return 'e.g. Review the result before continuing.';
+    default:
+      return 'e.g. Read the content before continuing.';
+  }
+}
+
+function plainText(value: string): string {
+  return value.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 // Preview a chosen asset by kind. Prefers the resolvable preview `url`, falling
 // back to the persisted `link` (e.g. an external URL).
 function AssetPreview({ assetType, value }: { assetType: AssetKind; value: AssetRef }) {
+  if (assetType === 'h5p') return <H5pPreview asset={value} />;
   const src = safePreviewSrc(value.url, value.link);
   if (!src) return null;
   if (assetType === 'image') return <img src={src} alt="" className="max-h-48 w-full rounded object-contain" />;
   if (assetType === 'audio') return <audio src={src} controls className="w-full" />;
-  if (assetType === 'h5p') {
-    // H5P files (.h5p) can't be played inline in the editor — show a badge.
-    return (
-      <div className="flex items-center gap-2 rounded border border-dashed border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-        <Puzzle className="h-4 w-4" /> H5P package selected
-      </div>
-    );
-  }
+  if (assetType === 'other') return null;
   return <VideoView src={src} className="max-h-64 w-full rounded" />;
 }
+
+// Asset-type-specific hint for the external-URL input — a bare "https://…"
+// placeholder read the same for an image field as a video field, which made
+// authors unsure what kind of link was actually expected.
+const EXTERNAL_ASSET_PLACEHOLDER: Record<AssetKind, string> = {
+  image: 'https://… (direct image link)',
+  audio: 'https://… (direct audio file link)',
+  video: 'https://… (or YouTube / Vimeo link)',
+  h5p: 'https://… (H5P embed-page URL)',
+  other: 'https://…',
+};
 
 // The Lovable asset field: "Select an Asset" (DAM picker) / "Select an External
 // Asset" (URL) when empty; asset preview + path + Change/Remove when set.
@@ -271,11 +321,16 @@ function AssetField({
   const [picking, setPicking] = useState(false);
   const [external, setExternal] = useState(false);
   const [url, setUrl] = useState('');
+  const [urlError, setUrlError] = useState('');
   const has = !!(value && (value.link || value.url));
 
   const applyExternal = () => {
     const trimmed = url.trim();
     if (!trimmed) return;
+    if (assetType === 'h5p' && !h5pEmbedUrl(trimmed)) {
+      setUrlError('Use an HTTP(S) embed-page URL. Upload .h5p packages through the asset library.');
+      return;
+    }
     onChange({ link: trimmed, url: trimmed, external: true });
     setExternal(false);
     setUrl('');
@@ -299,16 +354,17 @@ function AssetField({
           </div>
         </div>
       ) : external ? (
+        <div>
         <div className="flex items-center gap-2">
           <input
             autoFocus
             value={url}
-            onChange={(e) => setUrl(e.target.value)}
+            onChange={(e) => { setUrl(e.target.value); setUrlError(''); }}
             onKeyDown={(e) => {
               e.stopPropagation();
               if (e.key === 'Enter') applyExternal();
             }}
-            placeholder="https://… (or YouTube / Vimeo link)"
+            placeholder={EXTERNAL_ASSET_PLACEHOLDER[assetType]}
             className={inputCls}
           />
           <button type="button" onClick={applyExternal} className="rounded bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground">
@@ -317,6 +373,8 @@ function AssetField({
           <button type="button" onClick={() => setExternal(false)} className="text-xs text-muted-foreground hover:text-foreground">
             Cancel
           </button>
+        </div>
+        {urlError && <p role="alert" className="mt-1 text-xs text-red-600">{urlError}</p>}
         </div>
       ) : (
         <div className="flex flex-wrap gap-2">
@@ -353,12 +411,48 @@ function AssetField({
 
 // ── Per-kind bodies ──────────────────────────────────────────────────────────
 
-function TranscriptFields({ kind, media, set }: { kind: 'video' | 'audio'; media: MediaData; set: (m: MediaData) => void }) {
-  const field = (key: keyof MediaData, label: string, ph: string) => (
-    <label className="block">
+function RichTextField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  minHeight = 110,
+  ariaLabel,
+  resetKey,
+}: {
+  label: string;
+  value: string;
+  onChange: (html: string) => void;
+  placeholder?: string;
+  minHeight?: number;
+  ariaLabel?: string;
+  resetKey?: string | number;
+}) {
+  return (
+    <div>
       <span className={labelCls}>{label}</span>
-      <input value={(media[key] as string) || ''} placeholder={ph} onKeyDown={stop} onChange={(e) => set({ ...media, [key]: e.target.value })} className={inputCls} />
-    </label>
+      <BasicRichTextEditor
+        html={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        minHeight={minHeight}
+        ariaLabel={ariaLabel ?? label}
+        resetKey={resetKey}
+      />
+    </div>
+  );
+}
+
+function TranscriptFields({ kind, media, set }: { kind: 'video' | 'audio'; media: MediaData; set: (m: MediaData) => void }) {
+  const field = (key: MediaSourceKey, label: string) => (
+    <div className="block">
+      <span className={labelCls}>{label}</span>
+      <AssetField
+        assetType="other"
+        value={media.sourceAssets?.[key] ?? (media[key] ? { link: media[key] } : undefined)}
+        onChange={(asset) => set({ ...media, [key]: asset?.link || '', sourceAssets: { ...media.sourceAssets, [key]: asset } })}
+      />
+    </div>
   );
   return (
     <div className="space-y-2">
@@ -374,26 +468,31 @@ function TranscriptFields({ kind, media, set }: { kind: 'video' | 'audio'; media
       )}
       <div className="rounded border border-border p-2">
         <div className={labelCls}>Transcript, captions &amp; chapters</div>
-        {field('transcriptSource', 'Transcript source', 'https://… .vtt / .txt')}
+        {field('transcriptSource', 'Transcript source')}
         <label className="mt-1 block">
           <span className={labelCls}>Transcript text (in the storyboard)</span>
           <textarea value={media.transcriptText} onKeyDown={stop} onChange={(e) => set({ ...media, transcriptText: e.target.value })} rows={2} placeholder="Paste or write the transcript here" className={`${inputCls} resize-y`} />
         </label>
-        {field('captionsSource', 'Captions source', 'https://… .vtt')}
-        {field('descriptionsSource', 'Descriptions source', 'https://… .vtt')}
-        {field('chaptersSource', 'Chapters source', 'https://… .vtt')}
+        {field('captionsSource', 'Captions source')}
+        {field('descriptionsSource', 'Descriptions source')}
+        {field('chaptersSource', 'Chapters source')}
       </div>
     </div>
   );
 }
 
-function ComponentBody({ kind, data, set }: { kind: ComponentKind; data: ComponentData; set: (d: ComponentData) => void }) {
+function ComponentBody({ kind, data, set, blockId }: { kind: ComponentKind; data: ComponentData; set: (d: ComponentData) => void; blockId: string }) {
   if (kind === 'text') {
     return (
-      <div>
-        <span className={labelCls}>Description</span>
-        <textarea value={data.description} onKeyDown={stop} onChange={(e) => set({ ...data, description: e.target.value })} rows={2} placeholder="New component content…" className={`${inputCls} resize-y`} />
-      </div>
+      <RichTextField
+        label="Description"
+        value={data.description}
+        onChange={(html) => set({ ...data, description: html })}
+        placeholder="New component content…"
+        minHeight={110}
+        ariaLabel="Component description"
+        resetKey={blockId}
+      />
     );
   }
 
@@ -411,8 +510,18 @@ function ComponentBody({ kind, data, set }: { kind: ComponentKind; data: Compone
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
             </div>
-            <input value={it.title} placeholder="Item title" onKeyDown={stop} onChange={(e) => setItems(items.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)))} className={`${inputCls} mb-1`} />
-            <textarea value={it.body} placeholder="Item body — what should the learner read here?" onKeyDown={stop} rows={2} onChange={(e) => setItems(items.map((x, j) => (j === i ? { ...x, body: e.target.value } : x)))} className={`${inputCls} mb-1 resize-y`} />
+            <input value={it.title} placeholder="Item title *" onKeyDown={stop} onChange={(e) => setItems(items.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)))} className={`${inputCls} mb-1`} />
+            <div className="mb-1">
+              <RichTextField
+                label={`Item ${i + 1} body`}
+                value={it.body}
+                onChange={(html) => setItems(items.map((x, j) => (j === i ? { ...x, body: html } : x)))}
+                placeholder="Item body — what should the learner read here?"
+                minHeight={100}
+                ariaLabel={`Grouped content item ${i + 1} body`}
+                resetKey={`${blockId}-${i}`}
+              />
+            </div>
             <AssetField
               assetType="image"
               value={
@@ -504,7 +613,7 @@ function ComponentBody({ kind, data, set }: { kind: ComponentKind; data: Compone
               </select>
             </label>
             <label className="mt-1 block">
-              <span className={labelCls}>Label</span>
+              <span className={labelCls}>Label *</span>
               <input value={f.label} onKeyDown={stop} onChange={(e) => setFields(fields.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} className={inputCls} />
             </label>
             <label className="mt-1 block">
@@ -514,7 +623,10 @@ function ComponentBody({ kind, data, set }: { kind: ComponentKind; data: Compone
             <label className="mt-1 flex items-center gap-1.5 text-sm text-foreground cursor-pointer group">
               <input type="checkbox" checked={f.mandatory} onChange={(e) => setFields(fields.map((x, j) => (j === i ? { ...x, mandatory: e.target.checked } : x)))} aria-label="Is mandatory" className="sr-only peer" />
               <CheckboxIndicator checked={f.mandatory} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
-              Is mandatory
+              <span>
+                Required field
+                {f.mandatory && <span className="text-red-600 font-bold">*</span>}
+              </span>
             </label>
           </div>
         ))}
@@ -548,20 +660,20 @@ function ComponentBody({ kind, data, set }: { kind: ComponentKind; data: Compone
             className={inputCls}
           />
         </label>
-        <label className="block">
-          <span className={labelCls}>Completion body</span>
-          <textarea
+        <div>
+          <RichTextField
+            label="Completion body"
             value={r.completionBody}
+            onChange={(html) => setR({ completionBody: html })}
             placeholder="e.g. You scored {{scoreAsPercent}}%."
-            rows={2}
-            onKeyDown={stop}
-            onChange={(e) => setR({ completionBody: e.target.value })}
-            className={`${inputCls} resize-y`}
+            minHeight={90}
+            ariaLabel="Assessment completion body"
+            resetKey={`${blockId}-completion-body`}
           />
           <span className="mt-0.5 block text-[11px] italic text-muted-foreground">
             Supports {'{{score}}'}, {'{{scoreAsPercent}}'}, {'{{maxScore}}'}, {'{{correct}}'}, {'{{questionCount}}'}.
           </span>
-        </label>
+        </div>
         <div className="rounded border border-border p-2">
           <div className={labelCls}>Score bands</div>
           {bands.map((b, i) => (
@@ -578,14 +690,14 @@ function ComponentBody({ kind, data, set }: { kind: ComponentKind; data: Compone
                   className={inputCls}
                 />
               </label>
-              <label className="block">
-                <span className={labelCls}>Feedback</span>
-                <textarea
+              <div>
+                <RichTextField
+                  label="Feedback"
                   value={b.feedback}
-                  rows={2}
-                  onKeyDown={stop}
-                  onChange={(e) => setBands(bands.map((x, j) => (j === i ? { ...x, feedback: e.target.value } : x)))}
-                  className={`${inputCls} resize-y`}
+                  onChange={(html) => setBands(bands.map((x, j) => (j === i ? { ...x, feedback: html } : x)))}
+                  minHeight={80}
+                  ariaLabel={`Score band ${i + 1} feedback`}
+                  resetKey={`${blockId}-band-${i}`}
                 />
                 <label className="mt-1 flex items-center gap-1.5 text-xs text-foreground cursor-pointer group">
                   <input
@@ -598,7 +710,7 @@ function ComponentBody({ kind, data, set }: { kind: ComponentKind; data: Compone
                   <CheckboxIndicator checked={b.allowRetry} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
                   Allow retry
                 </label>
-              </label>
+              </div>
               <button
                 type="button"
                 aria-label="Remove band"
@@ -660,14 +772,19 @@ function MediaPlaceholder({ Icon, label }: { Icon: typeof Type; label: string })
 
 function ComponentPreview({ kind, title, data }: { kind: ComponentKind; title: string; data: ComponentData }) {
   const heading = data.showTitle && title ? <h4 className="mb-2 text-base font-semibold text-foreground">{title}</h4> : null;
-  const instruction = data.instruction ? <p className="mt-2 text-sm italic text-muted-foreground">{data.instruction}</p> : null;
+const instructionHtml = sanitizeEditorHtml(data.instruction);
+      const instruction = instructionHtml ? <div className="mt-2 text-sm italic text-muted-foreground" dangerouslySetInnerHTML={{ __html: instructionHtml }} /> : null;
 
   if (kind === 'text') {
+    const descriptionHtml = sanitizeEditorHtml(data.description);
     return (
       <div>
         {heading}
-        {data.description ? (
-          <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{data.description}</p>
+        {descriptionHtml ? (
+          <div
+            className="text-sm leading-relaxed text-foreground"
+            dangerouslySetInnerHTML={{ __html: descriptionHtml }}
+          />
         ) : (
           <p className="text-sm italic text-muted-foreground">No content yet — click Edit to add some.</p>
         )}
@@ -683,15 +800,18 @@ function ComponentPreview({ kind, title, data }: { kind: ComponentKind; title: s
         {heading}
         <p className="mb-4 text-sm italic text-muted-foreground">Select each heading to find out more.</p>
         <div className="space-y-5">
-          {items.map((it, i) => (
-            <div key={i} className="flex items-start justify-between gap-4">
-              <div className="min-w-0 flex-1">
-                <div className="font-semibold text-foreground">{it.title || `Item ${i + 1}`}</div>
-                {it.body && <div className="mt-0.5 whitespace-pre-wrap text-sm text-foreground">{it.body}</div>}
+          {items.map((it, i) => {
+            const bodyHtml = sanitizeEditorHtml(it.body);
+            return (
+              <div key={i} className="flex items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <div className="font-semibold text-foreground">{it.title || `Item ${i + 1}`}</div>
+                  {bodyHtml && <div className="mt-0.5 text-sm text-foreground" dangerouslySetInnerHTML={{ __html: bodyHtml }} />}
+                </div>
+                {safePreviewSrc(it.imageUrl, it.image) && <img src={safePreviewSrc(it.imageUrl, it.image)} alt="" className="h-20 w-32 shrink-0 rounded-md object-cover" />}
               </div>
-              {safePreviewSrc(it.imageUrl, it.image) && <img src={safePreviewSrc(it.imageUrl, it.image)} alt="" className="h-20 w-32 shrink-0 rounded-md object-cover" />}
-            </div>
-          ))}
+            );
+          })}
         </div>
         {instruction}
       </div>
@@ -741,7 +861,7 @@ function ComponentPreview({ kind, title, data }: { kind: ComponentKind; title: s
     return (
       <div>
         {heading}
-        <MediaPlaceholder Icon={Puzzle} label="H5P interactive content" />
+        <H5pPreview asset={data.media?.asset} />
         {instruction}
       </div>
     );
@@ -749,6 +869,7 @@ function ComponentPreview({ kind, title, data }: { kind: ComponentKind; title: s
 
   if (kind === 'laerdalForm') {
     const fields = data.fields ?? [];
+    console.log('[DEBUG ComponentPreview laerdalForm] Fields received:', fields);
     return (
       <div>
         {heading}
@@ -783,6 +904,7 @@ function ComponentPreview({ kind, title, data }: { kind: ComponentKind; title: s
   if (kind === 'assessmentResult') {
     const r = data.result;
     const bands = r?.bands ?? [];
+    const completionHtml = sanitizeEditorHtml(r?.completionBody ?? '');
     return (
       <div>
         {heading}
@@ -790,20 +912,29 @@ function ComponentPreview({ kind, title, data }: { kind: ComponentKind; title: s
           <div className="mb-2 inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             <Award className="h-3.5 w-3.5" /> Assessment result
           </div>
-          {r?.completionBody ? (
-            <p className="whitespace-pre-wrap text-sm text-foreground">{r.completionBody}</p>
+          {completionHtml ? (
+            <div className="text-sm text-foreground" dangerouslySetInnerHTML={{ __html: completionHtml }} />
           ) : (
             <p className="text-sm italic text-muted-foreground">Completion body not set.</p>
           )}
           {bands.length > 0 && (
             <ul className="mt-2 space-y-1 text-xs">
-              {bands.map((b, i) => (
-                <li key={i} className="flex items-baseline gap-2">
-                  <span className="min-w-[3rem] rounded bg-background px-1 py-0.5 text-[10px] font-semibold text-muted-foreground">≥ {b.score}%</span>
-                  <span className="text-foreground">{b.feedback || <span className="italic text-muted-foreground">(no feedback)</span>}</span>
-                  {b.allowRetry && <span className="text-muted-foreground">· retry</span>}
-                </li>
-              ))}
+              {bands.map((b, i) => {
+                const feedbackHtml = sanitizeEditorHtml(b.feedback || '');
+                return (
+                  <li key={i} className="flex items-baseline gap-2">
+                    <span className="min-w-[3rem] rounded bg-background px-1 py-0.5 text-[10px] font-semibold text-muted-foreground">≥ {b.score}%</span>
+                    <span className="text-foreground">
+                      {feedbackHtml ? (
+                        <span dangerouslySetInnerHTML={{ __html: feedbackHtml }} />
+                      ) : (
+                        <span className="italic text-muted-foreground">(no feedback)</span>
+                      )}
+                    </span>
+                    {b.allowRetry && <span className="text-muted-foreground">· retry</span>}
+                  </li>
+                );
+              })}
             </ul>
           )}
           {r?.assessmentId && (
@@ -844,7 +975,8 @@ export const componentBlock = createReactBlockSpec(
     meta: { selectable: false },
     render: ({ block, editor }) => {
       const kind = (COMPONENT_KINDS.includes(block.props.kind as ComponentKind) ? block.props.kind : 'text') as ComponentKind;
-      const meta = META[kind];
+      const meta = COMPONENT_META[kind];
+      console.log('[DEBUG] Resolved meta:', { kind, metaBadge: meta.badge, hasIcon: !!meta.Icon });
       const [model, setModel] = useState<ComponentData>(() => parseData(kind, block.props.data as string));
       // content already on the page opens in read-only Preview —
       // the author clicks "Edit" to reveal the editable fields, rather than
@@ -852,6 +984,7 @@ export const componentBlock = createReactBlockSpec(
       // still-blank component (just inserted) opens expanded instead.
       const [collapsed, setCollapsed] = useState(() => hasComponentContent(kind, model, block.props.title as string));
       const [dismissed, setDismissed] = useState(false);
+      const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
       const title = block.props.title as string;
 
       const setData = (next: ComponentData) => {
@@ -865,16 +998,13 @@ export const componentBlock = createReactBlockSpec(
       // created): Replace overwrites the content, Insert appends to it.
       const openAi = () => {
         storyboardActions.openAi({
-          initialText: model.description || (model.items || []).map((i) => i.body).join('\n'),
+          initialText: plainText(model.description || (model.items || []).map((i) => i.body).join('\n')),
           onReplace: (text) => setData({ ...model, description: text }),
           onInsert: (text) =>
             setData({ ...model, description: model.description ? `${model.description}\n\n${text}` : text }),
         });
       };
 
-      // Comment is an ACTION, but comments only ever live at Page/Article
-      // level (never Block/Component) — resolve to the Topic/Section heading
-      // this card sits under rather than the card's own block id.
       const openComment = () => {
         const anchor = resolveCommentAnchor(editor.document, block.id);
         if (!anchor) return;
@@ -887,15 +1017,23 @@ export const componentBlock = createReactBlockSpec(
 
       if (collapsed) {
         return (
-          <div className="group relative my-2 rounded-lg px-1 py-2 hover:bg-muted/20" contentEditable={false}>
+          <div className="group relative my-2 rounded-lg border border-border bg-background/50 p-3" contentEditable={false}>
+            {/* Badge/type indicator at the top */}
+            <div className="mb-2 flex items-center justify-between">
+              <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <meta.Icon className="h-3 w-3" /> {meta.badge}
+              </span>
+              <button
+                type="button"
+                onClick={() => setCollapsed(false)}
+                title="Edit content"
+                className="inline-flex items-center gap-1 rounded-full border bg-background px-2 py-0.5 text-xs text-muted-foreground shadow-sm transition-opacity hover:bg-muted"
+              >
+                <Pencil className="h-3 w-3" /> Edit
+              </button>
+            </div>
+            {/* Preview content */}
             <ComponentPreview kind={kind} title={title} data={model} />
-            <button
-              type="button"
-              onClick={() => setCollapsed(false)}
-              className="absolute right-1 top-1 inline-flex items-center gap-1 rounded-full border bg-background px-2 py-0.5 text-xs text-muted-foreground opacity-0 shadow-sm transition-opacity hover:bg-muted group-hover:opacity-100"
-            >
-              <RefreshCw className="h-3 w-3" /> Edit
-            </button>
           </div>
         );
       }
@@ -907,7 +1045,7 @@ export const componentBlock = createReactBlockSpec(
             <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
               <meta.Icon className="h-3 w-3" /> {meta.badge}
             </span>
-            <input value={title} placeholder={`${meta.badge} title`} onKeyDown={stop} onChange={(e) => setTitle(e.target.value)} className="min-w-0 flex-1 border-0 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground" />
+            <input value={title} placeholder={`${meta.badge} title *`} onKeyDown={stop} onChange={(e) => setTitle(e.target.value)} className="min-w-0 flex-1 border-0 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground" />
             <HeaderBtn onClick={() => setData({ ...model, showTitle: !model.showTitle })} active={model.showTitle} title="Show the title to learners">
               <Check className="h-3 w-3" /> Show title
             </HeaderBtn>
@@ -917,7 +1055,7 @@ export const componentBlock = createReactBlockSpec(
             <HeaderBtn onClick={openComment} title="Comment on this component">
               <MessageSquare className="h-3 w-3" /> Comment
             </HeaderBtn>
-            <HeaderBtn onClick={() => editor.removeBlocks([block])} title="Delete component">
+            <HeaderBtn onClick={() => setConfirmDeleteOpen(true)} title="Delete content">
               <Trash2 className="h-3 w-3" /> Delete
             </HeaderBtn>
             <HeaderBtn onClick={() => setCollapsed(true)} title="Collapse">
@@ -926,13 +1064,20 @@ export const componentBlock = createReactBlockSpec(
           </div>
 
           {/* Body */}
-          <ComponentBody kind={kind} data={model} set={setData} />
+          <ComponentBody kind={kind} data={model} set={setData} blockId={block.id} />
 
           {/* Instruction */}
-          <label className="mt-2 block">
-            <span className={labelCls}>Instruction text (optional)</span>
-            <input value={model.instruction} placeholder="e.g. Watch the video before continuing." onKeyDown={stop} onChange={(e) => setData({ ...model, instruction: e.target.value })} className={inputCls} />
-          </label>
+          <div className="mt-2">
+            <RichTextField
+              label="Instruction text (optional)"
+              value={model.instruction}
+              onChange={(html) => setData({ ...model, instruction: html })}
+              placeholder={instructionPlaceholder(kind)}
+              minHeight={80}
+              ariaLabel="Instruction text"
+              resetKey={`${block.id}-instruction`}
+            />
+          </div>
 
           {/* Suggested components */}
           {!dismissed && (
@@ -942,7 +1087,7 @@ export const componentBlock = createReactBlockSpec(
               </span>
               {meta.suggest.map((k) => (
                 <button key={k} type="button" onClick={() => insertSuggestion(k)} className="rounded-full border px-2 py-0.5 hover:bg-muted">
-                  {META[k].badge}
+                  {COMPONENT_META[k].badge}
                 </button>
               ))}
               <button type="button" onClick={() => setDismissed(true)} className="ml-auto text-muted-foreground hover:text-foreground">
@@ -950,6 +1095,20 @@ export const componentBlock = createReactBlockSpec(
               </button>
             </div>
           )}
+
+          <ConfirmDialog
+            open={confirmDeleteOpen}
+            title="Delete this content item?"
+            message="This content item will be removed from the storyboard."
+            note="This action cannot be undone from the storyboard."
+            confirmLabel="Delete"
+            cancelLabel="Cancel"
+            onCancel={() => setConfirmDeleteOpen(false)}
+            onConfirm={() => {
+              setConfirmDeleteOpen(false);
+              editor.removeBlocks([block]);
+            }}
+          />
         </div>
       );
     },

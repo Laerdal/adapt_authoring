@@ -1,7 +1,10 @@
 import { useState, useMemo, useEffect, useRef } from "react";
-import { getUsers, setUserRole, deleteUser } from "@/api/adaptAuthoring";
+import { getUsers, setUserRole, deleteUser, disableUser, restoreUser } from "@/api/adaptAuthoring";
+import { usePageLoader } from "@/hooks";
+import { useAuth } from "@/context/AuthContext";
 import AiAssistant from "@/components/common/AiAssistant";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
+import ErrorDialog from "@/components/common/ErrorDialog";
 
 type Role = "Super Admin" | "Authenticated User" | "Course Creator";
 
@@ -14,6 +17,7 @@ interface User {
   role: Role;
   failedLogins: number;
   lastAccess: string; // DD-MM-YY
+  isDeleted?: boolean;
 }
 
 const INITIAL_USERS: User[] = [
@@ -53,10 +57,25 @@ function isCompleteEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
-export default function UserManagementPage() {
-  const [users, setUsers]             = useState<User[]>([]);
+export function getUserActionLabel(isDeleted: boolean): string {
+  return isDeleted ? "Restore user" : "Disable user";
+}
 
-  const loadUsers = () => { getUsers().then(setUsers).catch(() => setUsers([])); };
+export default function UserManagementPage() {
+  const { user: currentUser } = useAuth();
+  const [users, setUsers]             = useState<User[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  usePageLoader(loading);
+
+  const loadUsers = () => {
+    setLoading(true);
+    getUsers()
+      .then(setUsers)
+      .catch(() => setUsers([]))
+      .finally(() => setLoading(false));
+  };
   useEffect(() => { loadUsers(); }, []);
   const [search, setSearch]           = useState("");
   const [searchError, setSearchError] = useState("");
@@ -135,9 +154,12 @@ export default function UserManagementPage() {
     setRoleMenuTarget(null);
     if (!target?.backendId) return;
     // optimistic update, then persist + reload from the engine
+    setActionError(null);
     setUsers((prev) => prev.map((u) => u.id === id ? { ...u, role } : u));
     try {
       await setUserRole(target.backendId, target.roleIds ?? [], role);
+    } catch {
+      setActionError(`Failed to change the role for ${target.email}. Please try again.`);
     } finally {
       loadUsers();
     }
@@ -147,9 +169,34 @@ export default function UserManagementPage() {
     const target = deleteTarget;
     setDeleteTarget(null);
     if (!target?.backendId) return;
+    setActionError(null);
     setUsers((prev) => prev.filter((u) => u.id !== target.id));
     try {
       await deleteUser(target.backendId);
+    } catch {
+      setActionError(`Failed to delete ${target.email}. Please try again.`);
+    } finally {
+      loadUsers();
+    }
+  }
+
+  async function toggleUserDisabledState(id: number) {
+    const target = users.find((u) => u.id === id);
+    setActionMenuTarget(null);
+    if (!target?.backendId) return;
+
+    const nextState = !target.isDeleted;
+    setActionError(null);
+    setUsers((prev) => prev.map((u) => u.id === id ? { ...u, isDeleted: nextState } : u));
+
+    try {
+      if (nextState) {
+        await disableUser(target.backendId);
+      } else {
+        await restoreUser(target.backendId);
+      }
+    } catch {
+      setActionError(`Failed to ${nextState ? "disable" : "restore"} ${target.email}. Please try again.`);
     } finally {
       loadUsers();
     }
@@ -160,6 +207,11 @@ export default function UserManagementPage() {
     if (action === "delete") {
       const user = users.find((u) => u.id === id);
       if (user) setDeleteTarget(user);
+      return;
+    }
+    if (action === "disable-user" || action === "restore-user") {
+      void toggleUserDisabledState(id);
+      return;
     }
     // "transfer", "delete-unshared", "share-all" — handled silently for now (backend ops)
   }
@@ -231,6 +283,7 @@ export default function UserManagementPage() {
               type="button"
               aria-pressed={roleFilter === option}
               onClick={() => {
+                setRoleFilter(option);
                 setPage(1);
               }}
               className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
@@ -245,35 +298,16 @@ export default function UserManagementPage() {
         </div>
 
         {/* Active filter chips */}
-        {(search || roleFilter !== "All") && (
+        {search && !searchError && (
           <div className="flex items-center gap-2 flex-wrap">
-            {search && !searchError && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#f3f4f6] text-xs text-[#374151] font-medium">
-                Email: <span className="text-[#2d6fa8]">"{search}"</span>
-                <button type="button" onClick={clearSearch} aria-label="Remove email filter" className="text-[#9ca3af] hover:text-[#374151] ml-0.5">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
-              </span>
-            )}
-            {roleFilter !== "All" && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#dbeeff] text-xs text-[#2d6fa8] font-medium">
-                Role: {roleFilter}
-                <button type="button" onClick={() => { setRoleFilter("All"); setPage(1); }} aria-label="Remove role filter" className="text-[#2d6fa8] hover:text-[#1e4d73] ml-0.5">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={() => { clearSearch(); setRoleFilter("All"); setPage(1); }}
-              className="text-xs text-[#9ca3af] hover:text-[#374151] underline underline-offset-2 transition-colors"
-            >
-              Clear all
-            </button>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#f3f4f6] text-xs text-[#374151] font-medium">
+              Email: <span className="text-[#2d6fa8]">"{search}"</span>
+              <button type="button" onClick={clearSearch} aria-label="Remove email filter" className="text-[#9ca3af] hover:text-[#374151] ml-0.5">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </span>
           </div>
         )}
 
@@ -309,15 +343,15 @@ export default function UserManagementPage() {
                   <th
                     key={key}
                     onClick={() => handleSort(key)}
-                    className="group px-4 py-3 text-left text-xs font-semibold text-[#374151] uppercase tracking-wide cursor-pointer select-none whitespace-nowrap hover:text-[#2d6fa8] transition-colors"
+                    className={`group px-4 py-3 text-xs font-semibold text-[#374151] uppercase tracking-wide cursor-pointer select-none whitespace-nowrap hover:text-[#2d6fa8] transition-colors ${key === "email" ? "text-left" : "text-center"}`}
                   >
-                    <span className="inline-flex items-center gap-1">
+                    <span className={`inline-flex items-center gap-1 ${key === "email" ? "" : "justify-center w-full"}`}>
                       {label}
                       <SortIcon col={key} />
                     </span>
                   </th>
                 ))}
-                <th className="px-4 py-3 text-right text-xs font-semibold text-[#374151] uppercase tracking-wide whitespace-nowrap">Actions</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-[#374151] uppercase tracking-wide whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -325,27 +359,37 @@ export default function UserManagementPage() {
                 <tr>
                   <td colSpan={6} className="px-4 py-16 text-center text-sm text-[#9ca3af]">No users found</td>
                 </tr>
-              ) : paginated.map((user) => (
-                <tr key={user.id} className="border-b border-[#f3f4f6] hover:bg-[#fafafa] transition-colors group/row">
+              ) : paginated.map((user) => {
+                const isCurrentUser = user.email.toLowerCase() === currentUser?.email.toLowerCase();
+                const isUserDisabled = !!user.isDeleted;
+
+                return (
+                <tr key={user.id} className={`border-b border-[#f3f4f6] hover:bg-[#fafafa] transition-colors group/row ${isCurrentUser ? "font-bold" : ""}`}>
                   {/* Email */}
-                  <td className="px-4 py-3 text-[#111827] font-medium">{user.email}</td>
+                  <td className={`px-4 py-3 text-[#111827] ${isCurrentUser ? "font-bold" : "font-normal"} ${isUserDisabled ? "opacity-60 grayscale-[0.25] saturate-50" : ""}`}>{user.email}</td>
 
                   {/* Tenant */}
-                  <td className="px-4 py-3 text-[#6b7280]">{user.tenant}</td>
+                  <td className={`px-4 py-3 text-center ${isCurrentUser ? "font-bold text-[#111827]" : "text-[#6b7280]"} ${isUserDisabled ? "opacity-60 grayscale-[0.25] saturate-50" : ""}`}>{user.tenant}</td>
 
                   {/* Role — click to change */}
-                  <td className="px-4 py-3 relative">
-                    <button
-                      type="button"
-                      onClick={() => setRoleMenuTarget(roleMenuTarget === user.id ? null : user.id)}
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${ROLE_COLORS[user.role]} hover:opacity-80 transition-opacity`}
-                    >
-                      {user.role}
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M6 9l6 6 6-6" />
-                      </svg>
-                    </button>
-                    {roleMenuTarget === user.id && (
+                  <td className={`px-4 py-3 text-center relative ${isUserDisabled ? "opacity-60 grayscale-[0.25] saturate-50" : ""}`}>
+                    {isCurrentUser || isUserDisabled ? (
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${ROLE_COLORS[user.role]}`}>
+                        {user.role}
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setRoleMenuTarget(roleMenuTarget === user.id ? null : user.id)}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${ROLE_COLORS[user.role]} hover:opacity-80 transition-opacity`}
+                      >
+                        {user.role}
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M6 9l6 6 6-6" />
+                        </svg>
+                      </button>
+                    )}
+                    {!isCurrentUser && !isUserDisabled && roleMenuTarget === user.id && (
                       <div className="absolute left-3 top-full mt-1 w-44 bg-white border border-[#e5e7eb] rounded-lg shadow-xl z-30 py-1">
                         <p className="px-3 py-1.5 text-xs font-semibold text-[#9ca3af] uppercase tracking-wide">Change role</p>
                         {ROLES.map((r) => (
@@ -368,18 +412,21 @@ export default function UserManagementPage() {
                   </td>
 
                   {/* Failed logins */}
-                  <td className="px-4 py-3">
-                    <span className={`font-medium ${user.failedLogins >= 5 ? "text-[#ef4444]" : user.failedLogins >= 1 ? "text-[#f59e0b]" : "text-[#6b7280]"}`}>
+                  <td className={`px-4 py-3 text-center ${isUserDisabled ? "opacity-60 grayscale-[0.25] saturate-50" : ""}`}>
+                    <span className={`${isCurrentUser ? "font-bold text-[#111827]" : `font-medium ${user.failedLogins >= 5 ? "text-[#ef4444]" : user.failedLogins >= 1 ? "text-[#f59e0b]" : "text-[#6b7280]"}`}`}>
                       {user.failedLogins}
                     </span>
                   </td>
 
                   {/* Last access */}
-                  <td className="px-4 py-3 text-[#6b7280] tabular-nums">{user.lastAccess}</td>
+                  <td className={`px-4 py-3 text-center tabular-nums ${isCurrentUser ? "font-bold text-[#111827]" : "text-[#6b7280]"} ${isUserDisabled ? "opacity-60 grayscale-[0.25] saturate-50" : ""}`}>{user.lastAccess}</td>
 
                   {/* Actions */}
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-1 relative">
+                  <td className="px-4 py-3 text-center">
+                    {isCurrentUser ? (
+                      <span className="block text-center text-xs text-[#111827] font-bold leading-snug w-40 mx-auto">Please log in as another admin for full access.</span>
+                    ) : (
+                    <div className="flex items-center justify-center gap-1 relative">
                       {/* Delete */}
                       <button
                         type="button"
@@ -409,6 +456,18 @@ export default function UserManagementPage() {
 
                       {actionMenuTarget === user.id && (
                         <div className="absolute right-0 top-full mt-1 w-52 bg-white border border-[#e5e7eb] rounded-lg shadow-xl z-30 py-1">
+                          <button
+                            type="button"
+                            onClick={() => handleActionMenu(user.id, user.isDeleted ? "restore-user" : "disable-user")}
+                            className="w-full text-left px-3 py-2 text-sm text-[#374151] hover:bg-[#f9fafb] flex items-center gap-2.5"
+                          >
+                            <img
+                              src={user.isDeleted ? "/assets/icons/UserRow.svg" : "/assets/icons/DisableUserIcon.svg"}
+                              alt=""
+                              className="w-4 h-4 shrink-0"
+                            />
+                            {getUserActionLabel(!!user.isDeleted)}
+                          </button>
                           <button
                             type="button"
                             onClick={() => handleActionMenu(user.id, "transfer")}
@@ -441,23 +500,14 @@ export default function UserManagementPage() {
                             </svg>
                             Share all courses
                           </button>
-                          <div className="border-t border-[#f3f4f6] my-1" />
-                          <button
-                            type="button"
-                            onClick={() => handleActionMenu(user.id, "delete")}
-                            className="w-full text-left px-3 py-2 text-sm text-[#ef4444] hover:bg-[#fef2f2] flex items-center gap-2.5"
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                              <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
-                            </svg>
-                            Delete user
-                          </button>
                         </div>
                       )}
                     </div>
+                    )}
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
 
@@ -571,6 +621,13 @@ export default function UserManagementPage() {
           onConfirm={confirmDelete}
         />
       )}
+
+      <ErrorDialog
+        open={Boolean(actionError)}
+        title="User action failed"
+        message={actionError ?? "The requested user action could not be completed."}
+        onClose={() => setActionError(null)}
+      />
 
     </div>
   );

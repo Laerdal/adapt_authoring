@@ -28,8 +28,11 @@ function publishCourse(courseId, mode, request, response, next) {
   let themeName;
   let menuName;
   let frameworkVersion;
+  let builtOutputFolder;
   let isForceRebuild;
   let computedFingerprint = '';
+  let customStyleFingerprint = '';
+  let compiledStyleFingerprint = '';
   let isCacheHit = false;
 
   let resultObject = {};
@@ -163,6 +166,8 @@ function publishCourse(courseId, mode, request, response, next) {
         outputJson = data;
         // PERF: fingerprint the raw course JSON now; used by cache gate below
         computedFingerprint = self.computeFingerprint(outputJson);
+        customStyleFingerprint = self.computeCustomStyleFingerprint(outputJson);
+        compiledStyleFingerprint = self.computeCompiledStyleFingerprint(outputJson);
         callback(null);
       });
     },
@@ -205,10 +210,18 @@ function publishCourse(courseId, mode, request, response, next) {
           self.buildFlagExists(path.join(BUILD_FOLDER, Constants.Filenames.Rebuild), function(err, buildFlagExists) {
             if (err) return done(err);
             isForceRebuild = request && request.query.force === 'true';
+            var storedCustomStyleFingerprint = '';
+            try {
+              storedCustomStyleFingerprint = fs.readFileSync(path.join(BUILD_FOLDER, '.custom-style-hash'), 'utf8').trim();
+            } catch (_) { /* missing marker forces one compatibility rebuild */ }
+            var storedCompiledStyleFingerprint = '';
+            try {
+              storedCompiledStyleFingerprint = fs.readFileSync(path.join(BUILD_FOLDER, '.compiled-style-hash'), 'utf8').trim();
+            } catch (_) {}
             if (!fs.existsSync(path.normalize(BUILD_FOLDER + '/index.html'))) {
               buildFlagExists = true;
             }
-            if (mode === Constants.Modes.Export || mode === Constants.Modes.Publish || buildFlagExists || isForceRebuild) {
+            if (mode === Constants.Modes.Export || mode === Constants.Modes.Publish || buildFlagExists || isForceRebuild || storedCustomStyleFingerprint !== customStyleFingerprint || storedCompiledStyleFingerprint !== compiledStyleFingerprint) {
               isRebuildRequired = true;
             }
             if (mode === Constants.Modes.Export || mode === Constants.Modes.Publish || isForceRebuild) {
@@ -415,6 +428,7 @@ function publishCourse(courseId, mode, request, response, next) {
       }
 
       args.push('--outputdir=' + outputFolder);
+      builtOutputFolder = outputFolder;
       args.push('--theme=' + themeName);
       args.push('--menu=' + menuName);
 
@@ -440,9 +454,6 @@ function publishCourse(courseId, mode, request, response, next) {
           logger.log('info', 'stdout: ' + stdout);
           resultObject.success = true;
 
-          // Indicate that the course has built successfully
-          app.emit('previewCreated', tenantId, courseId, outputFolder);
-
           return callback(null, 'Framework built OK');
         }
 
@@ -466,6 +477,11 @@ function publishCourse(courseId, mode, request, response, next) {
       if (isCacheHit) return callback(); // hash is already current — no need to rewrite
       const hashFile = path.join(BUILD_FOLDER, '.build-hash');
       try { fs.writeFileSync(hashFile, computedFingerprint); } catch (_) {}
+      if (isRebuildRequired) {
+        try { fs.writeFileSync(path.join(BUILD_FOLDER, '.custom-style-hash'), customStyleFingerprint); } catch (_) {}
+        try { fs.writeFileSync(path.join(BUILD_FOLDER, '.compiled-style-hash'), compiledStyleFingerprint); } catch (_) {}
+        app.emit('previewCreated', tenantId, courseId, builtOutputFolder);
+      }
       callback();
     },
     function(callback) {

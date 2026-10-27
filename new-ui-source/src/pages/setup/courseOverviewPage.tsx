@@ -7,9 +7,20 @@ import {
   updateCourse,
   type UserSummary,
 } from "../../api/adaptAuthoring";
+import { usePageLoader } from "../../hooks";
 import type { AssetPickerRequest } from "../../types/assetPicker";
-import { BasicRichTextEditor, isEditorEmpty } from "../../components/common";
+import { BasicRichTextEditor, isEditorEmpty, InfoFieldLabel } from "../../components/common";
 import { isSafeLanguageCode } from "../../api/adaptAuthoring";
+import { SaveChangesButton } from "./SaveChangesButton";
+import { SaveStatusToast } from "./SaveStatusToast";
+import {
+  getConfigRootSchema,
+  getCourseRootSchema,
+  getSchemaHint,
+  getSchemaLabel,
+  getSchemaNode,
+  type SetupSchemaNode,
+} from "../../helpers/setupInfoSchema";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 
@@ -78,12 +89,13 @@ export function CourseOverviewPage({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [loading, setLoading] = useState(!!courseId);
+  const initialBodyValue = initialDescription || "";
 
   // Committed values (server state)
   const [savedTitle, setSavedTitle] = useState(initialTitle);
   const [savedSubtitle, setSavedSubtitle] = useState("");
-  const [savedBody, setSavedBody] = useState("");
-  const [savedDesc, setSavedDesc] = useState(initialDescription);
+  const [savedBody, setSavedBody] = useState(initialBodyValue);
+  const [savedDesc, setSavedDesc] = useState("");
   const [savedInstruction, setSavedInstruction] = useState("");
   const [savedTags, setSavedTags] = useState<string[]>([]);
   const [savedHeroAssetId, setSavedHeroAssetId] = useState<string | null>(null);
@@ -94,8 +106,8 @@ export function CourseOverviewPage({
   // Live form values
   const [formTitle, setFormTitle] = useState(initialTitle);
   const [formSubtitle, setFormSubtitle] = useState("");
-  const [formBody, setFormBody] = useState(""); 
-  const [formDesc, setFormDesc] = useState(initialDescription);
+  const [formBody, setFormBody] = useState(initialBodyValue);
+  const [formDesc, setFormDesc] = useState("");
   const [formInstruction, setFormInstruction] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
@@ -116,12 +128,17 @@ export function CourseOverviewPage({
   const [activeEmailSuggestionIndex, setActiveEmailSuggestionIndex] = useState(-1);
   const [emailInputFocused, setEmailInputFocused] = useState(false);
   const emailSearchRequestIdRef = useRef(0);
+  const emailInputRef = useRef<HTMLInputElement | null>(null);
   const [showAuthoringBanner, setShowAuthoringBanner] = useState(true);
+  const [courseSchema, setCourseSchema] = useState<SetupSchemaNode | null>(null);
+  const [configSchema, setConfigSchema] = useState<SetupSchemaNode | null>(null);
 
   // Remount key for the Body rich-text editor. Bumping this forces the
   // uncontrolled contentEditable surface to re-initialize its innerHTML
   // (used after bootstrap load and on discard).
   const [bodyEditorKey, setBodyEditorKey] = useState(0);
+
+  usePageLoader(loading);
 
   function serializeCollaborators(list: Collaborator[]) {
     return [...list]
@@ -202,6 +219,26 @@ export function CourseOverviewPage({
       cancelled = true;
     };
   }, [courseId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void Promise.all([getCourseRootSchema(), getConfigRootSchema()])
+      .then(([nextCourseSchema, nextConfigSchema]) => {
+        if (cancelled) return;
+        setCourseSchema(nextCourseSchema);
+        setConfigSchema(nextConfigSchema);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setCourseSchema(null);
+        setConfigSchema(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function markDirty() {
     setSaveSuccess(false);
@@ -476,6 +513,11 @@ export function CourseOverviewPage({
   }
 
   function handleEmailInputKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Backspace" && !emailInput.trim() && collaborators.length > 0) {
+      e.preventDefault();
+      handleRemoveCollaborator(collaborators[collaborators.length - 1].userId);
+      return;
+    }
     if (e.key === "ArrowDown") {
       if (!showEmailSuggestions || emailSuggestions.length === 0) return;
       e.preventDefault();
@@ -500,9 +542,9 @@ export function CourseOverviewPage({
 
   const labelStyle: React.CSSProperties = {
     fontFamily: '"Lato", sans-serif',
-    fontSize: 13,
-    fontWeight: 700,
-    color: "var(--life-base-black)",   // #1A1A1A
+    fontSize: 12,
+    fontWeight: 600,
+    color: "#374151",
     display: "block",
     marginBottom: 6,
   };
@@ -536,6 +578,29 @@ export function CourseOverviewPage({
     e.currentTarget.style.borderColor = "var(--life-neutral-400)"; // #949494
   }
 
+  function renderFieldLabel(
+    label: string,
+    schemaPath: string[],
+    options?: { required?: boolean; schemaRoot?: SetupSchemaNode | null; hint?: string; labelOverride?: string; showInfoIcon?: boolean }
+  ) {
+    const schemaRoot = options?.schemaRoot ?? courseSchema;
+    const schemaNode = getSchemaNode(schemaRoot, ...schemaPath);
+    const displayLabel = options?.labelOverride ?? getSchemaLabel(schemaNode, label);
+    const hint = options?.hint ?? getSchemaHint(schemaNode);
+    const showInfoIcon = options?.showInfoIcon ?? true;
+
+    return (
+      <div style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 4, flexWrap: "nowrap" }}>
+        {showInfoIcon ? (
+          <InfoFieldLabel label={displayLabel} hint={hint} className="text-[#374151] !mb-0" />
+        ) : (
+          <span style={{ ...labelStyle, marginBottom: 0, lineHeight: 1.2 }}>{displayLabel}</span>
+        )}
+        {options?.required ? <span style={{ color: "var(--life-critical-500)", fontWeight: 400, lineHeight: 1 }}>*</span> : null}
+      </div>
+    );
+  }
+
   return (
     <div
       className="flex flex-col h-full w-full bg-[#f7f9fb]"
@@ -547,15 +612,21 @@ export function CourseOverviewPage({
         unicodeBidi: "plaintext",
       }}
     >
+      <SaveStatusToast toast={saveSuccess && !isDirty ? { type: "success", message: "Changes saved successfully" } : null} onDismiss={() => setSaveSuccess(false)} />
 
       {/* ── Header ───────────────────────────────────────────────── */}
-      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb]">
-        <h2 className="text-xl font-bold text-[var(--life-base-black)] m-0">
-          Course Overview
-        </h2>
-        <p className="text-sm text-[#6b7280] mt-0.5 mb-0">
-          Click any field to review and edit its content inline.
-        </p>
+      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-center gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-[var(--life-base-black)] m-0">
+            Course Overview
+          </h2>
+          <p className="text-sm text-[#6b7280] mt-0.5 mb-0">
+            Click any field to review and edit its content inline.
+          </p>
+        </div>
+        <div className="ml-auto">
+          <SaveChangesButton dirty={isDirty} saving={saving} disabled={!courseId} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto min-h-0">
@@ -567,20 +638,12 @@ export function CourseOverviewPage({
           {saveError}
         </div>
       )}
-      {saveSuccess && !isDirty && (
-        <div style={{ marginBottom: 20, padding: "10px 14px", borderRadius: 8, background: "var(--life-positive-050)", border: "1px solid var(--life-positive-400)", fontFamily: '"Lato", sans-serif', fontSize: 13, color: "var(--life-positive-500)" }}>
-          Changes saved successfully.
-        </div>
-      )}
-
       {/* ── Fields ───────────────────────────────────────────────── */}
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
 
         {/* Title */}
         <div>
-          <label style={labelStyle}>
-            Title <span style={{ color: "var(--life-critical-500)", fontWeight: 400 }}>*</span>
-          </label>
+          {renderFieldLabel("Title", ["title"], { required: true })}
           <input
             value={formTitle}
             onChange={(e) => { setFormTitle(e.target.value); markDirty(); }}
@@ -594,7 +657,7 @@ export function CourseOverviewPage({
 
         {/* Sub-Title */}
         <div>
-          <label style={labelStyle}>Subtitle</label>
+          {renderFieldLabel("Subtitle", ["subtitle"], { showInfoIcon: false })}
           <input
             value={formSubtitle}
             onChange={(e) => { setFormSubtitle(e.target.value); markDirty(); }}
@@ -609,12 +672,33 @@ export function CourseOverviewPage({
 
         {/* Description */}
         <div>
-          <label style={labelStyle}>Description</label>
+          {renderFieldLabel("Description", ["body"])}
+          <BasicRichTextEditor
+            key={bodyEditorKey}
+            html={formBody}
+            onChange={(next) => { setFormBody(next); markDirty(); }}
+            disabled={loading}
+            placeholder="Describe what this course is about and what learners will gain"
+            ariaLabel="description"
+          />
+        </div>
+
+          {/* Body */}
+        <div>
+          {renderFieldLabel("Course Metadata", ["description"], {
+            labelOverride: "Course Metadata",
+            hint: "This information is not currently displayed within the course",
+          })}
+          {/* Plain text, not rich text: `description` is a plain Text schema
+              field and CourseCard renders it as literal text — a rich editor
+              here would save HTML tags that show up unrendered on course
+              cards. The rich editor is only correct for `body` (Description,
+              above), which is an actual HTML field. */}
           <textarea
             rows={4}
             value={formDesc}
-            onChange={(e) => { setFormDesc(e.target.value); markDirty();}}
-            placeholder="Describe what this course is about and what learners will gain"
+            onChange={(e) => { setFormDesc(e.target.value); markDirty(); }}
+            placeholder="Provide description to be added to the course manifest metadata"
             disabled={loading}
             style={textareaBase}
             onFocus={focusIn}
@@ -622,22 +706,9 @@ export function CourseOverviewPage({
           />
         </div>
 
-          {/* Body */}
-        <div>
-          <label style={labelStyle}>Body</label>
-          <BasicRichTextEditor
-            key={bodyEditorKey}
-            html={formBody}
-            onChange={(next) => { setFormBody(next); markDirty(); }}
-            disabled={loading}
-            placeholder="Add the main content for this course overview"
-            ariaLabel="Body"
-          />
-        </div>
-
         {/* Instructions */}
         <div>
-          <label style={labelStyle}>Instructions</label>
+          {renderFieldLabel("Instructions", ["instruction"])}
           <textarea
             rows={4}
             value={formInstruction}
@@ -652,7 +723,7 @@ export function CourseOverviewPage({
 
         {/* Course Image */}
         <div>
-          <label style={labelStyle}>Course Image</label>
+          {renderFieldLabel("Course Image", ["heroImage"])}
           <div
             role="button"
             tabIndex={0}
@@ -738,7 +809,7 @@ export function CourseOverviewPage({
 
         {/* Tags */}
         <div>
-          <label style={labelStyle}>Tags</label>
+          {renderFieldLabel("Tags", ["tags"], { showInfoIcon: false })}
           <div style={{ display: "flex", gap: 8, marginBottom: tags.length > 0 ? 10 : 0 }}>
             <input
               value={tagInput}
@@ -777,7 +848,7 @@ export function CourseOverviewPage({
 
         {/* Default Language */}
         <div>
-          <label style={labelStyle}>Default Language</label>
+          {renderFieldLabel("Default Language", ["_defaultLanguage"], { schemaRoot: configSchema })}
           <div style={{ position: "relative" }}>
             <select
               value={selectedLanguageOption}
@@ -871,31 +942,106 @@ export function CourseOverviewPage({
         {/* Email input for specific sharing */}
         {shareMode === "specific" && (
           <div style={{ marginBottom: 14 }}>
-            <div style={{ position: "relative", display: "flex", gap: 8, marginBottom: emailError ? 6 : 0 }}>
-              <input
-                type="email"
-                value={emailInput}
-                onChange={(e) => {
-                  setEmailInput(e.target.value);
-                  setEmailError(null);
-                  if (!showEmailSuggestions) setShowEmailSuggestions(true);
+            <div style={{ position: "relative", marginBottom: emailError ? 6 : 0 }}>
+              <div
+                role="group"
+                aria-label="Share with users"
+                onMouseDown={(event) => {
+                  if (event.target instanceof HTMLButtonElement) return;
+                  event.preventDefault();
+                  emailInputRef.current?.focus();
                 }}
-                onKeyDown={handleEmailInputKeyDown}
-                placeholder="colleague@laerdal.com"
-                style={inputBase}
-                onFocus={(e) => {
-                  focusIn(e);
-                  setEmailInputFocused(true);
-                  if (emailSuggestions.length > 0) setShowEmailSuggestions(true);
+                style={{
+                  ...inputBase,
+                  minHeight: 44,
+                  height: "auto",
+                  padding: "7px 10px",
+                  display: "flex",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: 8,
+                  borderColor: emailInputFocused ? "var(--life-primary-500)" : "var(--life-neutral-400)",
                 }}
-                onBlur={(e) => {
-                  focusOut(e);
-                  setEmailInputFocused(false);
-                  window.setTimeout(() => setShowEmailSuggestions(false), 120);
-                }}
-              />
+              >
+                {collaborators.map(({ userId, email }) => (
+                  <span
+                    key={userId}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 8,
+                      maxWidth: "100%",
+                      padding: "5px 10px",
+                      borderRadius: 6,
+                      background: "#15d28e",
+                      color: "#ffffff",
+                      fontFamily: '"Lato", sans-serif',
+                      fontSize: 13,
+                      fontWeight: 700,
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{email}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveCollaborator(userId)}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        cursor: "pointer",
+                        color: "inherit",
+                        lineHeight: 1,
+                        padding: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        opacity: 0.92,
+                      }}
+                      aria-label={`Remove collaborator ${email}`}
+                    >
+                      <svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                        <path d="M9 3L3 9M3 3l6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                      </svg>
+                    </button>
+                  </span>
+                ))}
+                <input
+                  ref={emailInputRef}
+                  type="email"
+                  value={emailInput}
+                  onChange={(e) => {
+                    setEmailInput(e.target.value);
+                    setEmailError(null);
+                    if (!showEmailSuggestions) setShowEmailSuggestions(true);
+                  }}
+                  onKeyDown={handleEmailInputKeyDown}
+                  placeholder={collaborators.length === 0 ? "colleague@laerdal.com" : ""}
+                  style={{
+                    flex: 1,
+                    minWidth: 180,
+                    height: 28,
+                    border: "none",
+                    outline: "none",
+                    background: "transparent",
+                    padding: 0,
+                    margin: "2px 4px",
+                    fontFamily: '"Lato", sans-serif',
+                    fontSize: 14,
+                    color: "var(--life-base-black)",
+                  }}
+                  onFocus={() => {
+                    setEmailInputFocused(true);
+                    if (emailSuggestions.length > 0) setShowEmailSuggestions(true);
+                  }}
+                  onBlur={() => {
+                    setEmailInputFocused(false);
+                    window.setTimeout(() => setShowEmailSuggestions(false), 120);
+                  }}
+                />
+              </div>
               {showEmailSuggestions && (emailSuggestions.length > 0 || emailSearching) && (
-                <div role="listbox" aria-label="User suggestions"
+                <div
+                  role="listbox"
+                  aria-label="User suggestions"
                   style={{
                     position: "absolute",
                     top: "calc(100% + 6px)",
@@ -960,33 +1106,6 @@ export function CourseOverviewPage({
             )}
           </div>
         )}
-
-        {/* Collaborator list */}
-        {shareMode === "specific" && collaborators.length > 0 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {collaborators.map(({ userId, email }) => {
-              const initials = email.slice(0, 2).toUpperCase();
-              return (
-                <div key={userId} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 8, border: "1px solid var(--life-neutral-200)", background: "var(--life-neutral-020)" }}>
-                  <div style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--life-primary-500)", color: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: '"Lato", sans-serif', fontSize: 13, fontWeight: 700, flexShrink: 0 }}>
-                    {initials}
-                  </div>
-                  <span style={{ flex: 1, fontFamily: '"Lato", sans-serif', fontSize: 14, color: "var(--life-base-black)" }}>{email}</span>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveCollaborator(userId)}
-                    style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--life-neutral-400)", display: "flex", alignItems: "center", padding: 4 }}
-                    onMouseEnter={(e) => (e.currentTarget.style.color = "var(--life-critical-500)")}
-                    onMouseLeave={(e) => (e.currentTarget.style.color = "var(--life-neutral-400)")}
-                    aria-label={`Remove ${email}`}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M11 3L3 11M3 3l8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
       </div>
 
       {showAuthoringBanner && (
@@ -1032,42 +1151,6 @@ export function CourseOverviewPage({
             </button>
           </div>
         </>
-      )}
-
-      {/* Floating "Unsaved changes" bar — only while the form is dirty */}
-      {!loading && isDirty && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-4 py-3 rounded-xl bg-white border border-[var(--life-warning-100)] shadow-lg animate-fade-in-down">
-          <span className="flex items-center gap-2 text-sm text-[#374151]">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-warning-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
-            </svg>
-            Unsaved changes
-          </span>
-          {saveError && <span className="text-xs text-[#ef4444] max-w-[180px] truncate">{saveError}</span>}
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleDiscard}
-              disabled={saving}
-              className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] disabled:opacity-50 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving || !courseId}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-[var(--life-base-white)] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] disabled:opacity-50 rounded-lg transition-colors"
-            >
-              {saving && (
-                <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-                </svg>
-              )}
-              {saving ? "Saving…" : "Save Changes"}
-            </button>
-          </div>
-        </div>
       )}
 
       <UnsavedChangesModal

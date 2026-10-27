@@ -4,6 +4,7 @@
 // keep engine-specific endpoint knowledge here, not in the pages.
 
 import { apiClient } from "./client";
+import { stripHtmlToText } from "@/utils/format";
 import type { ImportResult } from "../types/storyboardImport";
 import {
   buildGraphicField,
@@ -15,7 +16,9 @@ import {
   imageFromMediaPoster,
   LAERDAL_MEDIA_COMPONENT,
   mediaFromComponent,
+  mediaAssetRefs,
   mergeProperties,
+  normalizeLaerdalMedia,
   resolveAssetUrl,
   type ImageData,
   type MediaData,
@@ -188,16 +191,18 @@ export interface Asset {
   path?: string;
 }
 
-export type AssetKind = "image" | "audio" | "video" | "h5p";
+export type AssetKind = "image" | "audio" | "video" | "other" | "h5p";
 
 // Query assets of a given kind from the engine asset manager.
 // GET /api/asset/query?search[mimeType]=<kind>
 // H5P is a `.h5p` (zip) file — the DAM stores those under the generic
 // `application/…` mimetypes rather than a well-known prefix. So for `h5p` we
 // query WITHOUT the mimeType filter and narrow to .h5p files client-side.
+// `other` is a generic/document asset bucket, so it should not pass a MIME
+// filter to the server — the list is filtered client-side by `AssetFormat`.
 export async function queryAssets(kind: AssetKind, search?: string): Promise<Asset[]> {
   const params = new URLSearchParams();
-  if (kind !== "h5p") params.append("search[mimeType]", kind);
+  if (kind !== "h5p" && kind !== "other") params.append("search[mimeType]", kind);
   if (search) params.append("search[title]", search);
   try {
     const result = await apiClient.get<Asset[]>(`/api/asset/query?${params}`);
@@ -268,6 +273,7 @@ export interface DashboardCourse {
   id: number;
   backendId: string;
   title: string;
+  body: string;
   description: string;
   savedDate: string;
   savedDateTs: number;
@@ -282,6 +288,7 @@ interface EngineCourse {
   _id: string;
   title?: string;
   displayTitle?: string;
+  body?: string;
   description?: string;
   heroImage?: string | null;
   updatedAt?: string;
@@ -321,14 +328,22 @@ function courseAuthorName(createdBy: EngineCourse["createdBy"]): string | null {
   return matchedName?.trim() || null;
 }
 
+export function getCourseSummaryDescription(doc: Pick<EngineCourse, "body" | "description">): string {
+  const bodyText = typeof doc.body === "string" ? stripHtmlToText(doc.body) : "";
+  if (bodyText) return bodyText;
+  const metadataText = typeof doc.description === "string" ? stripHtmlToText(doc.description) : "";
+  return metadataText;
+}
+
 function toDashboardCourse(doc: EngineCourse, index: number): DashboardCourse {
   const ts = doc.updatedAt ? new Date(doc.updatedAt).getTime() : 0;
   const heroAssetId = doc.heroImage && OBJECT_ID.test(doc.heroImage) ? doc.heroImage : null;
   return {
     id: index + 1,
     backendId: doc._id,
-    title: doc.displayTitle || doc.title || "Untitled Course",
-    description: doc.description || "",
+    title: doc.displayTitle?.trim() || doc.title?.trim() || "Untitled Course",
+    body: typeof doc.body === "string" ? doc.body : "",
+    description: getCourseSummaryDescription(doc),
     savedDate: ts
       ? new Date(ts).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
       : "",
@@ -361,8 +376,10 @@ export interface CourseQuery {
 // indexed, so it settles ties; ObjectId is ~creation-ordered (newest-first = -1).
 const SORT_OPERATORS: Record<CourseSort, Array<[string, string]>> = {
   recent:       [["updatedAt", "-1"], ["_id", "-1"]],
-  "alpha-asc":  [["title", "1"],  ["_id", "1"]],
-  "alpha-desc": [["title", "-1"], ["_id", "1"]],
+  // The dashboard displays displayTitle; sorting by the internal title makes
+  // copied courses appear in the wrong alphabetical position.
+  "alpha-asc":  [["displayTitle", "1"],  ["_id", "1"]],
+  "alpha-desc": [["displayTitle", "-1"], ["_id", "1"]],
 };
 
 // Escape regex metacharacters so the server's `new RegExp(term, 'i')` treats the
@@ -392,7 +409,9 @@ export async function fetchDashboardCourses(
     }
   }
   const term = query.search?.trim();
-  if (term) params.set("search[title]", escapeRegExp(term));
+  if (term) {
+    params.set("search[displayTitle]", escapeRegExp(term)); // displayTitle search
+  }
   for (const tagId of query.tags ?? []) {
     params.append("search[tags][$all][]", tagId);
   }
@@ -503,6 +522,23 @@ export async function updateCourse(
   return coursePromise;
 }
 
+/** Grant selected users course access without removing existing collaborators. */
+export async function addCourseCollaborators(courseId: string, userIds: string[]): Promise<void> {
+  const requested = [...new Set(userIds.filter((id) => typeof id === "string" && id.length > 0))];
+  if (!requested.length) return;
+
+  const course = await apiClient.get<Pick<EngineCourseDetails, "_isShared" | "_shareWithUsers">>(
+    `/api/content/course/${courseId}`
+  );
+  if (course._isShared) return;
+
+  const current = Array.isArray(course._shareWithUsers) ? course._shareWithUsers : [];
+  const combined = [...new Set([...current, ...requested])];
+  if (combined.length === current.length && combined.every((id) => current.includes(id))) return;
+
+  await updateCourse(courseId, { shareWithUserIds: combined });
+}
+
 export function duplicateCourse(backendId: string): Promise<unknown> {
   return apiClient.get(`/api/duplicatecourse/${backendId}`);
 }
@@ -514,6 +550,7 @@ export function deleteCourse(backendId: string): Promise<unknown> {
 export interface CreateCourseInput {
   title: string;
   description?: string;
+  body?: string;
   instanceId?: string;
   theme?: string;
   menuStyle?: string;
@@ -536,6 +573,16 @@ interface EnginePluginType {
   name?: string;
   displayName?: string;
   theme?: string;
+  properties?: Record<string, unknown>;
+}
+
+interface EngineExtensionType {
+  _id: string;
+  name?: string;
+  displayName?: string;
+  version?: string;
+  targetAttribute?: string;
+  properties?: Record<string, unknown>;
 }
 
 interface EngineCourseDetails {
@@ -552,6 +599,7 @@ interface EngineCourseDetails {
   _isShared?: boolean;
   _shareWithUsers?: string[];
   themeVariables?: Record<string, unknown>;
+  themeSettings?: Record<string, Record<string, unknown>>;
   _themePreset?: string;
   menuSettings?: CourseMenuSettings;
 }
@@ -586,6 +634,7 @@ export interface CourseBootstrapData {
   themeName: string;
   menuName: string;
   themeVariables: Record<string, unknown>;
+  themeSettings: Record<string, unknown>;
   themePresetId: string;
   language: string;
 }
@@ -662,9 +711,47 @@ function resolveBestPluginOption(options: EnginePluginType[], label: string, kin
   return best?.option ?? null;
 }
 
+let themeTypesPromise: Promise<EnginePluginType[]> | null = null;
+
 async function getThemeTypes(): Promise<EnginePluginType[]> {
-  const rows = await apiClient.get<EnginePluginType[]>("/api/themetype");
-  return Array.isArray(rows) ? rows : [];
+  if (!themeTypesPromise) {
+    themeTypesPromise = apiClient.get<EnginePluginType[]>("/api/themetype")
+      .then((rows) => Array.isArray(rows) ? rows : [])
+      .catch((error) => {
+        themeTypesPromise = null;
+        throw error;
+      });
+  }
+
+  return themeTypesPromise;
+}
+
+function getThemeTypeVariablesSchema(plugin: EnginePluginType | null | undefined): Record<string, unknown> | null {
+  const properties = plugin?.properties;
+  if (!properties || typeof properties !== 'object' || Array.isArray(properties)) {
+    return null;
+  }
+
+  const variables = (properties as Record<string, unknown>).variables;
+  if (!variables || typeof variables !== 'object' || Array.isArray(variables)) {
+    return null;
+  }
+
+  return variables as Record<string, unknown>;
+}
+
+export async function getThemeTypeVariablesSchemaByName(pluginName: string): Promise<Record<string, unknown> | null> {
+  const rows = await getThemeTypes();
+  const match = rows.find((row) => row.name === pluginName);
+  return getThemeTypeVariablesSchema(match);
+}
+
+export async function getThemeTypeVariablesSchemaByLabel(label: string): Promise<Record<string, unknown> | null> {
+  const rows = await getThemeTypes();
+  const match = resolveBestPluginOption(rows, label, "theme");
+  if (!match) return null;
+
+  return getThemeTypeVariablesSchema(match);
 }
 
 async function getMenuTypes(): Promise<EnginePluginType[]> {
@@ -712,9 +799,28 @@ export async function getThemePresetParentTheme(themeLabel: string): Promise<str
 
 export async function saveThemeVariables(
   courseId: string,
-  themeVariables: Record<string, unknown>
+  themeVariables: Record<string, unknown>,
+  onScreen?: Record<string, unknown>
 ): Promise<void> {
-  await apiClient.put(`/api/content/course/${courseId}`, { themeVariables });
+  const variables = { ...themeVariables };
+  delete variables._onScreen;
+  const patch: Record<string, unknown> = { themeVariables: variables };
+  if (onScreen) {
+    const [course, config, schemas] = await Promise.all([
+      apiClient.get<EngineCourseDetails>(`/api/content/course/${courseId}`),
+      apiClient.get<EngineConfigDetails>(`/api/content/config/${courseId}`),
+      getThemeSettingsSchemaByLevel(),
+    ]);
+    const key = findAppliedPluginSchemaKey(schemas.course, config._theme ?? "");
+    if (!key || !schemas.course[key].properties?._onScreen) {
+      throw new Error("The selected theme does not support global On Screen Classes.");
+    }
+    patch.themeSettings = {
+      ...course.themeSettings,
+      [key]: { ...course.themeSettings?.[key], _onScreen: onScreen },
+    };
+  }
+  await apiClient.put(`/api/content/course/${courseId}`, patch);
 }
 
 export async function getThemePresets(parentTheme?: string): Promise<ThemePreset[]> {
@@ -824,10 +930,17 @@ export async function createCourse(
   return created;
 }
 
+export function getCourseBodyValue(course: Pick<EngineCourseDetails, "body"> | null | undefined): string {
+  if (!course) return "";
+  const bodyValue = typeof course.body === "string" ? course.body : "";
+  return bodyValue.trim();
+}
+
 export async function getCourseBootstrapData(courseId: string): Promise<CourseBootstrapData> {
-  const [course, config] = await Promise.all([
+  const [course, config, schemas] = await Promise.all([
       apiClient.get<EngineCourseDetails>(`/api/content/course/${courseId}`),
       apiClient.get<EngineConfigDetails>(`/api/content/config/${courseId}`),
+      getThemeSettingsSchemaByLevel(),
   ]);
 
   const rawHero = course.heroImage ?? null;
@@ -837,14 +950,17 @@ export async function getCourseBootstrapData(courseId: string): Promise<CourseBo
         .map((t) => (typeof t === "string" ? t : t?.title ?? ""))
         .filter((s): s is string => !!s && !OBJECT_ID.test(s))
     : [];
+  const body = getCourseBodyValue(course);
+  const description = (course.description ?? "").trim();
+  const themeSettingsKey = findAppliedPluginSchemaKey(schemas.course, config._theme ?? "");
 
   return {
     courseId,
     title: course.title || "Untitled Course",
     displayTitle: course.displayTitle ?? "",
     subtitle: course.subtitle ?? course._subtitle ?? "",
-    body: course.body ?? "",
-    description: course.description || "",
+    body,
+    description,
     instruction: course.instruction ?? "",
     heroAssetId,
     tags,
@@ -855,6 +971,7 @@ export async function getCourseBootstrapData(courseId: string): Promise<CourseBo
     themeName: config._theme || "",
     menuName: config._menu || "",
     themeVariables: (course.themeVariables as Record<string, unknown>) || {},
+    themeSettings: themeSettingsKey ? course.themeSettings?.[themeSettingsKey] ?? {} : {},
     themePresetId: config._themePreset || "",
     language: config._defaultLanguage || "",
   };
@@ -994,6 +1111,11 @@ export function defaultNavigationSettings(): NavigationSettings {
       buttons: defaultFooterButtons(),
     },
   };
+}
+
+export function createDefaultStartPageSelection(pages: CoursePageOption[]): NavStartId[] {
+  if (!pages.length) return [];
+  return [{ _id: pages[0].id, _skipIfComplete: false, _className: "" }];
 }
 
 // Pages (page-type contentobjects) for the Start-page picker.
@@ -2359,6 +2481,7 @@ interface EngineContentNode {
   _type?: string;
   title?: string;
   displayTitle?: string;
+  _componentTypeDisplayName?: string;
   subtitle?: string;
   _subtitle?: string;
   body?: string;
@@ -2437,8 +2560,12 @@ export async function getCourseStructure(
     getContentByCourse("component", courseId),
   ]);
 
-  const label = (n: EngineContentNode): string =>
-    n.title || n.displayTitle || "Untitled";
+  const label = (n: EngineContentNode): string => {
+    if (n._component === LAERDAL_MEDIA_COMPONENT) {
+      return n._componentTypeDisplayName || "Laerdal Media";
+    }
+    return n.title || n.displayTitle || "Untitled";
+  };
   const scalarString = (value: unknown): string => {
     if (typeof value === "string") return value;
     if (typeof value === "number" && Number.isFinite(value)) return String(value);
@@ -2470,6 +2597,14 @@ export async function getCourseStructure(
   };
   const childrenOf = (rows: EngineContentNode[], parentId: string) =>
     rows.filter((r) => r._parentId === parentId).sort(bySortOrder);
+  const componentsOf = (parentId: string) => {
+    const blockComponents = childrenOf(components, parentId);
+    if (blockComponents.length !== 2) return blockComponents;
+
+    const left = blockComponents.find((component) => component._layout === "left");
+    const right = blockComponents.find((component) => component._layout === "right");
+    return left && right ? [left, right] : blockComponents;
+  };
 
   const menus = contentObjects.filter((c) => c._type === "menu");
   const pages = contentObjects.filter((c) => c._type === "page");
@@ -2578,7 +2713,7 @@ export async function getCourseStructure(
               ariaLevel: scalarString(block._ariaLevel),
               isA11yCompletionDescriptionEnabled: block._isA11yCompletionDescriptionEnabled !== false,
               extensions: objectValue(block._extensions),
-              components: childrenOf(components, block._id).map(
+              components: componentsOf(block._id).map(
                 (comp): SComponent => {
                   const componentProperties = objectValue(comp.properties);
                   const componentOnScreen = objectValue(comp._onScreen);
@@ -2872,6 +3007,18 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
   // asset renders + round-trips); every other component stays as an H4 heading
   // + body paragraph (keeps the text write-back contract intact).
   const emitMediaCard = (comp: EngineContentNode, mediaKind: "image" | "video" | "audio") => {
+    const props = (comp.properties as Record<string, unknown>) || {};
+    // `description` is an HTML string everywhere it's actually consumed
+    // (BasicRichTextEditor, dangerouslySetInnerHTML via sanitizeEditorHtml in
+    // componentBlock.tsx) — stripHtml() here used to delete every tag
+    // (bold/italic/lists/paragraph breaks) on every single reload/reseed of
+    // the Storyboard from the live course, which is what actually destroyed
+    // formatting after Generate/Save (not the render templates, which pass
+    // body through untouched). `comp.body` is trusted, already-stored
+    // content — sanitization (if ever needed) belongs at the render/edit
+    // boundary, which already sanitizes before display.
+    const description = comp.body || "";
+    const instruction = (typeof props.instruction === "string" ? props.instruction : "") || comp.instruction;
     if (mediaKind === "image") {
       const image = imageFromMediaPoster(propOf(comp, "_media"), assetIdMap);
       out.push({
@@ -2881,7 +3028,7 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
           kind: "image",
           title: label(comp),
           adaptComponent: LAERDAL_MEDIA_COMPONENT,
-          data: JSON.stringify({ showTitle: true, description: "", instruction: "", image }),
+          data: JSON.stringify({ showTitle: true, description, instruction, image }),
         },
       });
       return;
@@ -2894,7 +3041,7 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
         kind: mediaKind,
         title: label(comp),
         adaptComponent: LAERDAL_MEDIA_COMPONENT,
-        data: JSON.stringify({ showTitle: true, description: "", instruction: "", media: data }),
+        data: JSON.stringify({ showTitle: true, description, instruction, media: data }),
       },
     });
   };
@@ -2926,7 +3073,14 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
     // Graphic → Image card.
     if (kindOf === "graphic") {
       const image = imageFromGraphic(propOf(comp, "_graphic"), assetIdMap);
-      emitCard(comp, "image", { showTitle: true, description: "", instruction: "", image });
+      emitCard(comp, "image", {
+        showTitle: true,
+        // See the matching comment in emitMediaCard — description is HTML,
+        // not plain text; stripHtml() here destroyed formatting on reload.
+        description: comp.body || "",
+        instruction: (typeof props.instruction === "string" ? props.instruction : "") || comp.instruction,
+        image,
+      });
       return;
     }
     // Accordion / Narrative → Grouped Content card. Items round-trip via
@@ -2938,15 +3092,17 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
         const link = g.src || g.small || "";
         return {
           title: String(it.title || ""),
-          body: stripHtml(String(it.body || "")),
+          // `itemBody` is also an HTML rich-text field (componentBlock.tsx's
+          // getRichTextEditableFields) — same fix as description above.
+          body: String(it.body || ""),
           image: link, // persisted link (course/assets/<file> or external URL)
           imageUrl: resolveAssetUrl(link, assetIdMap), // servable preview
         };
       });
       emitCard(comp, "groupedContent", {
         showTitle: true,
-        description: stripHtml(comp.body || ""),
-        instruction: comp.instruction || (typeof props.instruction === "string" ? props.instruction : ""),
+        description: comp.body || "",
+        instruction: (typeof props.instruction === "string" ? props.instruction : "") || comp.instruction,
         items,
       });
       return;
@@ -2970,7 +3126,9 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
       const rawTitle = ((comp.title as string) || "").trim();
       const cleanDisplayTitle = isGenericOrDefaultTitle(displayTitle) ? "" : displayTitle;
       const cleanTitle = isGenericOrDefaultTitle(rawTitle) ? "" : rawTitle;
-      const bodyText = stripHtml(comp.body || "");
+      // `data.question` is HTML (BasicRichTextEditor) — same fix as
+      // description above; this used to strip all formatting on reload.
+      const bodyText = comp.body || "";
       const questionSeed = isMcqShaped
         ? bodyText || cleanDisplayTitle || cleanTitle
         : cleanDisplayTitle || cleanTitle || bodyText;
@@ -2978,7 +3136,12 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
       // (independent of displayTitle) — avoids duplicating displayTitle into
       // the block-title input on reload.
       const blockTitleProp = cleanTitle && cleanTitle !== questionSeed ? cleanTitle : "";
-      const data = parseAssessmentData(sbKind as AssessmentKind, props, questionSeed);
+      const data = parseAssessmentData(
+        sbKind as AssessmentKind,
+        props,
+        questionSeed,
+        (typeof props.instruction === 'string' ? props.instruction : '') || comp.instruction
+      );
       out.push({
         id: comp._id,
         type: "sbAssessment",
@@ -3003,8 +3166,9 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
         : undefined;
       emitCard(comp, "h5p", {
         showTitle: true,
-        description: stripHtml(comp.body || ""),
-        instruction: "",
+        // See the matching comment in emitMediaCard above.
+        description: comp.body || "",
+        instruction: (typeof props.instruction === "string" ? props.instruction : "") || comp.instruction,
         media,
       });
       return;
@@ -3034,22 +3198,43 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
             return "Single-Line Text";
         }
       };
+      // Placeholder/options live nested per input type on the real component
+      // (`_inputTypeText._placeholder`, `_inputTypeChoice.options`, etc.) —
+      // see the matching write-side comment in storyboardGeneration.ts. Fall
+      // back to a flat `_placeholder`/`options` on the item itself so content
+      // saved before this fix (which wrote the flat shape) still round-trips.
+      const placeholderOf = (it: Record<string, unknown>): string => {
+        const text = it._inputTypeText as { _placeholder?: string } | undefined;
+        const textarea = it._inputTypeTextArea as { _placeholder?: string } | undefined;
+        const number = it._inputTypeNumber as { _placeholder?: string } | undefined;
+        return String(
+          text?._placeholder ?? textarea?._placeholder ?? number?._placeholder ?? it._placeholder ?? ""
+        );
+      };
+      const optionsOf = (it: Record<string, unknown>): unknown => {
+        const choice = it._inputTypeChoice as { options?: unknown } | undefined;
+        return Array.isArray(choice?.options) ? choice.options : it.options;
+      };
       const rawItems = Array.isArray(props._items) ? (props._items as Array<Record<string, unknown>>) : [];
       const fields = rawItems.map((it) => ({
-        control: controlFor(String(it._inputType || "text"), it.options),
+        control: controlFor(String(it._inputType || "text"), optionsOf(it)),
         label: String(it._label || ""),
-        placeholder: String(it._placeholder || ""),
+        placeholder: placeholderOf(it),
         mandatory: !!it._isRequired,
       }));
       emitCard(comp, "laerdalForm", {
         showTitle: true,
-        description: stripHtml(comp.body || ""),
-        instruction: "",
+        // See the matching comment in emitMediaCard above.
+        description: comp.body || "",
+        instruction: (typeof props.instruction === "string" ? props.instruction : "") || comp.instruction,
         fields,
       });
       return;
     }
-    // Assessment Results → dedicated card that round-trips its bands and retry.
+    // Assessment Results → dedicated card that round-trips its bands and
+    // retry. Not a real assessment/question component on the Adapt side
+    // (sbKind resolves via assessmentResult, not isAssessmentComponentKind),
+    // but listed under the Storyboard's Assessment section by design.
     if (sbKind === "assessmentResult") {
       const rawBands = Array.isArray(props._bands) ? (props._bands as Array<Record<string, unknown>>) : [];
       const retry = (props._retry as Record<string, unknown>) || {};
@@ -3084,8 +3269,16 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
       const compTitle = label(comp);
       emitCard(comp, "text", {
         showTitle: !!compTitle,
-        description: stripHtml(comp.body || ""),
-        instruction: comp.instruction || (typeof props.instruction === "string" ? props.instruction : ""),
+        // This is THE primary case the reported "Generate Course → Preview
+        // strips all formatting" bug traces to: a plain BlockNote paragraph
+        // authored in the Storyboard generates into exactly this component
+        // type (storyboardGeneration.ts), so every reload/reseed after
+        // Generate/Save ran the author's real multi-paragraph/bold/list HTML
+        // through stripHtml() here, deleting it — then the degraded result
+        // got saved back as the new "clean" baseline on the very next
+        // Save/Generate. See the matching comment in emitMediaCard above.
+        description: comp.body || "",
+        instruction: (typeof props.instruction === "string" ? props.instruction : "") || comp.instruction,
       });
       return;
     }
@@ -3129,34 +3322,18 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
     });
   };
   const emitTopic = (page: EngineContentNode) => {
-    // Structure headings always appear, exactly like Editor Mode's Structure
-    // panel — including a still-unrenamed default node's placeholder title
-    // ("New Topic Title" etc). Editor Mode never hides these (getCourseStructure
-    // above uses the raw title unconditionally), and hiding them here made the
-    // Storyboard document (and its Contents/TOC) look empty for any freshly
-    // created Topic/Section/Content Group, even though the structure exists.
-    // Word/PDF export has its OWN independent placeholder filter
-    // (documentConvert.js::DEFAULT_PLACEHOLDER_TITLES) so suppressing them
-    // here too was redundant for that concern.
-    const rawLabel = (n: EngineContentNode): string => (n.displayTitle || n.title || "").trim() || "Untitled";
-    const topicTitle = rawLabel(page);
+    const topicTitle = label(page);
     out.push({ id: page._id, type: "heading", props: { level: 1 }, content: topicTitle });
     for (const article of childrenOf(articles, page._id)) {
-      const articleTitle = rawLabel(article);
+      const articleTitle = label(article);
       out.push({ id: article._id, type: "heading", props: { level: 2 }, content: articleTitle });
-      // The generation engine caps each Adapt block at 2 components — extra
-      // components are placed in continuation blocks that carry the SAME H3
-      // title. When we round-trip the course, those continuation blocks would
-      // appear as duplicate H3 headings in the Storyboard (and duplicate again
-      // on the next Save/Generate). Merge adjacent same-title H3 blocks so the
-      // Storyboard shows one H3 with all its components in their original order.
-      let prevTitle: string | null = null;
+      // Each Adapt block is a real Content Group with its own identity. Keep
+      // every heading, even when sibling groups share a title: generation
+      // uses these ids to update the existing structure instead of creating
+      // replacement groups for items whose ids were collapsed here.
       for (const blk of childrenOf(blocks, article._id)) {
-        const title = rawLabel(blk);
-        if (title !== prevTitle) {
-          out.push({ id: blk._id, type: "heading", props: { level: 3 }, content: title });
-          prevTitle = title;
-        }
+        const title = label(blk);
+        out.push({ id: blk._id, type: "heading", props: { level: 3 }, content: title });
         for (const comp of childrenOf(components, blk._id)) emitComponent(comp);
       }
     }
@@ -3201,7 +3378,14 @@ export async function saveStoryboardToCourse(
       level: "component",
       title: label(c),
       body: c.body || "",
-      instruction: c.instruction || "",
+      // `properties.instruction` is the real field (every installed component
+      // declares its own `instruction` in its OWN properties.schema — there is
+      // no generic top-level `instruction` in the content model). `c.instruction`
+      // is only a fallback for components a pre-fix Storyboard save wrote to
+      // the wrong (inert, publish-ignored) top-level location.
+      instruction: (typeof (c.properties as Record<string, unknown> | undefined)?.instruction === "string"
+        ? ((c.properties as Record<string, unknown>).instruction as string)
+        : c.instruction) || "",
       component: c._component,
       parentId: c._parentId,
       // Kept so an update can seed `patch.properties` from what's actually on
@@ -3216,6 +3400,29 @@ export async function saveStoryboardToCourse(
   let updatedBodies = 0;
   let unmapped = 0;
   const tasks: Promise<unknown>[] = [];
+  const hasQuestions = (doc as Array<{ type?: string }>).some((block) => block.type === "sbAssessment");
+
+  for (const component of components) {
+    if (component._component !== LAERDAL_MEDIA_COMPONENT) continue;
+    const properties = (component.properties as Record<string, unknown> | undefined) || {};
+    const rawMedia =
+      (properties._media as Record<string, unknown> | undefined) ||
+      (component._media as Record<string, unknown> | undefined);
+    if (rawMedia && Array.isArray(rawMedia.cc)) continue;
+    const normalizedMedia = normalizeLaerdalMedia(rawMedia);
+    tasks.push(
+      apiClient.put(`/api/content/component/${component._id}`, {
+        properties: {
+          ...properties,
+          _media: normalizedMedia,
+        },
+      })
+    );
+    component.properties = {
+      ...properties,
+      _media: normalizedMedia,
+    };
+  }
 
   for (const raw of doc as StoryboardBlock[]) {
     const id = raw && typeof raw.id === "string" ? raw.id : undefined;
@@ -3266,11 +3473,20 @@ export async function saveStoryboardToCourse(
     if (raw.type === "sbComponent" && info.level === "component") {
       const kind = raw.props?.kind;
       let parsed: {
+        showTitle?: boolean;
         image?: ImageData;
         media?: MediaData;
         description?: string;
         instruction?: string;
         items?: Array<{ title?: string; body?: string; image?: string; imageAssetId?: string }>;
+        fields?: Array<{ control?: string; label?: string; placeholder?: string; mandatory?: boolean }>;
+        result?: {
+          assessmentId?: string;
+          completionBody?: string;
+          retryButton?: string;
+          retryFeedback?: string;
+          bands?: Array<{ score?: number; feedback?: string; allowRetry?: boolean }>;
+        };
       } = {};
       try {
         parsed = raw.props?.data ? JSON.parse(raw.props.data) : {};
@@ -3279,11 +3495,12 @@ export async function saveStoryboardToCourse(
       }
       const patch: Record<string, unknown> = {};
       const nextTitle = (raw.props?.title || "").trim();
+      const showTitle = parsed.showTitle !== false;
       if (nextTitle && nextTitle !== info.title) {
         patch.title = nextTitle;
-        patch.displayTitle = nextTitle;
         updatedTitles += 1;
       }
+      patch.displayTitle = showTitle ? nextTitle : "";
       let assetLink: string | undefined;
       let assetId: string | undefined;
       const isLaerdalMedia = info.component === LAERDAL_MEDIA_COMPONENT;
@@ -3307,11 +3524,17 @@ export async function saveStoryboardToCourse(
         mergeProperties(patch, isLaerdalMedia ? buildImageAsMedia(parsed.image) : buildGraphicField(parsed.image));
         assetLink = parsed.image?.link;
         assetId = parsed.image?.assetId;
+        patch.body = parsed.description || "";
+        mergeProperties(patch, { instruction: parsed.instruction || "" });
       } else if ((kind === "video" || kind === "audio") && (isLaerdalMedia || info.component === "media")) {
         seedProperties();
-        mergeProperties(patch, buildMediaField(kind, parsed.media));
-        assetLink = parsed.media?.asset?.link;
-        assetId = parsed.media?.asset?.assetId;
+        const originalMedia = (info.properties?._media as Record<string, unknown> | undefined) || {};
+        mergeProperties(patch, buildMediaField(kind, parsed.media, originalMedia));
+        for (const asset of mediaAssetRefs(parsed.media)) {
+          tasks.push(linkContentAsset(courseId, "component", id, info.parentId || "", filenameFromLink(asset.link), asset.assetId!));
+        }
+        patch.body = parsed.description || "";
+        mergeProperties(patch, { instruction: parsed.instruction || "" });
       } else if (kind === "groupedContent" && isGrouped) {
         // Grouped Content → accordion / narrative `properties._items` with
         // `_graphic.src` (matches the installed schemas). Persist any link
@@ -3330,6 +3553,8 @@ export async function saveStoryboardToCourse(
             return { title: it?.title || "", body, _graphic: { alt: "", src: imgLink, attribution: "" } };
           }),
         });
+        patch.body = parsed.description || "";
+        mergeProperties(patch, { instruction: parsed.instruction || "" });
         // Each item image needs its own courseasset link for publish.
         for (const it of items) {
           const fn = filenameFromLink((it?.image || "").trim());
@@ -3337,24 +3562,119 @@ export async function saveStoryboardToCourse(
             tasks.push(linkContentAsset(courseId, "component", id, info.parentId || "", fn, it.imageAssetId));
           }
         }
+      } else if (kind === "h5p" && info.component === "laerdal-h5p") {
+        seedProperties();
+        const asset = parsed.media?.asset;
+        mergeProperties(patch, {
+          _h5pExternalAsset: asset?.external ? asset.link || asset.url || "" : "",
+          h5pAsset: asset?.external ? "" : asset?.link || "",
+        });
+        assetLink = asset?.link;
+        assetId = asset?.assetId;
+        patch.body = parsed.description || "";
+        mergeProperties(patch, { instruction: parsed.instruction || "" });
+      } else if (kind === "laerdalForm" && info.component === "laerdal-form") {
+        seedProperties();
+        const inputTypeFor = (control: string): string => {
+          switch ((control || "").toLowerCase()) {
+            case "multi-line text":
+              return "textarea";
+            case "number":
+              return "number";
+            case "dropdown":
+            case "checkbox":
+              return "options";
+            default:
+              return "text";
+          }
+        };
+        const slugify = (value: string, index: number) =>
+          (value || `field-${index + 1}`)
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "") || `field-${index + 1}`;
+        const fields = Array.isArray(parsed.fields) ? parsed.fields : [];
+        mergeProperties(patch, {
+          _items: fields.map((field, index) => {
+            const control = field?.control || "";
+            const _inputType = inputTypeFor(control);
+            const item: Record<string, unknown> = {
+              _inputType,
+              _label: field?.label || "",
+              _name: slugify(field?.label || "", index),
+              _isRequired: !!field?.mandatory,
+            };
+            // See the matching comment in storyboardGeneration.ts — the installed
+            // adapt-laerdal-form schema nests placeholder/options per input type.
+            if (_inputType === "text") item._inputTypeText = { _placeholder: field?.placeholder || "" };
+            else if (_inputType === "textarea") item._inputTypeTextArea = { _placeholder: field?.placeholder || "" };
+            else if (_inputType === "number") item._inputTypeNumber = { _placeholder: field?.placeholder || "" };
+            else if (_inputType === "options") {
+              item._inputTypeChoice = {
+                options: control.toLowerCase() === "checkbox" ? [{ label: field?.placeholder || "Yes" }] : [],
+              };
+            }
+            return item;
+          }),
+        });
+        patch.body = parsed.description || "";
+        mergeProperties(patch, { instruction: parsed.instruction || "" });
+      } else if (kind === "assessmentResult" && info.component === "assessmentResults") {
+        seedProperties();
+        const result = parsed.result || {};
+        const bands = Array.isArray(result.bands) ? result.bands : [];
+        mergeProperties(patch, {
+          _assessmentId: (result.assessmentId || "").trim() || undefined,
+          _completionBody: result.completionBody || "",
+          _isVisibleBeforeCompletion: false,
+          _setCompletionOn: "pass",
+          _resetType: "hard",
+          _retry: {
+            button: result.retryButton || "Try again",
+            feedback: result.retryFeedback || "",
+            _routeToAssessment: true,
+          },
+          _bands: bands
+            .slice()
+            .sort((a, b) => (Number(a?.score) || 0) - (Number(b?.score) || 0))
+            .map((band) => ({
+              _score: Math.max(0, Math.min(100, Number(band?.score) || 0)),
+              feedback: band?.feedback || "",
+              feedbackNotFinal: band?.feedback || "",
+              _allowRetry: !!band?.allowRetry,
+            })),
+        });
       } else if (kind === "text" && (info.component === "text" || info.component === "laerdal-text")) {
         // Plain text component — write the edited description back onto
-        // `body` (matches the ::body branch's HTML-wrapping convention above)
-        // and the instruction field, so the sbComponent "text" card (used for
-        // every text component, including the default one — ADAPT-3902)
-        // round-trips exactly like the legacy heading+paragraph contract did.
-        // The description here is always plain user/AI-authored text (never an
-        // imported-HTML payload), so it must be escaped unconditionally —
-        // trusting a leading "<" as "already HTML" would let raw markup typed
-        // or pasted by a user/AI flow straight into the course body.
+        // `body` and the instruction field, so the sbComponent "text" card
+        // (used for every text component, including the default one —
+        // ADAPT-3902) round-trips exactly like the legacy heading+paragraph
+        // contract did.
+        // `data.description` for this card is a BasicRichTextEditor field —
+        // real HTML (<p>/<strong>/<ul>/etc.), the same as every other card's
+        // description — NOT always-plain-text as a previous version of this
+        // comment assumed. Unconditionally escaping it turned any formatting
+        // the author applied (or any literal tag that survived a reload —
+        // see the emitMediaCard-side fix for the cause) into VISIBLE escaped
+        // text (e.g. a literal "&lt;br&gt;"), and collapsed every paragraph
+        // into one. Mirror the ::body branch's own `alreadyHtml` check above
+        // instead: treat a leading "<" as real HTML and pass it through;
+        // only escape+wrap when it's genuinely plain text (e.g. typed
+        // directly without going through the rich editor).
         const rawDescription = (parsed.description || "").trim();
-        const nextBodyHtml = rawDescription ? `<p>${escapeHtml(rawDescription)}</p>` : "";
-        if (stripHtml(nextBodyHtml) !== stripHtml(info.body || "")) {
+        const alreadyHtmlDescription = rawDescription.startsWith("<");
+        const nextBodyHtml = !rawDescription
+          ? ""
+          : alreadyHtmlDescription
+            ? rawDescription
+            : `<p>${escapeHtml(rawDescription)}</p>`;
+        if (stripHtml(nextBodyHtml) !== stripHtml(info.body || "") || nextBodyHtml !== (info.body || "")) {
           patch.body = nextBodyHtml;
         }
         const nextInstruction = (parsed.instruction || "").trim();
         if (nextInstruction !== (info.instruction || "")) {
-          patch.instruction = nextInstruction;
+          seedProperties();
+          mergeProperties(patch, { instruction: nextInstruction });
         }
       }
       if (Object.keys(patch).length) {
@@ -3384,17 +3704,31 @@ export async function saveStoryboardToCourse(
         }
         const patch: Record<string, unknown> = {};
         const nextTitle = (raw.props?.title || "").trim();
+        const showTitle = data.showTitle !== false;
         if (nextTitle && nextTitle !== info.title) {
           patch.title = nextTitle;
-          patch.displayTitle = nextTitle;
           updatedTitles += 1;
         }
+        patch.displayTitle = showTitle ? nextTitle : "";
+        // `data.question` is a BasicRichTextEditor field — real HTML, same as
+        // description/instruction elsewhere in this file (see the ::body and
+        // sbComponent-description branches above). Unconditionally
+        // escape+wrap here turned authored formatting into visible escaped
+        // text (literal "&lt;strong&gt;") on every save; mirror the same
+        // `alreadyHtml` check instead.
+        const rawQuestion = (data.question || "").trim();
+        const alreadyHtmlQuestion = rawQuestion.startsWith("<");
+        patch.body = !rawQuestion ? "" : alreadyHtmlQuestion ? rawQuestion : `<p>${escapeHtml(rawQuestion)}</p>`;
         const assessmentFields = buildAssessmentFields(kind as AssessmentKind, data);
-        if (Object.keys(assessmentFields).length) {
+        if (Object.keys(assessmentFields).length || data.instruction !== undefined) {
           // Seed from live properties first — same reasoning as the
           // sbComponent branch above (ADAPT-3760 properties-wipe fix).
+          // `instruction` nests under `properties` like every other plugin
+          // field (see the matching comment on the sbComponent branch) — it
+          // is never a generic top-level model field.
           patch.properties = { ...(info.properties || {}) };
-          mergeProperties(patch, assessmentFields);
+          if (Object.keys(assessmentFields).length) mergeProperties(patch, assessmentFields);
+          mergeProperties(patch, { instruction: data.instruction || "" });
         }
         if (Object.keys(patch).length) {
           tasks.push(apiClient.put(`/api/content/component/${id}`, patch));
@@ -3404,8 +3738,28 @@ export async function saveStoryboardToCourse(
     }
   }
 
+  if (hasQuestions) tasks.push(ensureQuestionFeedbackExtensions(courseId));
+
   await Promise.all(tasks);
   return { updatedTitles, updatedBodies, unmapped };
+}
+
+const TUTOR_EXTENSION_NAME = "adapt-contrib-tutor";
+const ANSWER_SPECIFIC_FEEDBACK_EXTENSION_NAME = "adapt-answer-specific-feedback";
+
+export async function ensureQuestionFeedbackExtensions(courseId: string): Promise<void> {
+  await seedMissingCourseDefaults(courseId);
+  const config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
+  const toEnable = [TUTOR_EXTENSION_NAME, ANSWER_SPECIFIC_FEEDBACK_EXTENSION_NAME]
+    .filter((name) => !isExtensionInstalledByName(config, name));
+
+  if (toEnable.length) {
+    const ids = await resolveExtensionTypeIdsByNames(toEnable);
+    if (ids.length) {
+      await apiClient.post(`/api/extension/enable/${courseId}`, { extensions: ids });
+    }
+  }
+
 }
 
 // ── Component types (Add Component drawer) ──────────────────────────────────
@@ -3417,7 +3771,10 @@ export async function getAvailableComponents(): Promise<ComponentTypeOption[]> {
     .filter((c) => c && c.component)
     .map((c) => ({
       component: c.component as string,
-      displayName: c.displayName || (c.component as string),
+      displayName:
+        c.component === LAERDAL_MEDIA_COMPONENT
+          ? "Laerdal Media"
+          : c.displayName || (c.component as string),
       description: c.description || "",
       icon: c.icon || null,
       _id: c._id as string,
@@ -3431,16 +3788,43 @@ export async function getAvailableComponents(): Promise<ComponentTypeOption[]> {
 // question components (e.g. mcq) get a valid _buttons sub-tree at runtime.
 // Ported from adapt-preview-edit/js/contentEditView.js (fetchMergedComponentSchema).
 let mergedSchemaCache: Record<string, { properties?: Record<string, unknown> }> | null = null;
+let mergedSchemaRequest: Promise<typeof mergedSchemaCache> | null = null;
+
+async function loadMergedSchema(): Promise<typeof mergedSchemaCache> {
+  if (mergedSchemaCache) return mergedSchemaCache;
+  if (!mergedSchemaRequest) {
+    mergedSchemaRequest = apiClient.get<NonNullable<typeof mergedSchemaCache>>("/api/content/schema")
+      .then((schema) => {
+        mergedSchemaCache = schema;
+        return schema;
+      })
+      .finally(() => {
+        mergedSchemaRequest = null;
+      });
+  }
+  return mergedSchemaRequest;
+}
 
 async function fetchMergedComponentSchema(
   componentKey: string
 ): Promise<{ properties?: Record<string, unknown> } | null> {
   if (!componentKey) return null;
   try {
-    if (!mergedSchemaCache) {
-      mergedSchemaCache = await apiClient.get("/api/content/schema");
-    }
+    await loadMergedSchema();
     return mergedSchemaCache?.[componentKey] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function getMergedContentSchema(schemaKey: string): Promise<Record<string, unknown> | null> {
+  const key = (schemaKey || "").trim();
+  if (!key) return null;
+
+  try {
+    await loadMergedSchema();
+    const entry = mergedSchemaCache?.[key];
+    return entry && typeof entry === "object" ? (entry as Record<string, unknown>) : null;
   } catch {
     return null;
   }
@@ -3525,10 +3909,24 @@ export interface ExtensionTypeOption {
 }
 
 let extensionTypeOptionsCache: ExtensionTypeOption[] | null = null;
+let extensionTypeRowsPromise: Promise<EngineExtensionType[]> | null = null;
+
+async function getExtensionTypeRows(): Promise<EngineExtensionType[]> {
+  if (!extensionTypeRowsPromise) {
+    extensionTypeRowsPromise = apiClient.get<EngineExtensionType[]>("/api/extensiontype")
+      .then((rows) => Array.isArray(rows) ? rows : [])
+      .catch((error) => {
+        extensionTypeRowsPromise = null;
+        throw error;
+      });
+  }
+
+  return extensionTypeRowsPromise;
+}
 
 export async function getExtensionTypeOptions(): Promise<ExtensionTypeOption[]> {
   if (!extensionTypeOptionsCache) {
-    const rows = await apiClient.get<Array<Partial<ExtensionTypeOption>>>("/api/extensiontype");
+    const rows = await getExtensionTypeRows();
     extensionTypeOptionsCache = (Array.isArray(rows) ? rows : [])
       .filter((row) => row && row.name)
       .map((row) => ({
@@ -3539,6 +3937,25 @@ export async function getExtensionTypeOptions(): Promise<ExtensionTypeOption[]> 
       }));
   }
   return extensionTypeOptionsCache;
+}
+
+export async function getExtensionTypeSchemaByName(extensionName: string): Promise<Record<string, unknown> | null> {
+  const normalizedTarget = normalize(extensionName);
+  if (!normalizedTarget) return null;
+
+  const rows = await getExtensionTypeRows();
+  const match = rows.find((row) => {
+    const candidates = [row.name, row.displayName, row.targetAttribute]
+      .map((value) => normalize(value))
+      .filter(Boolean);
+    return candidates.includes(normalizedTarget);
+  });
+
+  if (!match?.properties || typeof match.properties !== "object" || Array.isArray(match.properties)) {
+    return null;
+  }
+
+  return match.properties;
 }
 
 // Enables an extension type for a course (POST /api/extension/enable/:courseId),
@@ -3620,9 +4037,7 @@ export async function getExtensionSchemasByLevel(): Promise<
   Record<ExtensionSchemaLevel, Record<string, ExtensionFieldSchema>>
 > {
   if (!extensionSchemasByLevelCache) {
-    if (!mergedSchemaCache) {
-      mergedSchemaCache = await apiClient.get("/api/content/schema");
-    }
+    await loadMergedSchema();
     const result = {} as Record<ExtensionSchemaLevel, Record<string, ExtensionFieldSchema>>;
     for (const level of EXTENSION_SCHEMA_LEVELS) {
       const levelSchema = (mergedSchemaCache as Record<string, unknown> | null)?.[level] as
@@ -3657,9 +4072,7 @@ let menuSettingsSchemaByLevelCache: Record<ExtensionSchemaLevel, Record<string, 
 async function getPluginSettingsSchemaByLevel(
   settingsProperty: "themeSettings" | "menuSettings"
 ): Promise<Record<ExtensionSchemaLevel, Record<string, PluginSettingsFieldSchema>>> {
-  if (!mergedSchemaCache) {
-    mergedSchemaCache = await apiClient.get("/api/content/schema");
-  }
+  await loadMergedSchema();
   const result = {} as Record<ExtensionSchemaLevel, Record<string, PluginSettingsFieldSchema>>;
   for (const level of EXTENSION_SCHEMA_LEVELS) {
     const levelSchema = (mergedSchemaCache as Record<string, unknown> | null)?.[level] as
@@ -3745,9 +4158,7 @@ export async function getComponentExtensionSchema(
   if (!key) return {};
 
   if (!componentExtensionSchemaIndex) {
-    if (!mergedSchemaCache) {
-      mergedSchemaCache = await apiClient.get("/api/content/schema");
-    }
+    await loadMergedSchema();
     componentExtensionSchemaIndex = {};
     Object.entries(mergedSchemaCache ?? {}).forEach(([schemaKey, schema]) => {
       const extensionsProperties = (
@@ -3829,9 +4240,7 @@ function deepMergeGlobals(base: GlobalsObject, override: GlobalsObject): Globals
 
 export async function getGlobalsDefaults(): Promise<GlobalsObject> {
   try {
-    if (!mergedSchemaCache) {
-      mergedSchemaCache = await apiClient.get("/api/content/schema");
-    }
+    await loadMergedSchema();
     // The filtered course schema exposes `_globals` directly; guard the alternate
     // `.properties._globals` shape too, in case the server response changes.
     const courseSchema = (mergedSchemaCache as Record<string, unknown> | null)?.course as
@@ -3866,9 +4275,7 @@ export async function getCourseGlobalsMerged(courseId: string): Promise<GlobalsO
 // missing branches (existing values ALWAYS win) and PATCHes the doc back so
 // preview + publish + Adapt runtime never see an undefined critical field.
 async function computeCourseSchemaDefaults(): Promise<Record<string, unknown>> {
-  if (!mergedSchemaCache) {
-    mergedSchemaCache = await apiClient.get("/api/content/schema");
-  }
+  await loadMergedSchema();
   const courseSchema = (mergedSchemaCache as Record<string, unknown> | null)?.course as
     | Record<string, unknown>
     | undefined;
@@ -4138,10 +4545,19 @@ export async function createComponent(
     _type: "component",
     _component: componentType.component,
     _componentType: componentType._id,
-    _componentTypeDisplayName: componentType.displayName,
+    _componentTypeDisplayName:
+      componentType.component === LAERDAL_MEDIA_COMPONENT
+        ? "Laerdal Media"
+        : componentType.displayName,
     _layout: layout,
-    title: componentType.displayName,
-    displayTitle: componentType.displayName,
+    title:
+      componentType.component === LAERDAL_MEDIA_COMPONENT
+        ? "Laerdal Media"
+        : componentType.displayName,
+    displayTitle:
+      componentType.component === LAERDAL_MEDIA_COMPONENT
+        ? "Laerdal Media"
+        : componentType.displayName,
     properties: mergedProperties,
     _sortOrder: sortOrder,
   };
@@ -4684,6 +5100,7 @@ export interface DashboardUser {
   roleIds: string[];
   failedLogins: number;
   lastAccess: string;
+  isDeleted: boolean;
 }
 
 interface EngineUser {
@@ -4693,6 +5110,7 @@ interface EngineUser {
   _tenantId?: { name?: string } | string | null;
   failedLoginCount?: number;
   lastAccess?: string;
+  _isDeleted?: boolean;
 }
 
 export async function getRoles(): Promise<AdaptRole[]> {
@@ -4714,8 +5132,17 @@ export async function getUsers(): Promise<DashboardUser[]> {
       roleIds: roles.map((r) => r._id),
       failedLogins: u.failedLoginCount ?? 0,
       lastAccess: fmtDate(u.lastAccess),
+      isDeleted: !!u._isDeleted,
     };
   });
+}
+
+export function disableUser(userBackendId: string): Promise<unknown> {
+  return apiClient.put(`/api/user/${userBackendId}`, { _isDeleted: true });
+}
+
+export function restoreUser(userBackendId: string): Promise<unknown> {
+  return apiClient.put(`/api/user/${userBackendId}`, { _isDeleted: false });
 }
 
 // Change a user's role: unassign existing roles, then assign the chosen one.
@@ -4765,10 +5192,14 @@ export interface DashboardTemplate {
   description: string;
   timestamp: Date;
   author: string;
+  isShared: boolean;
+  shareWithUsers: string[];
 }
 
 interface EngineTemplate {
   _id: string;
+  _isShared?: boolean;
+  _shareWithUsers?: string[];
   title?: string;
   displayName?: string;
   name?: string;
@@ -4798,6 +5229,8 @@ export async function getTemplates(
     description: t.description || "",
     timestamp: new Date(t.updatedAt || t.createdAt || 0),
     author: t.author || "",
+    isShared: !!t._isShared,
+    shareWithUsers: t._shareWithUsers || [],
   }));
 }
 
@@ -4805,7 +5238,7 @@ export async function getTemplates(
 // { title, description } to the templating content endpoint.
 export function updateTemplate(
   backendId: string,
-  patch: { title?: string; description?: string }
+  patch: { title?: string; description?: string; _isShared?: boolean; _shareWithUsers?: string[] }
 ): Promise<unknown> {
   return apiClient.put(`/api/content/templating/${backendId}`, patch);
 }
@@ -4928,37 +5361,124 @@ interface EngineAsset {
   };
 }
 
-export async function getAssets(includeDeleted = false): Promise<DashboardAsset[]> {
-  const res = await apiClient.get<EngineAsset[] | { assets?: EngineAsset[] }>("/api/asset/query");
-  const docs = (Array.isArray(res) ? res : res?.assets ?? [])
-    .filter((asset) => includeDeleted || asset?._isDeleted !== true)
-    .slice()
-    .sort((left, right) => {
-    const leftTs = left.createdAt ? new Date(left.createdAt).getTime() : 0;
-    const rightTs = right.createdAt ? new Date(right.createdAt).getTime() : 0;
-    return rightTs - leftTs;
-  });
-  return docs.map((a, i) => {
-    const format = coerceFormat(a.mimeType, a.assetType);
-    return {
-      id: i + 1,
-      backendId: a._id,
-      title: a.title || "Untitled",
-      description: a.description || "",
-      size: fmtSize(a.size),
-      format,
-      tags: Array.isArray(a.tags)
-        ? a.tags.map((t) => (typeof t === "string" ? t : t?.title ?? "")).filter((s): s is string => !!s && !OBJECT_ID.test(s))
-        : [],
-      uploadedAt: fmtDate(a.createdAt),
-      thumbnail: format === "image" ? `/api/asset/serve/${a._id}` : undefined,
-      filename: a.filename,
-      path: a.path,
-      mimeType: a.mimeType,
-      isDeleted: !!a._isDeleted,
-      metadata: a.metadata,
-    };
-  });
+const DEFAULT_ASSET_PAGE_SIZE = 30;
+const MAX_ASSET_PAGE_SIZE = 100;
+
+export interface AssetQueryOptions {
+  includeDeleted?: boolean;
+  skip?: number;
+  limit?: number;
+  search?: string;
+  format?: AssetFormat | "All";
+  tagIds?: string[];
+  // Scopes the query to one course's AI Tutor source documents (lib/assetmanager.js
+  // queryAssets -> _resolveAiTutorTags), mirroring the classic UI's scaffoldAssetView.js.
+  // Omitting this hides tutor-tagged docs from the general list instead of showing them.
+  aiTutorCourseId?: string;
+}
+
+export interface AssetPage {
+  items: DashboardAsset[];
+  hasMore: boolean;
+}
+
+function mapEngineAsset(a: EngineAsset, id: number): DashboardAsset {
+  const format = coerceFormat(a.mimeType, a.assetType);
+  return {
+    id,
+    backendId: a._id,
+    title: a.title || "Untitled",
+    description: a.description || "",
+    size: fmtSize(a.size),
+    format,
+    tags: Array.isArray(a.tags)
+      ? a.tags.map((t) => (typeof t === "string" ? t : t?.title ?? "")).filter((s): s is string => !!s && !OBJECT_ID.test(s))
+      : [],
+    uploadedAt: fmtDate(a.createdAt),
+    thumbnail: format === "image" ? `/api/asset/serve/${a._id}` : undefined,
+    filename: a.filename,
+    path: a.path,
+    mimeType: a.mimeType,
+    isDeleted: !!a._isDeleted,
+    metadata: a.metadata,
+  };
+}
+
+// Paged, server-filtered asset query (was: fetch every asset in the tenant, filter/sort
+// client-side). Text search matches title/filename as plain strings so the backend's
+// query builder (lib/assetmanager.js queryAssets) routes them into its OR bucket; format
+// and tags are sent as regex/operator OBJECTS specifically so they land in its AND bucket
+// instead of joining that OR group — mixing the two would silently turn "text AND format"
+// into "text OR format". Deleted-asset filtering stays client-side per page: the server's
+// _isDeleted handling coerces any value to an exact true/false match, which doesn't cleanly
+// express "active, including legacy docs with the field unset".
+export async function getAssets(options: AssetQueryOptions = {}): Promise<AssetPage> {
+  const {
+    includeDeleted = false,
+    skip = 0,
+    limit = DEFAULT_ASSET_PAGE_SIZE,
+    search,
+    format,
+    tagIds,
+    aiTutorCourseId,
+  } = options;
+  const cappedLimit = Math.min(limit, MAX_ASSET_PAGE_SIZE);
+
+  const params = new URLSearchParams();
+  const text = search?.trim();
+  if (text) {
+    params.append("search[title]", text);
+    params.append("search[filename]", text);
+  }
+  if (format && format !== "All") {
+    if (format === "other" && aiTutorCourseId) {
+      // Match the classic AI Tutor picker only: the scaffold field is Asset:other and
+      // the old UI sends search.assetType={$in:['other']} together with aiTutorCourseId.
+      // Keep that behavior scoped to AI Tutor so normal "other files" flows continue to
+      // use the broader mime-based document bucket they already relied on.
+      params.append("search[assetType][$in][]", "other");
+    }
+    else if (format === "other") {
+      params.append("search[mimeType][$not][$regex]", "image|audio|video");
+      params.append("search[mimeType][$not][$options]", "i");
+    }
+    else {
+      params.append("search[mimeType][$regex]", format);
+      params.append("search[mimeType][$options]", "i");
+    }
+  }
+  if (tagIds && tagIds.length) {
+    tagIds.forEach((id) => params.append("search[tags][$all][]", id));
+  }
+  if (aiTutorCourseId) {
+    params.append("aiTutorCourseId", aiTutorCourseId);
+  }
+  params.append("operators[skip]", String(skip));
+  params.append("operators[limit]", String(cappedLimit + 1));
+  params.append("operators[sort][createdAt]", "-1");
+
+  const res = await apiClient.get<EngineAsset[] | { assets?: EngineAsset[] }>(`/api/asset/query?${params}`);
+  const docs = Array.isArray(res) ? res : res?.assets ?? [];
+  const hasMore = docs.length > cappedLimit;
+  const rawPage = hasMore ? docs.slice(0, cappedLimit) : docs;
+  const active = rawPage.filter((asset) => includeDeleted || asset?._isDeleted !== true);
+
+  return {
+    items: active.map((a, i) => mapEngineAsset(a, skip + i + 1)),
+    hasMore,
+  };
+}
+
+// Mirrors classic's scaffoldAssetView.js: tag an asset as an AI Tutor source for a
+// specific course at add time (upload or select), so it's immediately hidden from
+// the general asset list and scoped to this course's own picker - no dependency on
+// a later preview/publish. Best-effort; failure shouldn't block attaching the document.
+export async function tagAssetForAiTutor(assetId: string, courseId: string): Promise<void> {
+  try {
+    await apiClient.post("/api/asset/aitutor-tag", { assetId, courseId });
+  } catch {
+    // best-effort, see comment above
+  }
 }
 
 export function trashAsset(backendId: string): Promise<unknown> {

@@ -4,6 +4,7 @@ import { CourseCard } from '@/components/course'
 import AiAssistant from '@/components/common/AiAssistant'
 import PermissionDeniedModal from '@/components/common/PermissionDeniedModal'
 import { useAuth, isSuperAdmin, canManageCourses } from '@/context/AuthContext'
+import { usePageLoader } from '@/hooks'
 import { createCourse, deleteCourse, duplicateCourse, fetchDashboardCourses, fetchDashboardTags, getAuthoringMenuOptions, getAuthoringThemeOptions, updateCourse, type CourseSort } from '@/api/adaptAuthoring'
 import BuildMethodPickerModal from '@/components/dashboard/BuildMethodPickerModal'
 import BuildWithAiWizard from '@/components/dashboard/BuildWithAiWizard'
@@ -16,6 +17,7 @@ interface Course {
   id: number
   backendId?: string
   title: string
+  body?: string
   description: string
   savedDate: string
   savedDateTs: number   // unix ms for sorting
@@ -41,6 +43,18 @@ const SORT_OPTIONS = [
 ]
 const FALLBACK_THEME_OPTIONS: Theme[] = ['LIFE Theme']
 const FALLBACK_MENU_OPTIONS = ['LIFE Menu']
+
+export function getCourseClipboardId(course: Pick<Course, 'id' | 'backendId'>): string {
+  return course.backendId ?? String(course.id)
+}
+
+export async function copyTextToClipboard(value: string): Promise<void> {
+  if (!navigator?.clipboard?.writeText) {
+    throw new Error('Clipboard access is unavailable in this browser.')
+  }
+
+  await navigator.clipboard.writeText(value)
+}
 
 function normalizeOption(v: string): string {
   return v.toLowerCase().replace(/[^a-z0-9]/g, '')
@@ -108,6 +122,8 @@ export default function HomePage() {
   const loadingMoreRef = useRef(false)
   const [hasMore, setHasMore] = useState(false)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
+
+  // usePageLoader(isLoadingCourses)
 
   // Full tag universe for the filter dropdown (from the autocomplete endpoint,
   // not the loaded course slice) + a title→id map to filter courses by tag id.
@@ -275,7 +291,8 @@ export default function HomePage() {
       setIsCreatingCourse(true)
       const created = await createCourse({
         title,
-        description: newDesc,
+        body: newDesc,
+        description: '',
         theme: newTheme,
         menuStyle: newMenu,
       })
@@ -297,7 +314,7 @@ export default function HomePage() {
     }
   }
 
-  async function handleUpdate(id: number, patch: { title?: string; description?: string; heroAssetId?: string | null; tags?: string[] }) {
+  async function handleUpdate(id: number, patch: { title?: string; body?: string; heroAssetId?: string | null; tags?: string[] }) {
     const target = courses.find((c) => c.id === id)
     if (!target?.backendId) {
       showToast('Could not resolve course ID for update.', 'info')
@@ -306,7 +323,7 @@ export default function HomePage() {
     try {
       await updateCourse(target.backendId, {
         title: patch.title,
-        description: patch.description,
+        body: patch.body,
         heroAssetId: patch.heroAssetId,
         tags: patch.tags,
       })
@@ -333,9 +350,16 @@ export default function HomePage() {
     }
   }
 
-  function handleCopyId(id: number) {
-    navigator.clipboard.writeText(String(id)).catch(() => {})
-    showToast(`Course ID ${id} copied to clipboard`, 'info')
+  async function handleCopyId(id: number) {
+    const source = courses.find((c) => c.id === id)
+    const courseId = source ? getCourseClipboardId(source) : String(id)
+
+    try {
+      await copyTextToClipboard(courseId)
+      showToast(`Course ID ${courseId} copied to clipboard`, 'info')
+    } catch {
+      showToast('Could not copy Course ID to clipboard.', 'info')
+    }
   }
 
   async function handleDelete(id: number) {
@@ -569,7 +593,7 @@ export default function HomePage() {
               <div className="relative">
                 <button
                   type="button"
-                  onClick={() => { setSortOpen((o) => !o) }}
+                  onClick={() => { setSortOpen((o) => !o); setTagFilterOpen(false) }}
                   className="flex items-center gap-1.5 px-3 py-2.5 text-sm text-[#374151] bg-white border border-[#e5e7eb] rounded-lg hover:bg-[#f9fafb] transition-colors whitespace-nowrap"
                 >
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -683,7 +707,7 @@ export default function HomePage() {
           ) : (
             <div className={
               view === 'grid'
-                ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5'
+                ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-[repeat(auto-fit,minmax(max(280px,calc((100%_-_5rem)/5)),minmax(280px,1fr)))] gap-4 md:gap-5'
                 : 'flex flex-col gap-2'
             }>
               {displayed.map((course) => (
@@ -699,7 +723,7 @@ export default function HomePage() {
                       showPermissionDenied('Delete Course', 'You do not have permission to delete this course.');
                     }
                   }}
-                  viewHref={course.backendId ? `/course/${course.backendId}/preview` : ""}
+                  viewHref={course.backendId ? `/course/${course.backendId}/setup` : ""}
                   onUpdate={(patch) => handleUpdate(course.id, patch)}
                   onCopy={() => handleCopy(course.id)}
                   onCopyId={() => handleCopyId(course.id)}

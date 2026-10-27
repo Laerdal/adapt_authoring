@@ -59,10 +59,14 @@ server.post('/api/courses', function(req, res) {
     return res.status(400).json({ success: false, message: 'Course title is required' });
   }
 
+  const bodyText = String(body.body ?? '').trim();
+  const description = String(body.description ?? '').trim();
+
   const courseData = {
     title,
     displayTitle: title,
-    description: String(body.description || '').trim(),
+    description,
+    body: bodyText,
     tags: []
   };
 

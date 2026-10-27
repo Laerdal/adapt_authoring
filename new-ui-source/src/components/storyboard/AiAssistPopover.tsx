@@ -3,7 +3,7 @@
 // Functional parity with the legacy CKEditor "Samaritan Assistance" tool
 // (frontend/src/modules/scaffold/backboneFormsOverrides.js): four fixed actions
 // (Improve wording / Shorten / Prolong / Correct spelling) + a free-text prompt
-// ("Ask Samaritan to edit or generate from scratch…"), then Insert / Replace /
+// ("Ask Samaritan to edit or generate the content from scratch…"), then Insert / Replace /
 // Try again / Dismiss. All AI runs through the server proxy (samaritanAssist →
 // POST /api/storyboard/ai); no key is ever in the browser.
 //
@@ -213,7 +213,7 @@ export default function AiAssistPopover({
             onKeyDown={(e) => {
               if (e.key === 'Enter') submitPrompt();
             }}
-            placeholder="Ask Samaritan to edit or generate from scratch..."
+            placeholder="Ask Samaritan to edit or generate the content from scratch..."
             disabled={loading}
             className="min-w-0 flex-1 bg-transparent outline-none"
             style={{ fontSize: 13, color: 'var(--life-color-text-default)', opacity: loading ? 0.6 : 1 }}

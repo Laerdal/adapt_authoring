@@ -6,9 +6,21 @@ import {
   saveAccessibilityConfig,
   type GlobalsObject,
 } from "../../api/adaptAuthoring";
+import { usePageLoader } from "../../hooks";
+import { SaveChangesButton } from "./SaveChangesButton";
+import { SaveStatusToast } from "./SaveStatusToast";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 import { CheckboxIndicator } from "../../components/common/Checkbox";
+import InfoIcon, { InfoFieldLabel, shouldRenderFieldInfoIcon } from "../../components/common/InfoIcon";
+import {
+  getConfigRootSchema,
+  getCourseRootSchema,
+  getSchemaHint,
+  getSchemaLabel,
+  getSchemaNode,
+  type SetupSchemaNode,
+} from "../../helpers/setupInfoSchema";
 
 /* ── Accessibility Panel ──────────────────────────────────────────────────────
    Data-driven editor for the course `_globals` accessibility strings, laid out to
@@ -101,12 +113,16 @@ function subGroupsUnder(node: unknown, prefix: string[], exclude?: Set<string>):
     .filter((g) => g.fields.length > 0);
 }
 
+function firstDefinedSchemaNode(...nodes: Array<SetupSchemaNode | undefined | null>): SetupSchemaNode | undefined {
+  return nodes.find((node) => node && Object.keys(node).length > 0) ?? undefined;
+}
+
 /* ── Presentational bits ── */
 
-function A11yLeafInput({ leaf, onChange }: { leaf: A11yLeaf; onChange: (path: string[], v: string) => void }) {
+function A11yLeafInput({ leaf, onChange, hint }: { leaf: A11yLeaf; onChange: (path: string[], v: string) => void; hint?: string }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-xs font-semibold text-[#374151]">{leaf.label}</span>
+      <InfoFieldLabel label={leaf.label} hint={hint} />
       <input
         type="text"
         aria-label={leaf.label}
@@ -118,11 +134,11 @@ function A11yLeafInput({ leaf, onChange }: { leaf: A11yLeaf; onChange: (path: st
   );
 }
 
-function FieldGrid({ fields, onChange }: { fields: A11yLeaf[]; onChange: (path: string[], v: string) => void }) {
+function FieldGrid({ fields, onChange, getHint }: { fields: A11yLeaf[]; onChange: (path: string[], v: string) => void; getHint?: (path: string[]) => string | undefined }) {
   return (
     <div className="grid grid-cols-1 gap-3">
       {fields.map((f) => (
-        <A11yLeafInput key={f.path.join(".")} leaf={f} onChange={onChange} />
+        <A11yLeafInput key={f.path.join(".")} leaf={f} onChange={onChange} hint={getHint?.(f.path)} />
       ))}
     </div>
   );
@@ -133,12 +149,14 @@ function FieldGrid({ fields, onChange }: { fields: A11yLeaf[]; onChange: (path: 
 function Accordion({
   title,
   subtitle,
+  hint,
   defaultOpen = false,
   nested = false,
   children,
 }: {
   title: string;
   subtitle?: string;
+  hint?: string;
   defaultOpen?: boolean;
   nested?: boolean;
   children: React.ReactNode;
@@ -155,7 +173,7 @@ function Accordion({
         className="group w-full flex items-center justify-between gap-3 px-5 py-4 text-left bg-white text-[#111827] hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] transition-colors"
       >
         <div className="min-w-0">
-          <h3 className="font-bold text-current text-sm">{title}</h3>
+          <h3 className="font-bold text-current text-sm flex items-center gap-1.5">{title}{hint ? <InfoIcon label={title} hint={hint} /> : null}</h3>
           {subtitle && <p className="text-xs text-[#6b7280] mt-0.5 leading-snug group-hover:text-[#0f5f75]">{subtitle}</p>}
         </div>
         <svg
@@ -246,14 +264,18 @@ function normalizeAccessibilityConfig(acc: Record<string, unknown>): Record<stri
 function A11yToggle({
   label,
   description,
+  hint,
   checked,
   onChange,
 }: {
   label: string;
   description?: string;
+  hint?: string;
   checked: boolean;
   onChange: (v: boolean) => void;
 }) {
+  const showInfoIcon = shouldRenderFieldInfoIcon({ hint, description });
+
   return (
     <label className="flex items-start gap-3 cursor-pointer select-none group">
       <input
@@ -265,7 +287,7 @@ function A11yToggle({
       />
       <CheckboxIndicator checked={checked} className="mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
       <div className="flex flex-col gap-0.5">
-        <span className="text-sm font-semibold text-[#374151]">{label}</span>
+        <span className="text-sm font-semibold text-[#374151]">{label}{showInfoIcon ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}</span>
         {description && <span className="text-[13px] text-[#9ca3af] leading-snug">{description}</span>}
       </div>
     </label>
@@ -274,16 +296,18 @@ function A11yToggle({
 
 function A11yNumberField({
   label,
+  hint,
   value,
   onChange,
 }: {
   label: string;
+  hint?: string;
   value: string;
   onChange: (v: string) => void;
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-xs font-semibold text-[#374151]">{label}</span>
+      <InfoFieldLabel label={label} hint={hint} />
       <input
         type="number"
         aria-label={label}
@@ -301,19 +325,23 @@ function A11yNumberField({
 function A11yJsonField({
   label,
   help,
+  hint,
   value,
   onChange,
   invalid,
 }: {
   label: string;
   help?: string;
+  hint?: string;
   value: string;
   onChange: (v: string) => void;
   invalid: boolean;
 }) {
+  const showInfoIcon = shouldRenderFieldInfoIcon({ hint, help });
+
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-sm font-bold text-[#111827]">{label}</span>
+      <span className="text-sm font-bold text-[#111827]">{label}{showInfoIcon ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}</span>
       {help && <span className="text-[13px] text-[#9ca3af] leading-snug mb-1">{help}</span>}
       <textarea
         aria-label={label}
@@ -354,11 +382,14 @@ export function AccessibilityPage({
   const [savedOptionsText, setSavedOptionsText] = useState("{}");
   const [configId, setConfigId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  usePageLoader(loading);
   // Set when the initial load fails. Saving is blocked while true so a failed load
   // can never overwrite stored settings with defaults/empty (data loss).
   const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [courseSchema, setCourseSchema] = useState<SetupSchemaNode | null>(null);
+  const [configSchema, setConfigSchema] = useState<SetupSchemaNode | null>(null);
 
   useEffect(() => {
     if (!courseId) {
@@ -397,6 +428,26 @@ export function AccessibilityPage({
       cancelled = true;
     };
   }, [courseId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void Promise.all([getCourseRootSchema(), getConfigRootSchema()])
+      .then(([nextCourseSchema, nextConfigSchema]) => {
+        if (cancelled) return;
+        setCourseSchema(nextCourseSchema);
+        setConfigSchema(nextConfigSchema);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setCourseSchema(null);
+        setConfigSchema(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // A leaf's `path` is the absolute `_globals` path; write it back immutably so
   // unrelated branches (and non-string values) survive.
@@ -560,11 +611,15 @@ export function AccessibilityPage({
   // whenever a config document was loaded.
   const hasAnything = model.globalsCount > 0 || model.advanced.length > 0 || !!configId;
 
+  const getGlobalsSchemaNode = useCallback((path: string[]) => getSchemaNode(courseSchema, "_globals", ...path), [courseSchema]);
+  const getGlobalsHint = useCallback((path: string[]) => getSchemaHint(getGlobalsSchemaNode(path)), [getGlobalsSchemaNode]);
+  const getConfigA11yNode = useCallback((...path: string[]) => getSchemaNode(configSchema, "_accessibility", ...path), [configSchema]);
+
   const renderSubGroups = (groups: A11ySubGroup[]) => (
     <div className="flex flex-col gap-3">
       {groups.map((g) => (
-        <Accordion key={g.name} nested title={g.title}>
-          <FieldGrid fields={g.fields} onChange={updateLeaf} />
+        <Accordion key={g.name} nested title={getSchemaLabel(getGlobalsSchemaNode(g.fields[0]?.path.slice(0, -1) ?? [g.name]), g.title)} hint={getGlobalsHint(g.fields[0]?.path.slice(0, -1) ?? [g.name])}>
+          <FieldGrid fields={g.fields} onChange={updateLeaf} getHint={getGlobalsHint} />
         </Accordion>
       ))}
     </div>
@@ -572,11 +627,16 @@ export function AccessibilityPage({
 
   return (
     <div className="flex flex-col h-full w-full bg-[#f7f9fb]">
-      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb]">
-        <h2 className="text-xl font-bold text-[#111827]">Accessibility</h2>
-        <p className="text-sm text-[#6b7280] mt-0.5">
-          Configure basic accessibility settings, ARIA labels grouped by area, and advanced options.
-        </p>
+      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-center gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-[#111827]">Accessibility</h2>
+          <p className="text-sm text-[#6b7280] mt-0.5">
+            Configure basic accessibility settings, ARIA labels grouped by area, and advanced options.
+          </p>
+        </div>
+        <div className="ml-auto">
+          <SaveChangesButton dirty={dirty} saving={saving} disabled={!courseId} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto min-h-0">
@@ -604,12 +664,13 @@ export function AccessibilityPage({
       ) : (
         <div className="flex flex-col gap-4 pb-24">
           {/* ── Globals ── */}
-          <Accordion title="Globals" defaultOpen>
+          <Accordion title={getSchemaLabel(getSchemaNode(courseSchema, "_globals"), "Globals")} hint={getSchemaHint(getSchemaNode(courseSchema, "_globals"))} defaultOpen>
             <div className="flex flex-col gap-3">
-              <Accordion nested title="Basic Settings" defaultOpen>
+              <Accordion nested title={getSchemaLabel(getConfigA11yNode(), "Basic Settings")} hint={getSchemaHint(getConfigA11yNode())} defaultOpen>
                 <A11yToggle
-                  label="Enabled?"
+                  label={getSchemaLabel(getConfigA11yNode("_isEnabled"), "Enabled?")}
                   description="Turn on accessibility features across the course."
+                  hint={getSchemaHint(getConfigA11yNode("_isEnabled"))}
                   checked={cfgAcc._isEnabled === true}
                   onChange={setEnabled}
                 />
@@ -624,7 +685,8 @@ export function AccessibilityPage({
                       return (
                         <A11yNumberField
                           key={a.key}
-                          label={a.label}
+                          label={getSchemaLabel(getConfigA11yNode("_ariaLevels", a.key), a.label)}
+                          hint={getSchemaHint(getConfigA11yNode("_ariaLevels", a.key))}
                           value={raw === undefined || raw === null ? "" : String(raw)}
                           onChange={(v) => setAriaLevel(a.key, v)}
                         />
@@ -634,43 +696,45 @@ export function AccessibilityPage({
                 </div>
               </Accordion>
               {model.basic.length > 0 && (
-                <Accordion nested title="ARIA Labels – Globals">
-                  <FieldGrid fields={model.basic} onChange={updateLeaf} />
+                <Accordion nested title={getSchemaLabel(getGlobalsSchemaNode(["_accessibility"]), "ARIA Labels – Globals")} hint={getGlobalsHint(["_accessibility"])}>
+                  <FieldGrid fields={model.basic} onChange={updateLeaf} getHint={getGlobalsHint} />
                 </Accordion>
               )}
               {model.components.length > 0 && (
-                <Accordion nested title="ARIA Labels – Components">{renderSubGroups(model.components)}</Accordion>
+                <Accordion nested title={getSchemaLabel(getGlobalsSchemaNode(["_components"]), "ARIA Labels – Components")} hint={getGlobalsHint(["_components"])}>{renderSubGroups(model.components)}</Accordion>
               )}
               {model.extensions.length > 0 && (
-                <Accordion nested title="ARIA Labels – Extensions">{renderSubGroups(model.extensions)}</Accordion>
+                <Accordion nested title={getSchemaLabel(getGlobalsSchemaNode(["_extensions"]), "ARIA Labels – Extensions")} hint={getGlobalsHint(["_extensions"])}>{renderSubGroups(model.extensions)}</Accordion>
               )}
               {model.drawer.length > 0 && (
-                <Accordion nested title="ARIA Labels – Drawer">
-                  <FieldGrid fields={model.drawer} onChange={updateLeaf} />
+                <Accordion nested title={getSchemaLabel(getGlobalsSchemaNode(["_extensions", "_drawer"]), "ARIA Labels – Drawer")} hint={getGlobalsHint(["_extensions", "_drawer"])}>
+                  <FieldGrid fields={model.drawer} onChange={updateLeaf} getHint={getGlobalsHint} />
                 </Accordion>
               )}
               {model.navigation.length > 0 && (
-                <Accordion nested title="ARIA Labels – Navigation">
-                  <FieldGrid fields={model.navigation} onChange={updateLeaf} />
+                <Accordion nested title={getSchemaLabel(getGlobalsSchemaNode(["_extensions", "_navigation"]), "ARIA Labels – Navigation")} hint={getGlobalsHint(["_extensions", "_navigation"])}>
+                  <FieldGrid fields={model.navigation} onChange={updateLeaf} getHint={getGlobalsHint} />
                 </Accordion>
               )}
               {model.menu.length > 0 && (
-                <Accordion nested title="ARIA Labels – Menu">{renderSubGroups(model.menu)}</Accordion>
+                <Accordion nested title={getSchemaLabel(getGlobalsSchemaNode(["_menu"]), "ARIA Labels – Menu")} hint={getGlobalsHint(["_menu"])}>{renderSubGroups(model.menu)}</Accordion>
               )}
             </div>
           </Accordion>
 
           {/* ── Advanced ── */}
-          <Accordion title="Advanced Settings">
+          <Accordion title="Advanced Settings" hint={getSchemaHint(getConfigA11yNode("_options"))}>
             <A11yToggle
-              label="Enable Skip Navigation link?"
+              label={getSchemaLabel(getConfigA11yNode("_isSkipNavigationEnabled"), "Enable Skip Navigation link?")}
               description="Adds a skip link so keyboard users can jump straight to the main content."
+              hint={getSchemaHint(getConfigA11yNode("_isSkipNavigationEnabled"))}
               checked={cfgAcc._isSkipNavigationEnabled === true}
               onChange={setSkipNav}
             />
             <A11yJsonField
-              label="Accessibility Extended Options"
+              label={getSchemaLabel(getConfigA11yNode("_options"), "Accessibility Extended Options")}
               help="Advanced JSON configuration for framework-specific overrides."
+              hint={getSchemaHint(getConfigA11yNode("_options"))}
               value={optionsText}
               onChange={setOptionsText}
               invalid={optionsInvalid}
@@ -690,64 +754,8 @@ export function AccessibilityPage({
       </div>
       </div>
 
-      {/* Floating "Unsaved changes" bar — only while the form is dirty */}
-      {!loading && dirty && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-4 py-3 rounded-xl bg-white border border-[var(--life-warning-100)] shadow-lg animate-fade-in-down">
-          <span className="flex items-center gap-2 text-sm text-[#374151]">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-warning-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
-            </svg>
-            Unsaved changes
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleCancel}
-              disabled={saving}
-              className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] disabled:opacity-50 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving || !courseId}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-[var(--life-base-white)] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] disabled:opacity-50 rounded-lg transition-colors"
-            >
-              {saving && (
-                <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-                </svg>
-              )}
-              {saving ? "Saving…" : "Save Changes"}
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Success / error toast */}
-      {toast && (
-        <div className="fixed top-4 right-4 z-[60] pointer-events-none">
-          <div
-            className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium border pointer-events-auto animate-fade-in-down min-w-[260px] max-w-sm ${
-              toast.type === "success"
-                ? "bg-[var(--life-positive-050)] border-[var(--life-positive-100)] text-[var(--life-positive-500)]"
-                : "bg-[var(--life-critical-050)] border-[var(--life-critical-100)] text-[var(--life-critical-500)]"
-            }`}
-          >
-            {toast.type === "success" ? (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-positive-500)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-            ) : (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-critical-500)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-                <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-              </svg>
-            )}
-            <span className="flex-1">{toast.message}</span>
-          </div>
-        </div>
-      )}
+      <SaveStatusToast toast={toast} onDismiss={() => setToast(null)} autoHideMs={3500} />
 
       <UnsavedChangesModal
         isOpen={showConfirmModal}

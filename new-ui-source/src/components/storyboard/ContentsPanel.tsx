@@ -29,6 +29,7 @@ export default function ContentsPanel({
           <button
             type="button"
             aria-label="Collapse contents"
+            title="Collapse contents"
             onClick={onCollapse}
             className="sb-panel-collapse-btn"
           >

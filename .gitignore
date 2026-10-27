@@ -30,6 +30,7 @@ node_modules
 
 /temp
 /test/.testcache
+*.test.ts
 /tmp
 
 /.settings

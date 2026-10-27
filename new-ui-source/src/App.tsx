@@ -1,7 +1,9 @@
 import { useEffect } from 'react'
 import { Routes } from './routes'
 import { AuthProvider } from '@/context/AuthContext'
+import { PageTransitionProvider } from '@/context/PageTransitionContext'
 import { logout } from '@/api/adaptAuthoring'
+import { redirectToLogin } from '@/utils/authRedirect'
 
 // Match the old UI (frontend/src/modules/user/index.js): log the user out after
 // 1h of inactivity. Any activity resets the timer.
@@ -13,7 +15,10 @@ function useIdleLogout() {
     const reset = () => {
       if (timer !== undefined) window.clearTimeout(timer)
       timer = window.setTimeout(() => {
-        void logout().finally(() => window.location.assign('/'))
+        // Straight to the real login target in one hop - see ProfileMenu's
+        // handleLogout for why reloading "/" first and redirecting a second
+        // time from there causes Chrome to throttle the navigation.
+        void logout().finally(() => redirectToLogin())
       }, IDLE_MS)
     }
     const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart']
@@ -30,7 +35,9 @@ export default function App() {
   useIdleLogout()
   return (
     <AuthProvider>
-      <Routes />
+      <PageTransitionProvider>
+        <Routes />
+      </PageTransitionProvider>
     </AuthProvider>
   )
 }

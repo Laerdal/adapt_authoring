@@ -75,7 +75,7 @@ function componentPatchBlocks(existingId: string, existingKind: string, imported
       },
     ];
   }
-  const data: Record<string, unknown> = { showTitle: false, description: imported.body || "", instruction: "" };
+  const data: Record<string, unknown> = { showTitle: false, description: imported.body || "", instruction: imported.instruction || "" };
   if (imported.pendingKind === "image") data.image = imported.pendingImage;
   else if (imported.pendingKind === "video" || imported.pendingKind === "audio") data.media = imported.pendingMedia;
   else if (imported.pendingKind === "groupedContent") data.items = imported.pendingItems;

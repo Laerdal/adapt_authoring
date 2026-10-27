@@ -19,6 +19,7 @@ import {
   createComponent,
   linkContentAsset,
   seedMissingCourseDefaults,
+  ensureQuestionFeedbackExtensions,
 } from "./adaptAuthoring";
 import {
   buildAssessmentFields,
@@ -33,6 +34,7 @@ import {
   buildImageAsMedia,
   buildMediaField,
   filenameFromLink,
+  mediaAssetRefs,
   mergeProperties,
   type ImageData,
   type MediaData,
@@ -105,7 +107,9 @@ export interface GenComponent {
   existingId?: string;
   componentKey: string;
   title: string;
+  displayTitle?: string;
   body?: string;
+  instruction?: string;
   // Media components: the `_graphic`/`_media` patch + the chosen asset, so
   // generation writes the asset fields and links the courseasset for publish.
   mediaPatch?: Record<string, unknown>;
@@ -133,18 +137,21 @@ export interface GenGroup {
   sourceBlockId?: string;
   existingId?: string;
   title: string;
+  displayTitle?: string;
   components: GenComponent[];
 }
 export interface GenSection {
   sourceBlockId?: string;
   existingId?: string;
   title: string;
+  displayTitle?: string;
   groups: GenGroup[];
 }
 export interface GenTopic {
   sourceBlockId?: string;
   existingId?: string;
   title: string;
+  displayTitle?: string;
   sections: GenSection[];
 }
 
@@ -158,6 +165,47 @@ function inlineToText(content: unknown): string {
 
 function escapeHtml(s: string): string {
   return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function restoreRequiredStructureTitles(
+  topics: GenTopic[],
+  index: { contentObjects: ContentNode[]; articles: ContentNode[]; blocks: ContentNode[] }
+): void {
+  const existing = new Map(
+    [...index.contentObjects, ...index.articles, ...index.blocks].map((node) => [node._id, node])
+  );
+  const restore = (node: GenTopic | GenSection | GenGroup, fallbackTitle: string) => {
+    if (node.title.trim()) return;
+    const current = node.existingId ? existing.get(node.existingId) : undefined;
+    node.title = (current?.title || current?.displayTitle || fallbackTitle).trim() || fallbackTitle;
+    node.displayTitle = current?.displayTitle;
+  };
+
+  for (const topic of topics) {
+    restore(topic, "New Page Title");
+    for (const section of topic.sections) {
+      restore(section, "New Article Title");
+      for (const group of section.groups) restore(group, "New Block Title");
+    }
+  }
+}
+
+// Plain-text fallback for a title field — `data.question` is a
+// BasicRichTextEditor (HTML) value, and a title/displayTitle is rendered
+// as-is (not HTML-safe) by Adapt, so deriving a title straight from it
+// leaked literal tags ("<p><strong>...") into the learner-facing heading.
+function stripHtmlToPlainText(html: string): string {
+  return (html || "")
+    .replace(/<\s*br\s*\/?>/gi, " ")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 // A BlockNote block's inline content → safe HTML, preserving bold/italic/
@@ -311,7 +359,7 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
     if (type === "heading") {
       flushList();
       const level = (raw.props && raw.props.level) || 1;
-      const title = inlineToText(raw.content).trim() || "Untitled";
+      const title = inlineToText(raw.content).trim() || (existingId ? "" : "Untitled");
       if (level <= 1) {
         topic = { sourceBlockId: id, existingId, title, sections: [] };
         topics.push(topic);
@@ -360,11 +408,21 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
         continue;
       }
       ensureGroup();
+      // No title here — this Text component was never given one (no H4
+      // heading authored it; it's a bare paragraph the author just typed).
+      // Previously this stamped the first 40 chars of the paragraph's OWN
+      // body text as the title, which persisted into the component's real
+      // `title`/`displayTitle` fields on every Generate/Save — i.e. content
+      // the author only ever entered as body showed up duplicated as the
+      // title in the Editor. Leaving it empty here and letting the write-
+      // back loop (below) skip an empty title lets either createComponent's
+      // own sensible default ("Text") or whatever title already exists on
+      // the component stand, instead of a synthetic copy of the body.
       const comp: GenComponent = {
         sourceBlockId: id,
         existingId,
         componentKey: "text",
-        title: text.slice(0, 40) || "Text",
+        title: "",
         body: html,
       };
       group!.components.push(comp);
@@ -430,17 +488,11 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
       const kind = (raw.props && raw.props.kind) || "text";
       const data = safeParseJson<{
         description?: string;
+        instruction?: string;
         image?: ImageData;
         media?: MediaData;
         items?: Array<{ title?: string; body?: string; image?: string }>;
         fields?: Array<{ control?: string; label?: string; placeholder?: string; mandatory?: boolean }>;
-        result?: {
-          assessmentId?: string;
-          completionBody?: string;
-          retryButton?: string;
-          retryFeedback?: string;
-          bands?: Array<{ score?: number; feedback?: string; allowRetry?: boolean }>;
-        };
       }>(raw.props && raw.props.data, {});
       // `componentKey` now holds the STORYBOARD KIND; the Adapt _component is
       // resolved later via resolveAdaptComponent against installed types.
@@ -450,6 +502,7 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
         componentKey: kind,
         title: ((raw.props && raw.props.title) || "").trim() || "Component",
         body: data.description || "",
+        instruction: data.instruction || "",
       };
       if (kind === "image") {
         comp.pendingKind = "image";
@@ -470,7 +523,7 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
         // picked DAM assets write the course-relative link AND record a
         // courseasset link below so publish can resolve it.
         const asset = data.media?.asset;
-        const patch: Record<string, unknown> = { instruction: "" };
+        const patch: Record<string, unknown> = {};
         if (asset?.external || (asset?.link && /^https?:\/\//i.test(asset.link))) {
           patch._h5pExternalAsset = asset.link || asset.url || "";
         } else if (asset?.link) {
@@ -512,44 +565,23 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
             _label: f.label || "",
             _name: slugify(f.label || "", i),
             _isRequired: !!f.mandatory,
-            _placeholder: f.placeholder || "",
           };
-          if (_inputType === "options" && (f.control || "").toLowerCase() === "checkbox") {
-            item.options = [{ text: f.placeholder || "Yes", value: "yes" }];
+          // The installed adapt-laerdal-form schema nests placeholder/options
+          // per input type (`_inputTypeText._placeholder`, `_inputTypeChoice.
+          // options`, etc.) rather than on the item itself — a flat
+          // `_placeholder`/`options` here lands nowhere the real component (or
+          // its Page Editor / course renderer) ever reads.
+          if (_inputType === "text") item._inputTypeText = { _placeholder: f.placeholder || "" };
+          else if (_inputType === "textarea") item._inputTypeTextArea = { _placeholder: f.placeholder || "" };
+          else if (_inputType === "number") item._inputTypeNumber = { _placeholder: f.placeholder || "" };
+          else if (_inputType === "options") {
+            item._inputTypeChoice = {
+              options: (f.control || "").toLowerCase() === "checkbox" ? [{ label: f.placeholder || "Yes" }] : [],
+            };
           }
           return item;
         });
         comp.assessmentPatch = { _items: items };
-      } else if (kind === "assessmentResult") {
-        // adapt-contrib-assessmentResults: bind to an article-level assessment
-        // (`_assessmentId`), emit bands sorted ascending by `_score` (the
-        // plugin walks the array and picks the highest band whose `_score`
-        // ≤ the learner's score, so ascending order is the required contract),
-        // offer retry, and template the completion body with
-        // `{{scoreAsPercent}}` etc.
-        const r = data.result || {};
-        const bands = Array.isArray(r.bands) ? r.bands : [];
-        comp.assessmentPatch = {
-          _assessmentId: (r.assessmentId || "").trim() || undefined,
-          _completionBody: r.completionBody || "",
-          _isVisibleBeforeCompletion: false,
-          _setCompletionOn: "pass",
-          _resetType: "hard",
-          _retry: {
-            button: r.retryButton || "Try again",
-            feedback: r.retryFeedback || "",
-            _routeToAssessment: true,
-          },
-          _bands: bands
-            .slice()
-            .sort((a, b) => (Number(a.score) || 0) - (Number(b.score) || 0))
-            .map((b) => ({
-              _score: Math.max(0, Math.min(100, Number(b.score) || 0)),
-              feedback: b.feedback || "",
-              feedbackNotFinal: b.feedback || "",
-              _allowRetry: !!b.allowRetry,
-            })),
-        };
       }
     } else if (type === "sbAssessment") {
       const kind = ((raw.props && raw.props.kind) || "mcq") as AssessmentKind;
@@ -566,15 +598,26 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
       // the question body).
       const blockTitle = ((raw.props && (raw.props.title as string)) || "").trim();
       const questionText = (data.question || "").trim();
+      // Title/displayTitle are plain-text fields — never seed them from the
+      // raw (possibly HTML) question itself, only from a stripped fallback.
+      const questionPlainText = stripHtmlToPlainText(questionText);
       const isMcqShaped = kind === "mcq" || kind === "gmcq";
-      const resolvedTitle = blockTitle || (isMcqShaped ? "Check your understanding" : questionText || "Question");
-      const bodyText = isMcqShaped ? questionText : questionText && questionText !== resolvedTitle ? questionText : "";
+      const resolvedTitle = blockTitle || (isMcqShaped ? "Check your understanding" : questionPlainText || "Question");
+      // The question always goes in body as real HTML — including non-MCQ
+      // kinds, which previously only wrote it there when it happened to
+      // differ from resolvedTitle; since resolvedTitle is now always plain
+      // text (never the HTML itself), that comparison always held true and
+      // silently dropped the question body for every non-MCQ assessment.
+      const bodyText = questionText;
+      const showTitle = data.showTitle !== false;
       comp = {
         sourceBlockId: id,
         existingId,
         componentKey: kind,
         title: resolvedTitle,
+        displayTitle: showTitle ? resolvedTitle : "",
         body: bodyText,
+        instruction: data.instruction || '',
         assessmentPatch: buildAssessmentFields(kind, data),
         assessmentData: data,
       };
@@ -627,9 +670,18 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
 // against the existing course's OWN continuation blocks (same real parent
 // section id + same title, ordered by _sortOrder) so a later run UPDATES the
 // same block instead of creating a new one.
-const MAX_COMPONENTS_PER_BLOCK = 1;
+// Exported so the Storyboard editor can enforce the identical limit at
+// insert time (BlockNoteStoryboardEditor.tsx) instead of silently letting the
+// author exceed it in the document and only finding out the hierarchy
+// changed once generation splits it — single source of truth for both.
+export const MAX_COMPONENTS_PER_BLOCK = 1;
 
 export function enforceMaxComponentsPerBlock(topics: GenTopic[], existingBlocks: ContentNode[] = []): void {
+  const explicitlyEmittedGroupIds = new Set(
+    topics.flatMap((topic) => topic.sections.flatMap((section) =>
+      section.groups.map((group) => group.existingId).filter((id): id is string => !!id)
+    ))
+  );
   for (const t of topics) {
     for (const s of t.sections) {
       const out: GenGroup[] = [];
@@ -647,7 +699,11 @@ export function enforceMaxComponentsPerBlock(topics: GenTopic[], existingBlocks:
         // so repeated runs reuse them in the same order every time.
         const candidates = s.existingId
           ? existingBlocks
-              .filter((b) => b._parentId === s.existingId && b._id !== g.existingId && (b.title ?? b.displayTitle) === g.title)
+              .filter((b) =>
+                b._parentId === s.existingId &&
+                !explicitlyEmittedGroupIds.has(b._id) &&
+                (b.title ?? b.displayTitle) === g.title
+              )
               .sort((a, b) => (a._sortOrder ?? 0) - (b._sortOrder ?? 0))
           : [];
         let candidateIndex = 0;
@@ -690,6 +746,55 @@ export function pruneEmptyContainers(topics: GenTopic[]): void {
     }
     if (!t.sections.length) topics.splice(ti, 1);
   }
+}
+
+/** Warn when the document tries to skip required hierarchy levels. The parser
+ * intentionally fills missing parents (Topic/Section/Content Group) so legacy
+ * docs still generate, but every explicit heading should follow the intended
+ * Course → Topic → Article → Block → Component ladder. */
+export function validateStoryboardHierarchy(doc: unknown[]): string[] {
+  const issues: string[] = [];
+  let seenTopic = false;
+  let seenSection = false;
+  let seenGroup = false;
+
+  for (const raw of doc as GenBlock[]) {
+    if (raw.type !== "heading") continue;
+    const level = Number(raw.props?.level ?? 1);
+    const title = inlineToText(raw.content).trim() || "Untitled";
+
+    if (!Number.isInteger(level) || level < 1 || level > 4) {
+      issues.push(`Unsupported heading level ${level} for "${title}" — storyboard headings must stay within H1–H4.`);
+      continue;
+    }
+
+    if (level === 1) {
+      seenTopic = true;
+      seenSection = false;
+      seenGroup = false;
+      continue;
+    }
+
+    if (level === 2) {
+      if (!seenTopic) issues.push(`H2 heading "${title}" appears before any H1 Topic. Add a Topic heading first.`);
+      seenSection = true;
+      seenGroup = false;
+      continue;
+    }
+
+    if (level === 3) {
+      if (!seenTopic) issues.push(`H3 heading "${title}" appears before any H1 Topic. Add a Topic heading first.`);
+      if (!seenSection) issues.push(`H3 heading "${title}" is missing its parent H2 section. Add a Section heading before it.`);
+      seenGroup = true;
+      continue;
+    }
+
+    if (!seenTopic) issues.push(`H4 heading "${title}" appears before any H1 Topic. Add a Topic heading first.`);
+    if (!seenSection) issues.push(`H4 heading "${title}" is missing its parent H2 section. Add a Section heading before it.`);
+    if (!seenGroup) issues.push(`H4 heading "${title}" is missing its parent H3 content group. Add a Content Group heading before it.`);
+  }
+
+  return issues;
 }
 
 async function fetchCourseIndex(courseId: string) {
@@ -764,6 +869,8 @@ export async function planStoryboardGeneration(
 
   const issues: string[] = [];
   const warnings: string[] = [];
+  const hierarchyIssues = validateStoryboardHierarchy(doc);
+  if (hierarchyIssues.length) issues.push(...hierarchyIssues);
   if (tree.length === 0) {
     issues.push(
       hadTopicsBeforePruning
@@ -797,15 +904,24 @@ export async function generateStoryboardCourse(
   generatedContentMap: Record<string, string> = {},
   options: { skipDeletes?: boolean } = {}
 ): Promise<GenerationResult> {
+  const hierarchyIssues = validateStoryboardHierarchy(doc);
+  if (hierarchyIssues.length > 0) {
+    throw new Error(hierarchyIssues.join(' '));
+  }
+
   const [index, availableTypes] = await Promise.all([fetchCourseIndex(courseId), getAvailableComponents()]);
   const { resolve } = makeResolver(index as never, generatedContentMap);
   const tree = parseDocToTree(doc, resolve);
+  restoreRequiredStructureTitles(tree, index);
   enforceMaxComponentsPerBlock(tree, index.blocks);
   pruneEmptyContainers(tree);
   // Existing components' CURRENT properties, so an update seeds from what's
   // actually on the live document instead of building `properties` from
   // scratch (which would wipe every field the storyboard doesn't model).
   const existingComponentProps = new Map(index.components.map((c) => [c._id, c.properties || {}]));
+  if (doc.some((block) => (block as { type?: string }).type === "sbAssessment")) {
+    await ensureQuestionFeedbackExtensions(courseId);
+  }
 
   const typeByKey = new Map(availableTypes.map((t) => [t.component, t]));
   const installed = new Set(availableTypes.map((t) => t.component));
@@ -847,7 +963,7 @@ export async function generateStoryboardCourse(
           alt: "",
         });
       } else {
-        c.mediaPatch = buildMediaField(c.pendingKind, c.pendingMedia);
+        c.mediaPatch = buildMediaField(c.pendingKind, c.pendingMedia, c.existingId ? existingComponentProps.get(c.existingId)?._media as Record<string, unknown> | undefined : undefined);
       }
       return;
     }
@@ -880,7 +996,7 @@ export async function generateStoryboardCourse(
   for (const t of tree) {
     let topicId = t.existingId;
     if (topicId) {
-      await put("contentobject", topicId, { title: t.title, displayTitle: t.title, _parentId: courseId, _sortOrder: tSort });
+      await put("contentobject", topicId, { title: t.title, displayTitle: t.displayTitle ?? t.title, _parentId: courseId, _sortOrder: tSort });
       updated += 1;
     } else {
       topicId = await createTopic(courseId, courseId, t.title, tSort);
@@ -894,7 +1010,7 @@ export async function generateStoryboardCourse(
     for (const s of t.sections) {
       let secId = s.existingId;
       if (secId) {
-        await put("article", secId, { title: s.title, displayTitle: s.title, _parentId: topicId, _sortOrder: sSort });
+        await put("article", secId, { title: s.title, displayTitle: s.displayTitle ?? s.title, _parentId: topicId, _sortOrder: sSort });
         updated += 1;
       } else {
         secId = await createArticle(courseId, topicId, s.title, sSort);
@@ -915,7 +1031,7 @@ export async function generateStoryboardCourse(
         // which is fine — stale but harmless until the next full Generate).
         let grpId = g.existingId;
         if (grpId) {
-          await put("block", grpId, { title: g.title, displayTitle: g.title, _parentId: secId, _sortOrder: gSort });
+          await put("block", grpId, { title: g.title, displayTitle: g.displayTitle ?? g.title, _parentId: secId, _sortOrder: gSort });
           updated += 1;
         } else {
           grpId = await createBlock(courseId, secId, g.title, gSort);
@@ -940,21 +1056,38 @@ export async function generateStoryboardCourse(
           if (resolvedType) buildPatchFor(c, resolvedType.component);
           let compId = c.existingId;
           if (compId) {
-            // Existing node: always keep title/body; only write plugin fields
-            // when the kind resolves to an installed component.
-            const upd: Record<string, unknown> = { title: c.title, displayTitle: c.title, _parentId: grpId, _sortOrder: cSort, _layout: layout };
+            // Existing node: always keep body; only write plugin fields when
+            // the kind resolves to an installed component. title/displayTitle
+            // are written only when there's a real, author-provided title —
+            // an empty `c.title` (e.g. a bare-paragraph Text component with
+            // no H4 heading) must NOT overwrite whatever title the component
+            // already has (its createComponent default, or one set directly
+            // in the Page Editor) with a blank.
+            const upd: Record<string, unknown> = { _parentId: grpId, _sortOrder: cSort, _layout: layout };
+            if (c.title) {
+              upd.title = c.title;
+              upd.displayTitle = c.displayTitle ?? c.title;
+            }
             if (bodyHtml !== undefined) upd.body = bodyHtml;
             // Seed from what's actually live on the document BEFORE merging —
             // mergeProperties merges onto `upd.properties` if already present,
             // so this preserves any property the storyboard doesn't model
             // instead of replacing the whole object with just the new patch.
-            if (resolvedType && (c.mediaPatch || c.assessmentPatch)) {
+            if (resolvedType && (c.mediaPatch || c.assessmentPatch || c.instruction !== undefined)) {
               upd.properties = { ...(existingComponentProps.get(compId) || {}) };
             }
-            // Plugin fields (_graphic/_media/_items/_feedback) nest under
-            // `properties` — top-level would be dropped by the content model.
+            // Plugin fields (_graphic/_media/_items/_feedback) AND `instruction`
+            // nest under `properties` — every installed component declares its
+            // own `instruction` in its OWN properties.schema (there is no
+            // generic top-level `instruction` in the content model's
+            // model.schema), and the publish pipeline's sanitizeCourseJSON
+            // flattens `properties.*` onto the top level, overwriting whatever
+            // (if anything) is already there — so a top-level-only write here
+            // is invisible to Preview/Publish even though it round-trips fine
+            // through the Storyboard's own direct GET of the raw component.
             if (resolvedType && c.mediaPatch) mergeProperties(upd, c.mediaPatch);
             if (resolvedType && c.assessmentPatch) mergeProperties(upd, c.assessmentPatch);
+            if (resolvedType && c.instruction !== undefined) mergeProperties(upd, { instruction: c.instruction });
             await put("component", compId, upd);
             updated += 1;
           } else {
@@ -965,14 +1098,43 @@ export async function generateStoryboardCourse(
               continue;
             }
             compId = await createComponent(courseId, grpId, resolvedType.type, cSort, layout);
-            const upd: Record<string, unknown> = { title: c.title, displayTitle: c.title, _layout: layout };
+            // See the matching comment in the existing-component branch above
+            // — an empty `c.title` leaves createComponent's own default
+            // title (the installed component type's display name) standing,
+            // rather than blanking it out.
+            const upd: Record<string, unknown> = { _layout: layout };
+            if (c.title) {
+              upd.title = c.title;
+              upd.displayTitle = c.displayTitle ?? c.title;
+            }
             if (bodyHtml !== undefined) upd.body = bodyHtml;
+            // Seed from what createComponent() just wrote (its own defensive PUT
+            // applies the schema defaults) BEFORE merging — same reason as the
+            // existing-component branch above: mergeProperties only replaces the
+            // keys it's given, so without this seed, properties createComponent
+            // just set (e.g. `_supportedLayout`, other plugin defaults this patch
+            // doesn't touch) would be silently wiped by this follow-up PUT.
+            if (c.mediaPatch || c.assessmentPatch || c.instruction !== undefined) {
+              try {
+                const fresh = await apiClient.get<{ properties?: Record<string, unknown> }>(`/api/content/component/${compId}`);
+                upd.properties = { ...(fresh?.properties || {}) };
+              } catch {
+                /* best effort — fall through to mergeProperties seeding {} */
+              }
+            }
+            // See the matching comment in the existing-component branch above —
+            // `instruction` nests under `properties` like every other plugin
+            // field; it is never a generic top-level model field.
             if (c.mediaPatch) mergeProperties(upd, c.mediaPatch);
             if (c.assessmentPatch) mergeProperties(upd, c.assessmentPatch);
+            if (c.instruction !== undefined) mergeProperties(upd, { instruction: c.instruction });
             await put("component", compId, upd);
             created += 1;
           }
           resolved.add(compId);
+          for (const asset of mediaAssetRefs(c.pendingMedia)) {
+            await linkContentAsset(courseId, "component", compId, grpId, filenameFromLink(asset.link), asset.assetId!);
+          }
           if (c.sourceBlockId) blockToContent[c.sourceBlockId] = compId;
           // Link the chosen DAM asset to this component so publish resolves it.
           if (c.assetId && c.assetLink) {
@@ -1056,6 +1218,10 @@ export async function generateStoryboardCourse(
     await seedMissingCourseDefaults(courseId);
   } catch (err) {
     console.warn("Storyboard generation: failed to seed course schema defaults", err);
+  }
+
+  if (unsupported.size > 0) {
+    console.warn('[DEBUG] Unsupported component kinds:', Array.from(unsupported));
   }
 
   return { created, updated, deleted, blockToContent, missingTypes: [...unsupported] };

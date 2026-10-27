@@ -25,19 +25,19 @@ export type StoryboardComponentKind =
   | 'textInput'
   | 'slider'
   | 'checklist'
-  | 'assessmentResult'
   | 'hotgraphic'
   | 'hotgrid'
   | 'actionplan'
-  | 'instruction';
+  | 'instruction'
+  | 'assessmentResult';
 
 // Ordered candidate `_component` values per storyboard kind.
 export const COMPONENT_CANDIDATES: Record<StoryboardComponentKind, string[]> = {
   text: ['text', 'laerdal-text'],
   groupedContent: ['accordion', 'laerdal-narrative', 'narrative'],
   image: ['graphic'],
-  video: ['media', 'laerdal-media'],
-  audio: ['media', 'laerdal-media'],
+  video: ['laerdal-media', 'media'],
+  audio: ['laerdal-media', 'media'],
   h5p: ['laerdal-h5p', 'h5p'],
   laerdalForm: ['laerdal-form'],
   mcq: ['mcq'],
@@ -47,11 +47,11 @@ export const COMPONENT_CANDIDATES: Record<StoryboardComponentKind, string[]> = {
   textInput: ['textinput'],
   slider: ['slider', 'laerdal-slider'],
   checklist: ['laerdal-checklist'],
-  assessmentResult: ['assessmentResults'],
   hotgraphic: ['laerdal-hotgraphic', 'hotgraphic'],
   hotgrid: ['hotgrid'],
   actionplan: ['actionplan', 'laerdal-actionplan'],
   instruction: ['text', 'laerdal-text'],
+  assessmentResult: ['assessmentResults'],
 };
 
 // Resolve a storyboard kind to an installed Adapt `_component`, or null if none
@@ -91,12 +91,12 @@ const REVERSE: Record<string, StoryboardComponentKind | 'media'> = {
   slider: 'slider',
   'laerdal-slider': 'slider',
   'laerdal-checklist': 'checklist',
-  assessmentResults: 'assessmentResult',
   'laerdal-hotgraphic': 'hotgraphic',
   hotgraphic: 'hotgraphic',
   hotgrid: 'hotgrid',
   actionplan: 'actionplan',
   'laerdal-actionplan': 'actionplan',
+  assessmentResults: 'assessmentResult',
 };
 
 export function reverseKind(component?: string): StoryboardComponentKind | 'media' | null {

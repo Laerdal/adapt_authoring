@@ -110,6 +110,7 @@ export default function ImportPreviewDialog({
   const warnings = normalizedDocument?.metadata.warnings ?? [];
   const sectionCount = normalizedDocument ? countSections(normalizedDocument.sections) : 0;
   const title = normalizedDocument?.metadata.documentTitle || fileName;
+  const blocked = !!plan && plan.issues.length > 0;
   const snippet = useMemo(
     () => (normalizedDocument ? contentPreviewSnippet(normalizedDocument.sections) : ''),
     [normalizedDocument],
@@ -284,8 +285,15 @@ export default function ImportPreviewDialog({
           <button
             type="button"
             onClick={() => onConfirm(mode)}
+            disabled={!!blocked}
             className={`sb-toolbar-btn ${mode === 'replace' ? '' : 'sb-toolbar-btn-primary'}`}
-            style={mode === 'replace' ? { background: '#b42318', color: '#fff', borderColor: '#b42318' } : undefined}
+            style={
+              mode === 'replace'
+                ? { background: blocked ? '#d1d5db' : '#b42318', color: '#fff', borderColor: blocked ? '#d1d5db' : '#b42318' }
+                : blocked
+                  ? { opacity: 0.5, cursor: 'not-allowed' }
+                  : undefined
+            }
           >
             {mode === 'replace' ? 'Replace storyboard' : mode === 'reimport' ? 'Update content' : 'Confirm import'}
           </button>

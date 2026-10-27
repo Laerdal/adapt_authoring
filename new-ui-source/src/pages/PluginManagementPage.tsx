@@ -26,6 +26,7 @@ import {
   type DashboardPlugin,
   type PluginCategory,
 } from "@/api/adaptAuthoring";
+import { usePageLoader } from '@/hooks';
 import AiAssistant from "@/components/common/AiAssistant";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import ErrorDialog from "@/components/common/ErrorDialog";
@@ -176,6 +177,7 @@ function UploadPluginModal({
 export default function PluginManagementPage() {
   const [plugins, setPlugins] = useState<DashboardPlugin[]>([]);
   const [loading, setLoading] = useState(true);
+  usePageLoader(loading);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | PluginCategory>("all");
   const [page, setPage] = useState(1);
@@ -475,7 +477,7 @@ export default function PluginManagementPage() {
         <ConfirmDialog
           open
           title="Delete plugin"
-          message={<>Are you sure you want to delete <span className="font-medium text-[#111827]">"{deleteTarget.name}"</span>?</>}
+          message="Are you sure you want to delete this plugin?"
           confirmLabel="Delete"
           cancelLabel="Cancel"
           onCancel={() => setDeleteTarget(null)}

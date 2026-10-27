@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { API_BASE_URL } from "../../utils/constants";
+import InfoIcon, { InfoFieldLabel } from "../../components/common/InfoIcon";
 import {
   getCdnDeploymentSettings,
   saveCdnDeploymentSettings,
@@ -14,10 +15,19 @@ import {
   type CdnDeploymentSettings,
   type CdnLinkEntry,
 } from "../../api/adaptAuthoring";
+import {
+  getConfigRootSchema,
+  getSchemaHint,
+  getSchemaLabel,
+  getSchemaNode,
+  type SetupSchemaNode,
+} from "../../helpers/setupInfoSchema";
+import { usePageLoader } from "../../hooks";
+import { SaveChangesButton } from "./SaveChangesButton";
+import { SaveStatusToast } from "./SaveStatusToast";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 import { CheckboxIndicator } from "../../components/common/Checkbox";
-import { InfoFieldLabel } from "../../components/common/InfoIcon";
 
 /* ── Shared bits (mirrors NavigationPage's conventions) ─────────────────── */
 
@@ -29,46 +39,18 @@ function Spinner({ className = "" }: { className?: string }) {
   );
 }
 
-function Toast({ toast, onDismiss }: { toast: { type: "success" | "error"; message: string }; onDismiss: () => void }) {
-  return (
-    <div className="fixed top-4 right-4 z-[60] pointer-events-none">
-      <div
-        className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium border pointer-events-auto animate-fade-in-down min-w-[260px] max-w-sm ${
-          toast.type === "success"
-            ? "bg-[var(--life-positive-050)] border-[var(--life-positive-100)] text-[var(--life-positive-500)]"
-            : "bg-[var(--life-critical-050)] border-[var(--life-critical-100)] text-[var(--life-critical-500)]"
-        }`}
-      >
-        {toast.type === "success" ? (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-positive-500)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
-        ) : (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-critical-500)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-            <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-          </svg>
-        )}
-        <span className="flex-1">{toast.message}</span>
-        <button type="button" onClick={onDismiss} className="opacity-60 hover:opacity-100 transition-opacity ml-1" aria-label="Dismiss">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // Collapsible card — same visual language as NavigationPage's NavAccordion, but
 // independently toggleable (both CDN Config and Course Deployment default open).
 function Section({
   title,
   icon,
+  hint,
   defaultOpen = true,
   children,
 }: {
   title: string;
   icon: React.ReactNode;
+  hint?: string;
   defaultOpen?: boolean;
   children: React.ReactNode;
 }) {
@@ -83,7 +65,7 @@ function Section({
       >
         <div className="flex items-center gap-2.5">
           <span className="text-[#6b7280]">{icon}</span>
-          <h3 className="text-sm font-bold text-current">{title}</h3>
+          <h3 className="text-sm font-bold text-current flex items-center gap-1.5">{title}{hint ? <InfoIcon label={title} hint={hint} /> : null}</h3>
         </div>
         <svg
           className="shrink-0 ml-auto text-current"
@@ -113,12 +95,12 @@ function validateCdnId(v: string, fieldLabel: string): string | undefined {
   return undefined;
 }
 
-function ToggleSwitch({ checked, onChange, label, disabled = false, ariaLabel }: { checked: boolean; onChange: (v: boolean) => void; label: React.ReactNode; disabled?: boolean; ariaLabel?: string }) {
+function ToggleSwitch({ checked, onChange, label, hint, disabled = false, ariaLabel }: { checked: boolean; onChange: (v: boolean) => void; label: React.ReactNode; hint?: string; disabled?: boolean; ariaLabel?: string }) {
   const labelId = React.useId();
   const stringLabel = typeof label === "string" ? label : undefined;
   return (
     <div className={`flex items-center justify-between gap-3 py-1 ${disabled ? "opacity-40" : ""}`}>
-      <span id={labelId} className="text-sm font-semibold text-[var(--life-base-black)] leading-snug">{label}</span>
+      <span id={labelId} className="text-sm font-semibold text-[var(--life-base-black)] leading-snug">{label}{hint ? <InfoIcon label={stringLabel ?? "setting"} hint={hint} className="ml-1 inline-flex align-middle" /> : null}</span>
       <button
         type="button"
         role="switch"
@@ -137,16 +119,12 @@ function ToggleSwitch({ checked, onChange, label, disabled = false, ariaLabel }:
   );
 }
 
-function FieldLabel({ label, hint }: { label: string; hint?: string }) {
-  return <InfoFieldLabel label={label} hint={hint} />;
-}
-
 function TextField({
   label, hint, value, onChange, placeholder, error, maxLength, sanitize,
 }: { label: string; hint?: string; value: string; onChange: (v: string) => void; placeholder?: string; error?: string; maxLength?: number; sanitize?: (v: string) => string }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <FieldLabel label={label} hint={hint} />
+      <InfoFieldLabel label={label} hint={hint} description={hint} className="text-[var(--life-base-black)]" />
       <input
         type="text"
         value={value}
@@ -158,9 +136,10 @@ function TextField({
       />
       {error ? (
         <p className="text-[11px] text-[var(--life-error-500)] leading-snug">{error}</p>
-      ) : hint ? (
-        <p className="text-[11px] text-[#9ca3af] leading-snug">{hint}</p>
+       
       ) : null}
+      {hint && <p className="text-[11px] text-[var(--life-neutral-300)] leading-snug">{hint}</p>}
+
     </div>
   );
 }
@@ -170,7 +149,7 @@ function SelectField({
 }: { label: string; hint?: string; value: string; onChange: (v: string) => void; options: readonly string[] }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <FieldLabel label={label} hint={hint} />
+      <InfoFieldLabel label={label} hint={hint} description={hint} className="text-[var(--life-base-black)]" />
       <div className="relative">
         <select
           value={value}
@@ -183,7 +162,8 @@ function SelectField({
           <polyline points="6 9 12 15 18 9" />
         </svg>
       </div>
-      {hint && <p className="text-[11px] text-[#9ca3af] leading-snug">{hint}</p>}
+      {hint && <p className="text-[11px] text-[var(--life-neutral-300)] leading-snug">{hint}</p>}
+    
     </div>
   );
 }
@@ -310,7 +290,9 @@ export function CdnDeploymentPage({
   const { user } = useAuth();
 
   const [loading, setLoading] = useState(true);
+  usePageLoader(loading);
   const [cfg, setCfg] = useState<CdnDeploymentSettings | null>(null);
+  const [configSchema, setConfigSchema] = useState<SetupSchemaNode | null>(null);
   const [savedSnapshot, setSavedSnapshot] = useState<CdnDeploymentSettings | null>(null);
   const [saving, setSaving] = useState(false);
   const [cdnCliVersion, setCdnCliVersion] = useState("");
@@ -383,6 +365,18 @@ export function CdnDeploymentPage({
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getConfigRootSchema()
+      .then((nextConfigSchema) => {
+        if (!cancelled) setConfigSchema(nextConfigSchema);
+      })
+      .catch(() => {
+        if (!cancelled) setConfigSchema(null);
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   // The CLI version string is a display-only footnote ("NPM cdndeploy
   // version: …") backed by a `cdndeploy -version` subprocess spawn, which can
@@ -616,15 +610,23 @@ export function CdnDeploymentPage({
   const canTrigger =
     !!cfg?.isEnabled && !!cfg.cdnid && !!cfg.groupid && !!cfg.courseid && !!cfg.version && !building && !identityMatchesDefault && !hasIdentityErrors;
 
+  const cdnSchema = getSchemaNode(configSchema, "_extensions", "_cdnConfig");
+  const courseDeploymentSchema = getSchemaNode(cdnSchema, "_courseDeployment");
+
   return (
     <div className="flex flex-col h-full w-full bg-[#f7f9fb]">
       {/* Header */}
-      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb]">
-        <h2 className="text-xl font-bold text-[var(--life-base-black)]">CDN Deployment</h2>
-        <p className="text-sm text-[#6b7280] mt-0.5">Configure CDN targets and deploy this course to the storage container.</p>
-        {cdnCliVersion && (
-          <p className="text-xs text-[#9ca3af] mt-2">NPM <span className="font-mono">cdndeploy</span> version: {cdnCliVersion}</p>
-        )}
+      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-start gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-[var(--life-base-black)]">CDN Deployment</h2>
+          <p className="text-sm text-[#6b7280] mt-0.5">Configure where your course is deployed, trigger deployment to publish new versions to the CDN, and restore previous versions when needed.</p>
+          {cdnCliVersion && (
+            <p className="text-xs text-[#9ca3af] mt-2">NPM <span className="font-mono">cdndeploy</span> version: {cdnCliVersion}</p>
+          )}
+        </div>
+        <div className="ml-auto pt-1">
+          <SaveChangesButton dirty={dirty} saving={saving} disabled={!courseId} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto min-h-0">
@@ -637,27 +639,28 @@ export function CdnDeploymentPage({
             <>
               {/* CDN Config */}
               <Section
-                title="CDN Config"
+                title={getSchemaLabel(cdnSchema, "CDN Config")}
+                hint={getSchemaHint(cdnSchema)}
                 icon={
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                     <rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" />
                   </svg>
                 }
               >
-                <ToggleSwitch checked={cfg.isEnabled} onChange={(v) => set({ isEnabled: v })} label="Is Enabled" />
+                <ToggleSwitch checked={cfg.isEnabled} onChange={(v) => set({ isEnabled: v })} label={getSchemaLabel(getSchemaNode(cdnSchema, "_isEnabled"), "Enable CDN settings")} />
 
                 {cfg.isEnabled && (
                   <div className="flex flex-col gap-3 mt-1">
                     <SelectField
-                      label="CDN Storage Container"
-                      hint="Which CDN server should the course be deployed to? Only live courses should be deployed to prod, and the rest should point to the dev environment."
+                      label={getSchemaLabel(getSchemaNode(courseDeploymentSchema, "cdnid"), "CDN Storage Container")}
+                      hint={getSchemaHint(getSchemaNode(courseDeploymentSchema, "cdnid")) ?? "Which CDN server should the course be deployed to? Only live courses should be deployed to prod, and the rest should point to the dev environment."}
                       value={cfg.cdnid}
                       onChange={(v) => set({ cdnid: v })}
                       options={CDN_STORAGE_CONTAINERS}
                     />
                     <TextField
-                      label="Project"
-                      hint="Which project does this course belong to? Set the project ID with 30 characters or fewer and no special characters allowed."
+                      label={getSchemaLabel(getSchemaNode(courseDeploymentSchema, "groupid"), "Project")}
+                      hint={getSchemaHint(getSchemaNode(courseDeploymentSchema, "groupid")) ?? "Which project does this course belong to? Set the project ID with 30 characters or fewer and no special characters allowed."}
                       value={cfg.groupid}
                       onChange={(v) => set({ groupid: v })}
                       maxLength={CDN_ID_MAX_LENGTH}
@@ -665,8 +668,8 @@ export function CdnDeploymentPage({
                       error={groupidError}
                     />
                     <TextField
-                      label="Course Id"
-                      hint="Set the course ID with 30 characters or fewer and no special characters allowed."
+                      label={getSchemaLabel(getSchemaNode(courseDeploymentSchema, "courseid"), "Course Id")}
+                      hint={getSchemaHint(getSchemaNode(courseDeploymentSchema, "courseid")) ?? "Set the course ID with 30 characters or fewer and no special characters allowed."}
                       value={cfg.courseid}
                       onChange={(v) => set({ courseid: v })}
                       maxLength={CDN_ID_MAX_LENGTH}
@@ -674,26 +677,19 @@ export function CdnDeploymentPage({
                       error={courseidError}
                     />
                     <TextField
-                      label="Version"
-                      hint="Sets the version"
+                      label={getSchemaLabel(getSchemaNode(courseDeploymentSchema, "version"), "Version")}
+                      hint={getSchemaHint(getSchemaNode(courseDeploymentSchema, "version")) ?? "Sets the version"}
                       value={cfg.version}
                       onChange={(v) => set({ version: v })}
                     />
                     <TextField
-                      label="Build Trigger Comment"
-                      hint="Update the build trigger information"
+                      label={getSchemaLabel(getSchemaNode(courseDeploymentSchema, "buildTriggerComment"), "Build Trigger Comment")}
+                      hint={getSchemaHint(getSchemaNode(courseDeploymentSchema, "buildTriggerComment")) ?? "Update the build trigger information"}
                       value={cfg.buildTriggerComment}
                       onChange={(v) => set({ buildTriggerComment: v })}
                     />
 
-                    {identityMatchesDefault ? (
-                      <p className="text-xs text-[var(--life-warning-500)] bg-[var(--life-warning-050)] border border-[var(--life-warning-100)] rounded-lg px-3 py-2">
-                        Project and/or Course Id is still set to a default placeholder value ("default-project" /
-                        "default-course"). Update both to values specific to this course before you can trigger a CDN
-                        build — deploying with a shared default would overwrite another course's deployment at the
-                        same path.
-                      </p>
-                    ) : dirty ? (
+                    {!identityMatchesDefault && dirty ? (
                       // Only shown while the edits are unsaved (`dirty`) — this is a heads-up about the
                       // *pending* change, so it should go away once the user saves (at which point
                       // `savedSnapshot` catches up to `cfg` and these are simply the current settings,
@@ -710,13 +706,20 @@ export function CdnDeploymentPage({
 
               {/* Course Deployment */}
               <Section
-                title="Course Deployment"
+                title="Course Deployment"  
                 icon={
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" />
                   </svg>
                 }
               >
+                {identityMatchesDefault && (
+                  <p className="text-[11px] text-[#9ca3af] leading-snug">
+                    Before deploying, replace the default Project ID and Course ID with values specific to this
+                    course. Trigger CDN Build will remain disabled until both fields are updated.
+                  </p>
+                )}
+              
                 <label className="relative flex items-start gap-3 cursor-pointer group">
                   <input
                     type="checkbox"
@@ -726,14 +729,16 @@ export function CdnDeploymentPage({
                     className="sr-only peer"
                   />
                   <CheckboxIndicator checked={includeExport} className="mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
-                  <span className="text-sm text-[#374151]">
-                    Include the <strong>source code*</strong> as part of the CDN deployment.
-                    <span className="block mt-1 text-xs text-[#9ca3af]">
-                      *Same bundle as when you "Export" a course from the Authoring Tool. Useful for debugging courses after they have been deployed.
-                      <span className="block mt-0.5"><strong>Note:</strong> This extra build step will slow down CDN deployment.</span>
-                    </span>
+                  <span className="text-sm text-[#374151] flex items-center gap-1.5">
+                    Include the <strong>source code</strong> as part of the CDN deployment.
+                    <InfoIcon
+                      label="Include the source code as part of the CDN deployment"
+                      hint={'Same bundle as when you "Export" a course from the Authoring Tool. Useful for debugging courses after they have been deployed. Note: this extra build step will slow down CDN deployment.'}
+                    />
                   </span>
                 </label>
+
+
 
                 <div className="flex items-center justify-between gap-2 mt-1">
                   <button
@@ -901,7 +906,7 @@ export function CdnDeploymentPage({
               <div className="flex items-start gap-2.5 rounded-lg bg-[#fff7ed] border border-[#fed7aa] px-4 py-3">
                 <span className="text-base leading-none mt-0.5" aria-hidden="true">💡</span>
                 <p className="text-sm text-[#9a3412] leading-snug">
-                  <span className="font-semibold">Tip:</span> Edit the config above and click Trigger CDN Build to publish a new version. Use Restore on a previous version to promote it back to active.
+                  <span className="font-semibold">Tip:</span> Set an expiry date when sharing a CDN link to help limit how long the course remains accessible and reduce unintended sharing or wider circulation.
                 </p>
               </div>
             </>
@@ -909,28 +914,7 @@ export function CdnDeploymentPage({
         </div>
       </div>
 
-      {/* Floating "Unsaved changes" bar */}
-      {!loading && dirty && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-4 py-3 rounded-xl bg-white border border-[var(--life-warning-100)] shadow-lg animate-fade-in-down">
-          <span className="flex items-center gap-2 text-sm text-[#374151]">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-warning-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
-            </svg>
-            Unsaved changes
-          </span>
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={handleCancel} disabled={saving} className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] disabled:opacity-50 transition-colors">
-              Cancel
-            </button>
-            <button type="button" onClick={() => void handleSave()} disabled={saving} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-[var(--life-base-white)] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] disabled:opacity-50 rounded-lg transition-colors">
-              {saving && <Spinner />}
-              {saving ? "Saving…" : "Save Changes"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
+      <SaveStatusToast toast={toast} onDismiss={() => setToast(null)} autoHideMs={3500} />
 
       <UnsavedChangesModal
         isOpen={showConfirmModal}

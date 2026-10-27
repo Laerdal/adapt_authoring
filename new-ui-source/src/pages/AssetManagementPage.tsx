@@ -1,9 +1,11 @@
-import { useState, useMemo, useEffect, useRef, useCallback, useDeferredValue, memo } from "react";
-import { getAssets, getMaxFileUploadSize, trashAsset, restoreAsset, updateAsset, uploadAsset } from "@/api/adaptAuthoring";
+import { useState, useMemo, useEffect, useRef, useCallback, memo } from "react";
+import { getAssets, getMaxFileUploadSize, trashAsset, restoreAsset, updateAsset, uploadAsset, fetchDashboardTags } from "@/api/adaptAuthoring";
 import type { AssetFormat, DashboardAsset } from "@/api/adaptAuthoring";
+import { usePageLoader } from "@/hooks";
 import AiAssistant from "@/components/common/AiAssistant";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import type { AssetPickerResult, AssetPickerType } from "@/types/assetPicker";
+import { SaveStatusToast } from "./setup/SaveStatusToast";
 
 type Asset = DashboardAsset;
 
@@ -15,6 +17,9 @@ interface AssetManagementWorkspaceProps {
   onPickAsset?: (asset: AssetPickerResult) => void;
   onCancelPick?: () => void;
   hideAssistant?: boolean;
+  // Scopes the picker to one course's AI Tutor source documents - see getAssets'
+  // aiTutorCourseId in adaptAuthoring.ts for what this does server-side.
+  aiTutorCourseId?: string;
 }
 
 const FORMAT_COLORS: Record<AssetFormat, string> = {
@@ -56,7 +61,7 @@ const THUMBNAIL_COLORS: Record<AssetFormat, string> = {
 
 // ── Upload types ─────────────────────────────────────────────────────────────
 
-type UploadStep = "pick" | "details" | "uploading" | "done" | "error";
+type UploadStep = "pick" | "details" | "uploading" | "error";
 
 interface FileValidation {
   ok: boolean;
@@ -78,8 +83,12 @@ interface UploadState {
   formErrors: UploadFormErrors;
   uploadError: string | null;
   progress: number;
-  uploadedAssetId: string | null;
 }
+
+type ToastState = {
+  type: "success" | "error";
+  message: string;
+};
 
 interface EditModalState {
   asset: Asset | null;
@@ -218,7 +227,6 @@ const EMPTY_UPLOAD: UploadState = {
   formErrors: {},
   uploadError: null,
   progress: 0,
-  uploadedAssetId: null,
 };
 
 const EMPTY_EDIT = (a: Asset): EditModalState => ({
@@ -412,7 +420,7 @@ function AssetPreviewPanel({
 
   if (!asset) {
     return (
-      <aside className="xl:sticky xl:top-0 xl:self-start">
+      <aside className="sticky top-0 self-start">
         <div className="rounded-[24px] border border-[#e5edf5] bg-white/90 p-6 text-center shadow-[0_16px_40px_rgba(15,23,42,0.06)] backdrop-blur">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#eef6fd] text-[#2d6fa8]">
             <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -445,14 +453,14 @@ function AssetPreviewPanel({
   }
 
   return (
-    <aside className="xl:sticky xl:top-0 xl:self-start xl:h-[calc(100vh-10rem)]">
+    <aside className="sticky top-0 self-start h-[calc(100vh-10rem)]">
       <div className="flex h-full flex-col overflow-hidden rounded-[24px] border border-[#e5edf5] bg-white shadow-[0_16px_40px_rgba(15,23,42,0.08)]">
         <div className="border-b border-[#edf2f7] bg-[linear-gradient(135deg,#f6fbff_0%,#eef5fb_100%)] px-5 py-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#2d6fa8]">Asset Preview</p>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto space-y-6 p-5 text-center pb-10">
-          <AssetPreviewMedia asset={asset} onImageMeasure={setImageDimensions} />
+          <AssetPreviewMedia key={asset.backendId} asset={asset} onImageMeasure={setImageDimensions} />
 
           <div className="space-y-4">
             <div>
@@ -633,19 +641,22 @@ export function AssetManagementWorkspace({
   onPickAsset,
   onCancelPick,
   hideAssistant = false,
+  aiTutorCourseId,
 }: AssetManagementWorkspaceProps) {
   const [assets, setAssets]             = useState<Asset[]>([]);
+  const [isLoadingAssets, setIsLoadingAssets] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore]           = useState(false);
+  // Same infinite-scroll shape as the dashboard course list (HomePage.tsx): a skip
+  // cursor and a load generation counter live in refs, not state, so a debounced
+  // search reset can't be clobbered by a slower in-flight page that was already
+  // superseded.
+  const skipRef = useRef(0);
+  const loadGenRef = useRef(0);
+  const loadingMoreRef = useRef(false);
   const fixedPickerFormat = pickerMode && pickerAssetType ? pickerAssetType : null;
 
-  const loadAssets = useCallback(async () => {
-    try {
-      const rows = await getAssets(!pickerMode);
-      setAssets(rows);
-    } catch {
-      setAssets([]);
-    }
-  }, [pickerMode]);
-  useEffect(() => { void loadAssets(); }, [loadAssets]);
+  usePageLoader(!pickerMode && isLoadingAssets);
   const [search, setSearch]             = useState("");
   const [formatFilter, setFormatFilter] = useState<AssetFormat | "All">(
     fixedPickerFormat && isDirectFormatPickerType(fixedPickerFormat) ? fixedPickerFormat : "All"
@@ -661,6 +672,7 @@ export function AssetManagementWorkspace({
   const [uploadOpen, setUploadOpen]     = useState(false);
   const [upload, setUpload]             = useState<UploadState>(EMPTY_UPLOAD);
   const [uploadDrag, setUploadDrag]     = useState(false);
+  const [toast, setToast]               = useState<ToastState | null>(null);
 
   const [editState, setEditState]       = useState<EditModalState | null>(null);
 
@@ -713,22 +725,33 @@ export function AssetManagementWorkspace({
     };
   }, []);
 
-  const deferredSearch = useDeferredValue(search);
-  const availableTags = useMemo(() => {
-    const seen = new Set<string>();
-    const tags: string[] = [];
-    for (const asset of assets) {
-      for (const rawTag of asset.tags) {
-        const tag = rawTag.trim();
-        if (!tag) continue;
-        const key = tag.toLowerCase();
-        if (seen.has(key)) continue;
-        seen.add(key);
-        tags.push(tag);
-      }
-    }
-    return tags.sort((a, b) => a.localeCompare(b));
-  }, [assets]);
+  // Debounce the search box before it drives a server request (was: instant, since
+  // filtering used to happen entirely in-memory over an already-fully-loaded list).
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const handle = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => window.clearTimeout(handle);
+  }, [search]);
+
+  // Tag universe for the filter chips comes from the same tenant-wide tag endpoint the
+  // old UI uses, not from currently-loaded assets — those are now only a page at a time.
+  const [tagsUniverse, setTagsUniverse] = useState<Array<{ title: string; id: string }>>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void fetchDashboardTags().then((rows) => {
+      if (!cancelled) setTagsUniverse(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const availableTags = useMemo(() => tagsUniverse.map((t) => t.title), [tagsUniverse]);
+  const selectedTagIds = useMemo(() => {
+    const idByTitle = new Map(tagsUniverse.map((t) => [t.title.toLowerCase(), t.id]));
+    return selectedTags
+      .map((t) => idByTitle.get(t.trim().toLowerCase()))
+      .filter((id): id is string => !!id);
+  }, [selectedTags, tagsUniverse]);
 
   const visibleTagOptions = useMemo(
     () => availableTags.filter((t) => !tagSearch.trim() || t.toLowerCase().includes(tagSearch.trim().toLowerCase())),
@@ -737,24 +760,77 @@ export function AssetManagementWorkspace({
 
   const effectiveFormatFilter: AssetFormat | "All" =
     fixedPickerFormat && isDirectFormatPickerType(fixedPickerFormat) ? fixedPickerFormat : formatFilter;
+
+  // Search/format(direct)/tags are now applied server-side (see getAssets). The only
+  // filtering left to do here is for composite picker types (media/h5p/other-excluding-
+  // h5p/all) that don't map onto a single server-side format value — see
+  // matchesPickerAssetType. That's a real corner cut: those picker views can display
+  // fewer than a full page of items before "Load more" is needed, since some fetched
+  // items get filtered out client-side after the fact.
+  const needsClientFormatFilter = !!fixedPickerFormat && !isDirectFormatPickerType(fixedPickerFormat);
   const filtered = useMemo(() => {
-    const q = deferredSearch.trim().toLowerCase();
-    return assets.filter((a) => {
-      const matchSearch =
-        q === "" ||
-        a.title.toLowerCase().includes(q) ||
-        a.tags.some((t) => t.toLowerCase().includes(q));
-      const matchFormat = fixedPickerFormat
-        ? matchesPickerAssetType(a, fixedPickerFormat)
-        : effectiveFormatFilter === "All" || a.format === effectiveFormatFilter;
-      const matchTags =
-        selectedTags.length === 0 ||
-        selectedTags.every((tag) =>
-          a.tags.some((assetTag) => assetTag.trim().toLowerCase() === tag.trim().toLowerCase())
-        );
-      return matchSearch && matchFormat && matchTags;
-    });
-  }, [assets, deferredSearch, effectiveFormatFilter, fixedPickerFormat, selectedTags]);
+    if (!needsClientFormatFilter) return assets;
+    return assets.filter((a) => matchesPickerAssetType(a, fixedPickerFormat!));
+  }, [assets, needsClientFormatFilter, fixedPickerFormat]);
+
+  const fetchAssetsPage = useCallback(async (reset: boolean) => {
+    if (!reset) {
+      if (!hasMore || loadingMoreRef.current) return;
+      loadingMoreRef.current = true;
+    }
+    const gen = reset ? ++loadGenRef.current : loadGenRef.current;
+    if (reset) {
+      setIsLoadingAssets(true);
+      skipRef.current = 0;
+    } else {
+      setIsLoadingMore(true);
+    }
+    try {
+      const { items, hasMore: more } = await getAssets({
+        includeDeleted: !pickerMode,
+        skip: skipRef.current,
+        search: debouncedSearch,
+        format: effectiveFormatFilter,
+        tagIds: selectedTagIds,
+        aiTutorCourseId,
+      });
+      if (gen !== loadGenRef.current) return; // superseded by a newer reset
+      setAssets((prev) => (reset ? items : [...prev, ...items]));
+      skipRef.current += items.length;
+      setHasMore(more);
+    } catch {
+      if (gen === loadGenRef.current) {
+        if (reset) setAssets([]);
+        setHasMore(false);
+      }
+    } finally {
+      if (gen === loadGenRef.current) {
+        if (reset) setIsLoadingAssets(false); else setIsLoadingMore(false);
+      }
+      if (!reset) loadingMoreRef.current = false;
+    }
+  }, [pickerMode, debouncedSearch, effectiveFormatFilter, selectedTagIds, hasMore, aiTutorCourseId]);
+
+  useEffect(() => {
+    void fetchAssetsPage(true);
+    // Reset-and-refetch whenever a filter changes; "load more" (the sentinel below)
+    // is a separate, explicit action and intentionally not a dependency here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch, effectiveFormatFilter, selectedTagIds, pickerMode]);
+
+  // Infinite scroll: pull the next page when the sentinel nears the viewport —
+  // same mechanism as the dashboard course list (HomePage.tsx).
+  const assetSentinelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = assetSentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => { if (entries[0].isIntersecting) void fetchAssetsPage(false); },
+      { rootMargin: "400px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [fetchAssetsPage]);
 
   const selectedAsset = useMemo(
     () => filtered.find((asset) => asset.backendId === selectedAssetId)
@@ -866,13 +942,19 @@ export function AssetManagementWorkspace({
     }, 120);
 
     try {
-      const assetId = await uploadAsset(file, title, { description, tags });
+      const assetId = await uploadAsset(file, title, { description, tags, aiTutorCourseId });
       if (progressTimer.current) {
         clearInterval(progressTimer.current);
         progressTimer.current = null;
       }
-      await loadAssets();
-      setUpload((prev) => ({ ...prev, step: "done", progress: 100, uploadedAssetId: assetId }));
+      await fetchAssetsPage(true);
+      if (pickerMode) {
+        setSelectedAssetId(assetId);
+        setLastDeletedAsset(null);
+        setRestoreError(null);
+      }
+      setToast({ type: "success", message: "Your asset has been added to the Asset Library and is ready to use." });
+      closeUpload();
     } catch (error) {
       if (progressTimer.current) {
         clearInterval(progressTimer.current);
@@ -943,7 +1025,7 @@ export function AssetManagementWorkspace({
     try {
       await trashAsset(target.backendId);
     } finally {
-      await loadAssets();
+      await fetchAssetsPage(true);
     }
   }
 
@@ -957,7 +1039,7 @@ export function AssetManagementWorkspace({
       await restoreAsset(target.backendId);
       setLastDeletedAsset(null);
       setSelectedAssetId(null);
-      await loadAssets();
+      await fetchAssetsPage(true);
     } catch (error) {
       setRestoreError(getEditErrorMessage(error));
     }
@@ -994,22 +1076,23 @@ export function AssetManagementWorkspace({
       <div className="px-6 md:px-8 pt-6 pb-4 flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-[#111827] leading-tight">{pickerMode ? (pickerTitle || "Select Asset") : "Asset Management"}</h1>
+          {!pickerMode ? (
+            <p className="mt-1 text-sm text-[#6b7280]">Upload, organize, and manage your course assets</p>
+          ) : null}
         </div>
-        {pickerMode ? null : (
-          <button
-            type="button"
-            onClick={() => { setUpload(EMPTY_UPLOAD); setUploadOpen(true); }}
-            className="shrink-0 flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors shadow-sm"
-          >
-          <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-            <polyline points="17 8 12 3 7 8" />
-            <line x1="12" y1="3" x2="12" y2="15" />
-          </svg>
-          <span className="hidden sm:inline">Upload Asset</span>
-          <span className="sm:hidden">Upload</span>
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={() => { setUpload(EMPTY_UPLOAD); setUploadOpen(true); }}
+          className="shrink-0 flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors shadow-sm"
+        >
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+          <polyline points="17 8 12 3 7 8" />
+          <line x1="12" y1="3" x2="12" y2="15" />
+        </svg>
+        <span className="hidden sm:inline">Upload Asset</span>
+        <span className="sm:hidden">Upload</span>
+        </button>
       </div>
 
       {/* ── Toolbar ── */}
@@ -1182,8 +1265,8 @@ export function AssetManagementWorkspace({
       </div>
 
       {/* ── Content ── */}
-      <div className="flex-1 px-6 md:px-8 pb-6 overflow-y-auto">
-        <div className={`grid items-start gap-6 ${pickerMode ? "grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px]" : "grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px]"}`}>
+      <div className="flex-1 overflow-x-hidden overflow-y-auto px-4 pb-4 sm:px-6 sm:pb-6 md:px-8">
+        <div className="grid grid-cols-[minmax(0,1fr)_168px] items-start gap-3 sm:grid-cols-[minmax(0,1fr)_220px] sm:gap-4 md:grid-cols-[minmax(0,1fr)_280px] md:gap-6 xl:grid-cols-[minmax(0,1fr)_340px] mt-2">
           <div className="min-w-0">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-center">
@@ -1196,8 +1279,13 @@ export function AssetManagementWorkspace({
             <p className="text-xs text-[#9ca3af] mt-1">Try adjusting your search or filter, or upload a new asset.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-4">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-3 sm:grid-cols-[repeat(auto-fill,minmax(170px,1fr))] md:gap-4 xl:grid-cols-[repeat(auto-fill,minmax(230px,1fr))]">
             {filtered.map((a) => <AssetCardItem key={a.id} asset={a} onEdit={handleEditAsset} onDelete={handleDeleteAsset} clickable onActivate={handleAssetActivate} hideActions={hideActions} selected={selectedAssetId === a.backendId} />)}
+          </div>
+        )}
+        {hasMore && (
+          <div ref={assetSentinelRef} className="flex justify-center py-8 text-sm text-[#9ca3af]">
+            {isLoadingMore ? "Loading more…" : ""}
           </div>
         )}
           </div>
@@ -1220,7 +1308,7 @@ export function AssetManagementWorkspace({
       {/* ════════════════════════════════════════════════════════════════
           Upload Modal — multi-step: pick → details → uploading → done
       ════════════════════════════════════════════════════════════════ */}
-      {!pickerMode && uploadOpen && (
+      {uploadOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
           onClick={(e) => { if (e.target === e.currentTarget && upload.step !== "uploading") closeUpload(); }}
@@ -1453,44 +1541,11 @@ export function AssetManagementWorkspace({
               </div>
             )}
 
-            {/* ══════════════ Done ══════════════ */}
-            {upload.step === "done" && (
-              <>
-                <div className="px-6 py-10 flex flex-col items-center gap-4">
-                  <div className="w-16 h-16 rounded-full bg-[#dcfce7] flex items-center justify-center">
-                    <svg width="30" height="30" fill="none" viewBox="0 0 24 24" stroke="#16a34a" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-base font-semibold text-[#111827]">Upload complete!</p>
-                    <p className="text-sm text-[#6b7280] mt-1">
-                      <span className="font-medium text-[#111827]">"{upload.title}"</span> has been added to your assets.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[#e5e7eb] shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => { setUpload(EMPTY_UPLOAD); }}
-                    className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors"
-                  >
-                    Upload Another
-                  </button>
-                  <button
-                    type="button"
-                    onClick={closeUpload}
-                    className="px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors"
-                  >
-                    Done
-                  </button>
-                </div>
-              </>
-            )}
-
           </div>
         </div>
       )}
+
+      <SaveStatusToast toast={toast} onDismiss={() => setToast(null)} autoHideMs={3500} />
 
       {/* ════════════════════════════════════════════════════════════════
           Edit Modal

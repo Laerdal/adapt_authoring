@@ -29,7 +29,7 @@ function CourseContent () {
 util.inherits(CourseContent, ContentPlugin);
 
 var DASHBOARD_COURSE_FIELDS = [
-    '_id', '_tenantId', '_type', '_isShared', 'title', 'displayTitle', 'description', 'heroImage',
+    '_id', '_tenantId', '_type', '_isShared', 'title', 'displayTitle', 'body', 'description', 'heroImage',
     'updatedAt', 'updatedBy', 'createdAt', 'createdBy', 'tags', '_shareWithUsers'
 ];
 
@@ -37,6 +37,58 @@ var metadata = {
   idMap: {},
 };
 var courseId;
+function retrieveDashboardCourses(query, options, next) {
+  var sort = options.operators && options.operators.sort;
+  if (!sort || !sort.displayTitle) return new CourseContent().retrieve(query, options, next);
+  database.getDatabase(function(err, db) {
+    if (err) return next(err);
+    var Model = db.getModel('course');
+    var castQuery = Model.find(query);
+    try {
+      castQuery.cast(Model);
+    } catch (error) {
+      return next(error);
+    }
+    var displayName = { $trim: { input: { $ifNull: ['$displayTitle', ''] } } };
+    var title = { $trim: { input: { $ifNull: ['$title', ''] } } };
+    var sortKeys = { _dashboardName: Number(sort.displayTitle) < 0 ? -1 : 1 };
+    var sortFields = { _id: 1, title: 1, displayTitle: 1 };
+    Object.keys(sort).forEach(function(key) {
+      if (key !== 'displayTitle') {
+        sortKeys[key] = Number(sort[key]) < 0 ? -1 : 1;
+        sortFields[key] = 1;
+      }
+    });
+    if (!sortKeys._id) sortKeys._id = 1;
+    var pipeline = [
+      { $match: castQuery.getQuery() },
+      { $project: sortFields },
+      { $addFields: { _dashboardName: { $toLower: { $cond: [
+        { $ne: [displayName, ''] }, displayName,
+        { $cond: [{ $ne: [title, ''] }, title, 'Untitled Course'] }
+      ] } } } },
+      { $sort: sortKeys }
+    ];
+    var skip = parseInt(options.operators.skip, 10);
+    var limit = parseInt(options.operators.limit, 10);
+    if (skip > 0) pipeline.push({ $skip: skip });
+    if (limit > 0) pipeline.push({ $limit: limit });
+    pipeline.push({ $project: { _id: 1 } });
+    Model.aggregate(pipeline).exec(function(error, rows) {
+      if (error) return next(error);
+      if (!rows.length) return next(null, []);
+      var orderedIds = rows.map(function(row) { return row._id; });
+      var retrievalOptions = Object.assign({}, options, { operators: {} });
+      new CourseContent().retrieve({ _id: { $in: orderedIds } }, retrievalOptions, function(retrieveError, courses) {
+        if (retrieveError) return next(retrieveError);
+        var byId = {};
+        courses.forEach(function(course) { byId[String(course._id)] = course; });
+        next(null, orderedIds.map(function(id) { return byId[String(id)]; }).filter(Boolean));
+      });
+    });
+  });
+}
+
 function doQuery(req, res, andOptions, next) {
   if(!next) {
     next = andOptions;
@@ -78,10 +130,10 @@ function doQuery(req, res, andOptions, next) {
       console.error('This suggests a database connection or query performance issue');
     }, 5000); // 5 second timeout
     
-    new CourseContent().retrieve(query, options, function (err, results) {
-      clearTimeout(queryTimeout); // Clear the timeout when callback is reached      
-            
-      if (err) {        
+    retrieveDashboardCourses(query, options, function (err, results) {
+      clearTimeout(queryTimeout); // Clear the timeout when callback is reached
+
+      if (err) {
         // Try to extract meaningful error info
         let errorMessage = err.message || err.toString() || 'Unknown database error';
         let errorDetails = {
@@ -180,13 +232,23 @@ function initialize () {
 
 
   app.contentmanager.addContentHook('update', 'course', { when: 'pre' }, function (data, next) {
-    if (data[1].hasOwnProperty('themeSettings') || data[1].hasOwnProperty('customStyle')) {
-      var tenantId = usermanager.getCurrentUser().tenant._id;
-
-      app.emit('rebuildCourse', tenantId, data[0]._id);
+    var delta = data[1];
+    if (!['themeSettings', 'customStyle', 'themeVariables'].some(function(key) { return delta.hasOwnProperty(key); })) {
+      return next(null, data);
     }
-
-    next(null, data);
+    var tenantId = usermanager.getCurrentUser().tenant._id;
+    app.contentmanager.retrieve('course', data[0], function(err, courses) {
+      if (err) return next(err);
+      var stored = courses && courses[0];
+      if (!stored) return next(null, data);
+      var updated = _.extend({}, stored, delta);
+      var fingerprint = require('../../../lib/outputmanager').OutputPlugin.prototype.computeCompiledStyleFingerprint;
+      if (!_.isEqual(stored.themeSettings || {}, updated.themeSettings || {}) ||
+          fingerprint({ course: [stored] }) !== fingerprint({ course: [updated] })) {
+        app.emit('rebuildCourse', tenantId, data[0]._id);
+      }
+      next(null, data);
+    });
   });
 
   ['component'].forEach(function (contentType) {
@@ -441,6 +503,7 @@ function duplicate(data, cb) {
 
       // New course name
       doc.title = 'Copy of ' + doc.title;
+      doc.displayTitle = doc.title;
 
       // Set the current user's ID as the creator
       doc.createdBy = user._id;
@@ -603,6 +666,18 @@ async function referenceId(courseId, cb) {
 
     // Update the configObject with the new footer custom id
     await updateContentObject(db, configObject);
+
+    // The updates above write straight to the collections, bypassing
+    // contentmanager's create/update/destroy hooks - so Studio's live-preview
+    // cache (which invalidates on those hooks) is never told this course
+    // changed. Fire the 'post' hooks manually so the cache doesn't serve
+    // stale data for this course until its TTL expires.
+    await new Promise((resolve) => {
+      origin().contentmanager.processContentHooks('update', 'course', {}, { when: 'post' }, (hookError) => {
+        if (hookError) console.error('Error invalidating Studio live cache after reference ID processing:', hookError);
+        resolve();
+      });
+    });
 
   } catch (error) {
     console.error('Error during reference ID processing:', error);

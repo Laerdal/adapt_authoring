@@ -7,10 +7,14 @@ import CourseStructureTree from "../components/course/CourseStructureTree";
 import AddComponentDrawer from "../components/course/AddComponentDrawer";
 import { StoryboardWorkspace } from "../components/storyboard";
 import CommonCourseTopBarRow from "../components/course/CommonCourseTopBarRow";
+import { Lightbulb } from "lucide-react";
 import { getCourseBootstrapData, publishCoursePackage } from "../api/adaptAuthoring";
 import { useCourseStructure } from "../hooks/useCourseStructure";
 import { STRUCTURE_LABELS } from "../types/structure";
+import { BasicRichTextEditor, GuideDialog, type GuidePanel, type GuideSection } from "../components/common";
 import { CourseOverviewPage } from "./setup/courseOverviewPage";
+import { SaveChangesButton } from "./setup/SaveChangesButton";
+import { SaveStatusToast } from "./setup/SaveStatusToast";
 import SelectThemePage from "./setup/themePage";
 import { MenuPage } from "./setup/menuPage";
 import { NavigationPage } from "./setup/navigationPage";
@@ -18,6 +22,7 @@ import { AccessibilityPage } from "./setup/accessibilityPage";
 import { TechnicalSettingPage } from "./setup/technicalSettingPage";
 import { TrackingAnalyticsPage } from "./setup/trackingAnalyticsPage";
 import { LearnerExperiencePanel } from "./setup/learnerExperiencePage";
+import { TranslationPage } from "./setup/translationPage";
 import { UnsavedChangesModal } from "./setup/unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./setup/useUnsavedChangesNavigationGuard";
 import { CompletionProgressPage } from "./setup/completionProgressPage";
@@ -31,9 +36,201 @@ import PublishCourseDialog, { type PublishCoursePhase } from "../components/publ
 import ExportDialog from "../components/common/ExportDialog";
 import ErrorDialog from "../components/common/ErrorDialog";
 import { AssetManagementWorkspace } from "./AssetManagementPage";
+import { PageTransitionBoundary, usePageTransition } from "../context/PageTransitionContext";
+import { usePageLoader } from "../hooks";
 import type { AssetPickerRequest, AssetPickerResult } from "../types/assetPicker";
 
 const ICON_BASE = "/new/assets/icons";
+
+const COURSE_SETUP_GUIDE_PANELS: GuidePanel[] = [
+  {
+    title: "Left panel: Settings navigation",
+    description: "Browse meaningful settings groups for course setup, design, learning flow, insights, advanced configuration, and publishing actions.",
+  },
+  {
+    title: "Middle panel: Configuration workspace",
+    description: "Edit the selected area's fields, expandable sections, toggles, selection cards, or guided workflows.",
+  },
+  {
+    title: "Preview and supporting guidance",
+    description: "Where available, use live previews to check the learner experience. Tips within each area provide context for advanced options.",
+  },
+];
+
+const COURSE_SETUP_GUIDE_SECTIONS: GuideSection[] = [
+  {
+    title: "A useful working flow",
+    description: "Start with course fundamentals, define the learner experience, then configure advanced and publishing settings.",
+    items: [
+      "Complete Course Overview: title, description, metadata, language, and preview image.",
+      "Use Course Structure to organize the initial hierarchy.",
+      "Configure Theme and Menu for visual identity and navigation.",
+      "Set up Navigation, Completion & Progress, and Learner Experience.",
+      "Configure Tracking & Analytics for the delivery environment.",
+      "Review Accessibility and use Technical Settings for advanced configuration.",
+      "Configure CDN Deployment or Translation when ready for distribution or localization.",
+      "Preview and validate the learner experience before publishing.",
+    ],
+  },
+  {
+    title: "Course Overview",
+    description: "Define the course identity and essential information.",
+    items: [
+      "Add the course title, subtitle, and description.",
+      "Provide course metadata and learner instructions.",
+      "Add a preview image and relevant tags.",
+      "Select the default course language.",
+    ],
+  },
+  {
+    title: "Course Structure",
+    description: "Build and organize the learning journey.",
+    items: [
+      "Create and organize Modules, Topics, Sections, Content Groups, and Components.",
+      "Reorder items to improve sequence and learning flow.",
+      "Open Storyboard when the initial structure is ready for content planning and review.",
+      "Select a Topic to continue detailed authoring in Page Editor.",
+    ],
+  },
+  {
+    title: "Theme",
+    description: "Configure the overall visual appearance of the course.",
+    items: [
+      "Choose an available theme.",
+      "Configure colors, fonts, and text styles.",
+      "Adjust course-level and component-level presentation.",
+      "Save frequently used configurations as presets.",
+      "Use the live preview to review changes as you work.",
+    ],
+  },
+  {
+    title: "Menu",
+    description: "Define how learners access and navigate the course.",
+    items: [
+      "Select an appropriate menu style.",
+      "Add a menu logo, header image, or background image where required.",
+      "Configure text alignment and menu behavior.",
+      "Decide whether learners should see submenu pages.",
+      "Provide clear messaging for locked or unavailable content.",
+      "Review the result in the live menu preview.",
+    ],
+  },
+  {
+    title: "Navigation",
+    description: "Define how learners enter and move through the course.",
+    items: [
+      "Choose the page learners see when opening the course.",
+      "Configure start items and routing behavior.",
+      "Control access to the course menu and configure menu locking for guided sequences.",
+      "Set up top-bar logos, primary navigation labels, and footer navigation.",
+    ],
+  },
+  {
+    title: "Completion & Progress",
+    description: "Define how learner progress is tracked and displayed.",
+    items: [
+      "Configure course completion criteria and feedback.",
+      "Set resume and bookmarking behavior.",
+      "Choose how progress is shown.",
+      "Provide an estimated course duration.",
+      "Review settings that can be overridden at Topic level.",
+    ],
+  },
+  {
+    title: "Learner Experience",
+    description: "Manage additional tools available to learners. Enable only features that support the course objective and learner journey.",
+    items: [
+      "Learning Resources",
+      "Learner Notes",
+      "Learner Search",
+      "Ask AI Tutor",
+      "Laerdal Course Feedback",
+    ],
+  },
+  {
+    title: "Tracking & Analytics",
+    description: "Configure reporting and usage insights.",
+    items: [
+      "Choose the tracking standard used to report learner progress to the LMS.",
+      "Configure the required analytics integration.",
+      "Enable tracking and analytics according to delivery requirements.",
+      "Validate the configured options in the intended destination before release.",
+    ],
+  },
+  {
+    title: "Accessibility",
+    description: "Configure course-wide accessibility behavior.",
+    items: [
+      "Enable available accessibility features.",
+      "Review ARIA heading levels and labels.",
+      "Configure accessibility options for Components, Extensions, Drawer, Navigation, and Menu.",
+      "Validate keyboard navigation, focus order, heading structure, and labels in the completed course.",
+    ],
+  },
+  {
+    title: "Technical Settings",
+    description: "These options are intended for developers and advanced users. Use custom styling with caution; framework or component updates can affect selectors and underlying structures.",
+    items: [
+      "Configure responsive screen-size breakpoints.",
+      "Review assistive and embedded experience options.",
+      "Configure runtime behavior where required.",
+      "Add custom CSS or LESS for course-specific styling.",
+      "Export a copy of configured custom styling for reference or backup.",
+    ],
+  },
+  {
+    title: "CDN Deployment",
+    description: "Publish and manage deployed course versions.",
+    items: [
+      "Enable the CDN configuration.",
+      "Enter course-specific project and course identifiers.",
+      "Choose whether to include source code.",
+      "Trigger a CDN build to publish a new version.",
+      "Review previous deployment links where available.",
+      "Set an appropriate expiry date before sharing a course link.",
+    ],
+  },
+  {
+    title: "Translation",
+    description: "Prepare course content for additional languages.",
+    items: [
+      "Select the source language and load the available course strings.",
+      "Preview the strings and review counts for strings and characters.",
+      "Include Global Strings, Course Strings, or both.",
+      "Select a translation method.",
+      "Review and confirm translated content.",
+      "Check for missing translations and validate them in the learner experience.",
+    ],
+  },
+  {
+    title: "Recommendations",
+    items: [
+      "Use Course Settings for overall defaults and expected course behavior; not every detailed decision is needed at this stage.",
+      "Some course-level settings can be overridden at Topic or content level in Page Editor.",
+      "Configure content-, layout-, or learning-context-specific settings directly in Page Editor.",
+      "Set defaults here when behavior should apply consistently across the course.",
+      "Use Page Editor when a decision depends on a specific Topic, Section, Content Group, Component, or interaction.",
+      "Avoid changing a course-wide default to solve an issue limited to one area.",
+      "Preview affected content after applying an override.",
+      "Keep completion, navigation, progress, and tracking decisions aligned across levels.",
+    ],
+  },
+  {
+    title: "Best practices",
+    items: [
+      "Complete essential course-level settings before detailed authoring.",
+      "Use clear, learner-focused course titles and descriptions.",
+      "Keep structure, menu, and navigation consistent.",
+      "Use Theme and Menu previews to validate visual and navigation decisions.",
+      "Test the experience for new and returning learners.",
+      "Review Topic-level overrides to avoid inconsistent behavior.",
+      "Treat Accessibility as part of course design, not just a final publishing check.",
+      "Reserve Technical Settings for needs that standard configuration cannot address.",
+      "Verify links, resources, tracking, completion behavior, and translations in the delivery environment.",
+      "Preview the complete course on representative screen sizes before publishing.",
+    ],
+  },
+];
 
 function SidebarMaskIcon({ file, className }: { file: string; className?: string }) {
   const iconPath = `${ICON_BASE}/${file}`;
@@ -189,7 +386,6 @@ const NAV_ITEMS = [
     ),
   },
 ];
-
 type NavLeafItem = Extract<(typeof NAV_ITEMS)[number], { heading?: false }>;
 
 function isNavLeafItem(item: (typeof NAV_ITEMS)[number]): item is NavLeafItem {
@@ -211,7 +407,6 @@ const NAV_GROUPS = NAV_ITEMS.reduce<{ id: string; label: string; items: NavLeafI
 // Navigation guard source of truth:
 // To guard a page in future (unsaved-changes interception), add `guarded: true`
 // on that page item in NAV_ITEMS. It will automatically be included here.
-
 const GUARDED_NAV_IDS = new Set([
   ...NAV_ITEMS.filter((item) => item.heading !== true && item.guarded).map((item) => item.id),
   "export-pdf",
@@ -226,6 +421,7 @@ function CourseStructurePanel({
   courseTitle,
   onOpenEditor,
   onOpenStoryboard,
+  onOpenCourseEditor,
   onNavigationRequest,
   pendingNavigation,
   onPendingNavigationHandled,
@@ -234,6 +430,7 @@ function CourseStructurePanel({
   courseTitle: string;
   onOpenEditor: (topicId: string) => void;
   onOpenStoryboard: () => void;
+  onOpenCourseEditor: () => void;
   onNavigationRequest?: (nav: string) => void;
   pendingNavigation?: string | null;
   onPendingNavigationHandled?: () => void;
@@ -242,6 +439,7 @@ function CourseStructurePanel({
   // Content-group id whose Add Component drawer is open (null = closed).
   const [addComponentBlockId, setAddComponentBlockId] = useState<string | null>(null);
   const [hintDismissed, setHintDismissed] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
   const {
     state,
     loading,
@@ -262,6 +460,8 @@ function CourseStructurePanel({
   } = useCourseStructure(courseId, courseTitle);
   const [dismissedStructureError, setDismissedStructureError] = useState<Error | null>(null);
 
+  usePageLoader(loading);
+
   // Edits are staged locally and saved only on demand — confirm before leaving
   // with unsaved changes (mirrors Technical Settings / Navigation).
   const { showConfirmModal, consumePendingNavigation, clearPendingNavigation } =
@@ -273,10 +473,15 @@ function CourseStructurePanel({
     });
 
   async function handleConfirmSave() {
-    const ok = await save();
+    const ok = await handleSave();
     if (!ok) return; // save failed — stay put, show the error
     const target = consumePendingNavigation();
     if (target) onNavigationRequest?.(target);
+  }
+  async function handleSave() {
+    const ok = await save();
+    if (ok) setSaveSuccess(true);
+    return ok;
   }
   function handleConfirmDiscard() {
     discard();
@@ -286,14 +491,18 @@ function CourseStructurePanel({
 
   return (
     <div className="flex flex-col h-full w-full bg-[#f7f9fb]">
-      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-start justify-between gap-4">
+      <SaveStatusToast toast={saveSuccess ? { type: "success", message: "Changes saved successfully" } : null} onDismiss={() => setSaveSuccess(false)} />
+      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-start gap-4">
         <div>
           <h2 className="text-xl font-bold text-[#111827]">Course Structure</h2>
-          <p className="text-sm text-[#6b7280] mt-0.5">Build your structure before editing.</p>
+          <p className="text-sm text-[#6b7280] mt-0.5">Create and organize the learning journey using the tree view. Click any field to edit content directly.</p>
         </div>
 
-        {/* View mode toggle */}
-        <div className="flex items-center border border-[#e5e7eb] rounded-lg overflow-hidden shrink-0">
+        <div className="ml-auto flex items-center gap-3 shrink-0">
+          <SaveChangesButton dirty={dirty} saving={saving} disabled={!courseId} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
+
+          {/* View mode toggle */}
+          <div className="flex items-center border border-[#e5e7eb] rounded-lg overflow-hidden shrink-0">
           <button
             type="button"
             onClick={() => setViewMode("tree")}
@@ -334,25 +543,14 @@ function CourseStructurePanel({
           </button>
         </div>
       </div>
+      </div>
 
       <div className="flex-1 overflow-y-auto min-h-0">
       <div className="max-w-5xl px-6 py-6">
 
       {/* Rules banner (top) */}
       <div className="mb-3 p-3.5 rounded-lg bg-[#f0faf8] border border-[#99e6de] text-sm text-[#0d7377]">
-        Organize your course into modules, topics, sections, content groups and components. At least one topic
-        is mandatory at the course level, and every module must contain at least one topic.
-      </div>
-
-      {/* Tip (top) - view-specific info text, styled like the app's Tip callouts */}
-      <div className="mb-5 flex items-start gap-2.5 rounded-lg bg-[#fff7ed] border border-[#fed7aa] px-4 py-3">
-        <span className="text-base leading-none mt-0.5" aria-hidden="true">💡</span>
-        <p className="text-sm text-[#9a3412] leading-snug">
-          <span className="font-semibold">Tip:</span>{" "}
-          {viewMode === "tree"
-            ? "Create and organize the learning journey using the tree view. Click any field to edit content directly, and open a topic in the Page Editor (→) for advanced editing and settings."
-            : "Explore the entire course structure in a visual format. Use Map View to review content coverage and learning flow across topics. To create, edit, or reorganize content, switch to Tree View."}
-        </p>
+        At least one topic is mandatory at the course level, and every module must contain at least one topic.
       </div>
 
       <ErrorDialog
@@ -426,78 +624,32 @@ function CourseStructurePanel({
               <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
             </svg>
             <div>
-              <p className="text-sm font-semibold text-[#111827]">Your structure is ready</p>
+              <p className="text-sm font-semibold text-[#111827]">Course structure created</p>
               <p className="text-sm text-[#5b7c93] mt-1">
-                Open Storyboard to review and refine the content flow, or select a topic to continue building in the
-                Page Editor with content, layouts, interactions, and learner experience settings.
+                <strong>Storyboard</strong> — Plan ideas, content, and learning flow.
+                <span className="mt-1 block"><strong>Course Editor</strong> — Build pages, layouts, components, and interactions.</span>
+                <span className="mt-1 block">You can continue updating course settings such as themes, menus, navigation, and accessibility options from this page whenever needed.</span>
               </p>
-              <button
-                type="button"
-                onClick={onOpenStoryboard}
-                className="mt-3 inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] rounded-lg hover:bg-[#255d8f] transition-colors"
-              >
-                Open Storyboard
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
-                </svg>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {!loading && dirty && (
-        <div className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-4 rounded-xl border border-[var(--life-warning-100)] bg-white px-4 py-3 shadow-lg animate-fade-in-down">
-          <span className="flex items-center gap-2 text-sm text-[#374151]">
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="var(--life-warning-500)"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="shrink-0"
-            >
-              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-              <line x1="12" y1="9" x2="12" y2="13" />
-              <line x1="12" y1="17" x2="12.01" y2="17" />
-            </svg>
-            Unsaved changes
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={discard}
-              disabled={saving}
-              className="rounded-lg border border-[#d1d5db] bg-white px-4 py-2 text-sm font-medium text-[#374151] transition-colors hover:bg-[#f9fafb] disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => void save()}
-              disabled={saving}
-              className="inline-flex items-center gap-2 rounded-lg bg-[var(--life-primary-500)] px-4 py-2 text-sm font-semibold text-[var(--life-base-white)] transition-colors hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] disabled:opacity-50"
-            >
-              {saving && (
-                <svg
-                  className="animate-spin"
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={onOpenStoryboard}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] rounded-lg hover:bg-[#255d8f] transition-colors"
                 >
-                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-                </svg>
-              )}
-              {saving ? "Saving…" : "Save Changes"}
-            </button>
+                  Open Storyboard
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={onOpenCourseEditor}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-[#1f2937] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors"
+                >
+                  Open Course Editor
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -1437,12 +1589,11 @@ function MenuFieldLabel({ children, required }: { children: React.ReactNode; req
   );
 }
 
-/* -- Rich text editor with formatting toolbar -- */
 const FONT_SIZE_OPTIONS = [
-  { label: "Small",    value: "12px" },
-  { label: "Default",  value: "14px" },
-  { label: "Large",    value: "18px" },
-  { label: "X-Large",  value: "24px" },
+  { label: "Small", value: "12px" },
+  { label: "Default", value: "14px" },
+  { label: "Large", value: "18px" },
+  { label: "X-Large", value: "24px" },
   { label: "2X-Large", value: "32px" },
 ];
 
@@ -1467,91 +1618,11 @@ function RichTextEditor({
   color: string;
   onColorChange: (v: string) => void;
 }) {
-  const editorRef = useRef<HTMLDivElement>(null);
-  const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set());
-
-  // Set innerHTML only on mount - never re-set during typing (avoids cursor reset / reversed text)
-  const initRef = useCallback((node: HTMLDivElement | null) => {
-    if (node) {
-      node.innerHTML = html;
-      (editorRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
-    }
-  // intentionally empty deps - run once on mount only
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const syncFormats = useCallback(() => {
-    const formats = new Set<string>();
-    if (document.queryCommandState("bold"))          formats.add("bold");
-    if (document.queryCommandState("italic"))        formats.add("italic");
-    if (document.queryCommandState("underline"))     formats.add("underline");
-    if (document.queryCommandState("strikeThrough")) formats.add("strikeThrough");
-    setActiveFormats(formats);
-  }, []);
-
-  const emit = useCallback(() => {
-    if (editorRef.current) onChange(editorRef.current.innerHTML);
-  }, [onChange]);
-
-  const applyFormat = useCallback((cmd: string) => {
-    editorRef.current?.focus();
-    document.execCommand(cmd, false);
-    syncFormats();
-    emit();
-  }, [emit, syncFormats]);
-
-  const handleInput = useCallback(() => { emit(); syncFormats(); }, [emit, syncFormats]);
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (!multiline && e.key === "Enter") { e.preventDefault(); return; }
-    if (e.key === "b" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); applyFormat("bold"); }
-    if (e.key === "i" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); applyFormat("italic"); }
-    if (e.key === "u" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); applyFormat("underline"); }
-  }, [multiline, applyFormat]);
-
-  const FORMAT_BUTTONS: { cmd: string; title: string; icon: React.ReactNode }[] = [
-    {
-      cmd: "bold", title: "Bold (Ctrl+B)",
-      icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/><path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/></svg>,
-    },
-    {
-      cmd: "italic", title: "Italic (Ctrl+I)",
-      icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="4" x2="10" y2="4"/><line x1="14" y1="20" x2="5" y2="20"/><line x1="15" y1="4" x2="9" y2="20"/></svg>,
-    },
-    {
-      cmd: "underline", title: "Underline (Ctrl+U)",
-      icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3v7a6 6 0 0 0 6 6 6 6 0 0 0 6-6V3"/><line x1="4" y1="21" x2="20" y2="21"/></svg>,
-    },
-    {
-      cmd: "strikeThrough", title: "Strikethrough",
-      icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17.3 12H6.7"/><path d="M10 7.5C10 6.1 11.1 5 12.5 5c1 0 1.9.6 2.3 1.5"/><path d="M6 16.5C6 17.9 7.1 19 8.5 19h5.5a3 3 0 0 0 0-6H6"/></svg>,
-    },
-  ];
-
   return (
     <div className="flex flex-col gap-1.5">
       <MenuFieldLabel>{label}</MenuFieldLabel>
       <div className="border border-[#d1d5db] rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-[#2d6fa8] focus-within:border-transparent">
-
-        {/* -- toolbar -- */}
-        <div className="flex items-center flex-wrap gap-0.5 px-2 py-1.5 border-b border-[#e5e7eb] bg-[#f9fafb]">
-
-          {/* bold / italic / underline / strikethrough */}
-          {FORMAT_BUTTONS.map(({ cmd, title, icon }) => (
-            <button
-              key={cmd}
-              type="button"
-              title={title}
-              onMouseDown={(e) => { e.preventDefault(); applyFormat(cmd); }}
-              className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${activeFormats.has(cmd) ? "bg-[#2d6fa8] text-white" : "text-[#6b7280] hover:bg-[#e5e7eb] hover:text-[#374151]"}`}
-            >
-              {icon}
-            </button>
-          ))}
-
-          <div className="w-px h-4 bg-[#e5e7eb] mx-1 shrink-0" />
-
-          {/* font size dropdown - directly controls the cfg field, no execCommand */}
+        <div className="flex items-center flex-wrap gap-1.5 px-2 py-1.5 border-b border-[#e5e7eb] bg-[#f9fafb]">
           <div className="relative">
             <select
               value={fontSize}
@@ -1566,21 +1637,20 @@ function RichTextEditor({
               ))}
             </select>
             <svg className="absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="6 9 12 15 18 9"/>
+              <polyline points="6 9 12 15 18 9" />
             </svg>
           </div>
 
           <div className="w-px h-4 bg-[#e5e7eb] mx-1 shrink-0" />
 
-          {/* text color - directly controls the cfg field, anchored label for correct picker position */}
           <label
             title="Text color"
             className="relative w-7 h-7 flex flex-col items-center justify-center gap-0.5 rounded hover:bg-[#e5e7eb] transition-colors cursor-pointer"
             onMouseDown={(e) => e.preventDefault()}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="4 20 8.5 8 12 17 15.5 8 20 20"/>
-              <line x1="6.5" y1="15" x2="17.5" y2="15"/>
+              <polyline points="4 20 8.5 8 12 17 15.5 8 20 20" />
+              <line x1="6.5" y1="15" x2="17.5" y2="15" />
             </svg>
             <span className="w-5 h-1 rounded-full block" style={{ backgroundColor: color }} />
             <input
@@ -1591,24 +1661,15 @@ function RichTextEditor({
               onChange={(e) => onColorChange(e.target.value)}
             />
           </label>
-
         </div>
 
-        {/* -- editable area - uncontrolled, innerHTML set once on mount -- */}
-        <div
-          ref={initRef}
-          contentEditable
-          suppressContentEditableWarning
-          dir="ltr"
-          lang="en"
-          onInput={handleInput}
-          onKeyDown={handleKeyDown}
-          onMouseUp={syncFormats}
-          onKeyUp={syncFormats}
-          onFocus={syncFormats}
-          data-placeholder={placeholder}
-          className={`px-3 py-2.5 outline-none bg-white text-[#374151] empty:before:content-[attr(data-placeholder)] empty:before:text-[#9ca3af] ${multiline ? "min-h-[80px]" : "min-h-[38px]"}`}
-          style={{ wordBreak: "break-word", direction: "ltr", unicodeBidi: "plaintext", textAlign: "left", fontSize }}
+        <BasicRichTextEditor
+          html={html}
+          onChange={onChange}
+          placeholder={placeholder}
+          minHeight={multiline ? 80 : 38}
+          ariaLabel={label}
+          fontSize={fontSize}
         />
       </div>
     </div>
@@ -2663,26 +2724,6 @@ function ComingSoonPanel({ label }: { label: string }) {
   );
 }
 
-function LegacyTranslationPanel({ courseId }: { courseId: string }) {
-  if (!courseId) {
-    return (
-      <div className="rounded-lg border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm text-[#991b1b]">
-        No course is associated with this setup flow, so translation cannot be opened.
-      </div>
-    );
-  }
-
-  return (
-    <div className="h-full min-h-0 w-full overflow-hidden">
-      <iframe
-        title="Translation"
-        src={`/?embed=translation#/translation/${encodeURIComponent(courseId)}`}
-        className="w-full h-full border-0"
-      />
-    </div>
-  );
-}
-
 /* -- Main page -- */
 function CourseCreationCenterContent() {
   const [params] = useSearchParams();
@@ -2700,6 +2741,7 @@ function CourseCreationCenterContent() {
   const [savedThemeName, setSavedThemeName] = useState("");
   const [savedMenuName, setSavedMenuName] = useState("");
   const [savedThemeVariables, setSavedThemeVariables] = useState<Record<string, unknown>>({});
+  const [savedThemeSettings, setSavedThemeSettings] = useState<Record<string, unknown>>({});
   const [savedPresetId, setSavedPresetId] = useState("");
 
   // canExportCourse depends on `user`, which AuthContext fetches asynchronously
@@ -2716,6 +2758,7 @@ function CourseCreationCenterContent() {
           ? "export-pdf"
           : "overview",
   );
+          const [isCourseGuideOpen, setIsCourseGuideOpen] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
@@ -2733,6 +2776,7 @@ function CourseCreationCenterContent() {
   const contentScrollRef = useRef<HTMLElement | null>(null);
   const deferredNavigationActionRef = useRef<(() => void) | null>(null);
   const [assetPickerRequest, setAssetPickerRequest] = useState<SetupAssetPickerRequest | null>(null);
+  const { beginTransition } = usePageTransition();
 
   // Tracks requested navigation when on a panel with unsaved changes
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
@@ -2744,6 +2788,7 @@ function CourseCreationCenterContent() {
       setSavedThemeName("");
       setSavedMenuName("");
       setSavedThemeVariables({});
+      setSavedThemeSettings({});
       setSavedPresetId("");
       return;
     }
@@ -2753,11 +2798,13 @@ function CourseCreationCenterContent() {
       try {
         const data = await getCourseBootstrapData(courseId);
         if (cancelled) return;
+        const nextDescription = data.body || initialDescription;
         setTitle(data.displayTitle || data.title || initialTitle);
-        setDescription(data.description || initialDescription);
+        setDescription(nextDescription);
         setSavedThemeName(data.themeName || "");
         setSavedMenuName(data.menuName || "");
         setSavedThemeVariables(data.themeVariables || {});
+        setSavedThemeSettings(data.themeSettings || {});
         setSavedPresetId(data.themePresetId || "");
       } catch {
         if (cancelled) return;
@@ -2766,6 +2813,7 @@ function CourseCreationCenterContent() {
         setSavedThemeName("");
         setSavedMenuName("");
         setSavedThemeVariables({});
+        setSavedThemeSettings({});
         setSavedPresetId("");
       }
     })();
@@ -2878,10 +2926,15 @@ function CourseCreationCenterContent() {
       return;
     }
 
+    if (target === activeNav) {
+      return;
+    }
+
     if (target === "export-pdf") {
       setExportPopup(null);
     }
 
+    beginTransition();
     setActiveNav(target);
   }
 
@@ -2896,13 +2949,14 @@ function CourseCreationCenterContent() {
             courseTitle={title}
             onOpenEditor={(pageId) => requestGuardedAction(() => openEditor(pageId))}
             onOpenStoryboard={() => handleNavigation("storyboarding")}
+            onOpenCourseEditor={() => requestGuardedAction(() => openEditor())}
             onNavigationRequest={performNavigation}
             pendingNavigation={pendingNavigation}
             onPendingNavigationHandled={() => setPendingNavigation(null)}
           />
         );
       case "theme":
-        return <SelectThemePage initialThemeName={savedThemeName} initialThemeVariables={savedThemeVariables} initialPresetId={savedPresetId} courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} onThemeSaved={({ themeName, themeVariables, themePresetId }) => { setSavedThemeName(themeName); setSavedThemeVariables(themeVariables); setSavedPresetId(themePresetId); }} />;
+        return <SelectThemePage initialThemeName={savedThemeName} initialThemeVariables={savedThemeVariables} initialThemeSettings={savedThemeSettings} initialPresetId={savedPresetId} courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} onThemeSaved={({ themeName, themeVariables, themeSettings, themePresetId }) => { setSavedThemeName(themeName); setSavedThemeVariables(themeVariables); setSavedThemeSettings(themeSettings); setSavedPresetId(themePresetId); }} />;
       case "menu":
         return <MenuPage courseId={courseId} initialMenuName={savedMenuName} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
       case "navigation":
@@ -2920,7 +2974,7 @@ function CourseCreationCenterContent() {
       case "cdn-deployment":
         return <CdnDeploymentPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
       case "translation":
-        return <LegacyTranslationPanel courseId={courseId} />;
+        return <TranslationPage courseId={courseId} courseTitle={title} />;
       case "publish":
         return <PreflightValidatorPage courseId={courseId} onNavigationRequest={setActiveNav} />;
       case "export-pdf":
@@ -2942,6 +2996,7 @@ function CourseCreationCenterContent() {
             courseId={courseId}
             courseTitle={title}
             onBack={() => setActiveNav("overview")}
+            showBackButton={false}
             onTitleChange={setTitle}
           />
         );
@@ -3048,9 +3103,19 @@ function CourseCreationCenterContent() {
         onOpenCourseSettings={() => handleNavigation("overview")}
         onOpenStoryboard={() => handleNavigation("storyboarding")}
         onOpenEditor={() => requestGuardedAction(() => openEditor())}
-        onOpenPreview={(startFromCurrentPage) => requestGuardedAction(() => openPreview(startFromCurrentPage))}
+        onOpenPreview={() => requestGuardedAction(() => openPreview(false))}
         previewDisabled={!courseId}
         editorDisabled={!courseId}
+        previewMode="button"
+      />
+
+      <GuideDialog
+        open={isCourseGuideOpen}
+        title="Course Settings How-To Guide"
+        description="A practical overview of Course Settings panels, common setup tasks, and how global defaults relate to detailed authoring."
+        panels={COURSE_SETUP_GUIDE_PANELS}
+        sections={COURSE_SETUP_GUIDE_SECTIONS}
+        onClose={() => setIsCourseGuideOpen(false)}
       />
 
       {/* -- Second Row Header -- */}
@@ -3065,6 +3130,7 @@ function CourseCreationCenterContent() {
           </div>
 
         <div className="ml-auto flex items-center gap-4">
+          <div id="setup-save-button-slot" className="flex items-center" />
           {canExportCourse && (
             <ExportMenu
               disabled={!courseId || !user?._tenantId}
@@ -3079,6 +3145,16 @@ function CourseCreationCenterContent() {
               onSelectPreflight={() => handleNavigation("publish")}
               onSelectPublish={() => requestGuardedAction(openPublishDialog)}
             />
+            <button
+              type="button"
+              onClick={() => setIsCourseGuideOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-[8px] px-2.5 py-2 text-[13px] font-medium text-[#40515e] transition-colors hover:bg-[#f1f5f8] hover:text-[#1d3547] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2d6fa8]"
+              aria-haspopup="dialog"
+              aria-expanded={isCourseGuideOpen}
+            >
+              <Lightbulb size={16} strokeWidth={1.8} aria-hidden="true" />
+              <span>How-To Guide</span>
+            </button>
           </div>
         </div>
       )}
@@ -3212,7 +3288,9 @@ function CourseCreationCenterContent() {
 
         {/* -- Right content panel -- */}
         <main ref={contentScrollRef} className={`flex-1 min-h-0 min-w-0 bg-[#f7f9fb] ${fullCanvasPanels.has(activeNav) || activeNav === "storyboarding" || activeNav === "translation" ? "flex flex-col overflow-hidden" : "overflow-y-auto px-8 py-8"}`}>
-          {renderPanel()}
+          <PageTransitionBoundary key={activeNav}>
+            {renderPanel()}
+          </PageTransitionBoundary>
         </main>
       </div>
 

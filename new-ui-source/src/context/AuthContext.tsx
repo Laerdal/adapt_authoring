@@ -1,11 +1,21 @@
 // Fetches the logged-in engine user once on mount and exposes it app-wide.
 // The /new SPA has no login of its own — it relies on the engine session cookie
-// (log in via the legacy app). On failure `user` is null; consumers show a
-// fallback rather than crashing.
+// (log in via the legacy app).
+//
+// A never-logged-in visitor's /api/user/me call fails with 403 here (this
+// backend uses 403, not 401, for "no session at all" - confirmed live), which
+// api/client.ts's session-expiry handling doesn't cover (that's specifically
+// for a session dying mid-use, detected via 401). Left unhandled, this used
+// to just render every page with `user: null` and no redirect anywhere -
+// a permanently blank app shell with no way back to login. Any failure here
+// - this call's only purpose is checking login state - now sends the user to
+// login (SSO if configured, otherwise the classic UI's own form) rather than
+// leaving them stuck.
 
 import { createContext, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { getCurrentUser, type CurrentUser } from "@/api/adaptAuthoring";
+import { redirectToLogin } from "@/utils/authRedirect";
 
 export type AppRole = "Super Admin" | "Course Creator" | "Authenticated User";
 export type DashboardSection =
@@ -69,10 +79,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let alive = true;
     getCurrentUser()
       .then((user) => alive && setState({ user, loading: false, error: null }))
-      .catch((e: unknown) =>
-        alive &&
-        setState({ user: null, loading: false, error: e instanceof Error ? e.message : "not authenticated" })
-      );
+      .catch((e: unknown) => {
+        if (!alive) return;
+        setState({ user: null, loading: false, error: e instanceof Error ? e.message : "not authenticated" });
+        redirectToLogin();
+      });
     return () => {
       alive = false;
     };

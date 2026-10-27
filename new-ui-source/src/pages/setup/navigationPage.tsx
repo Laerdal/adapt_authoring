@@ -1,15 +1,28 @@
 import React, { useEffect, useState } from "react";
 import AssetPickerModal from "../../components/common/AssetPickerModal";
 import EditorMaskIcon from "../../components/editor/EditorMaskIcon";
+import { SaveChangesButton } from "./SaveChangesButton";
+import { SaveStatusToast } from "./SaveStatusToast";
+import InfoIcon, { InfoFieldLabel } from "../../components/common/InfoIcon";
 import {
   getNavigationSettings,
   saveNavigationSettings,
   getCoursePages,
   defaultNavigationSettings,
+  createDefaultStartPageSelection,
   type NavigationSettings,
   type CoursePageOption,
   type NavFooterButtonKey,
 } from "../../api/adaptAuthoring";
+import {
+  getConfigRootSchema,
+  getCourseRootSchema,
+  getSchemaHint,
+  getSchemaLabel,
+  getSchemaNode,
+  type SetupSchemaNode,
+} from "../../helpers/setupInfoSchema";
+import { usePageLoader } from "../../hooks";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 
@@ -18,11 +31,13 @@ function CheckboxRow({
   checked,
   onChange,
   label,
+  hint,
   disabled = false,
 }: {
   checked: boolean;
   onChange: (v: boolean) => void;
   label: string;
+  hint?: string;
   disabled?: boolean;
 }) {
   return (
@@ -39,7 +54,10 @@ function CheckboxRow({
           </svg>
         )}
       </div>
-      <span className="text-sm text-[#374151] leading-snug">{label}</span>
+      <span className="text-sm text-[#374151] leading-snug">
+        {label}
+        {hint ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}
+      </span>
     </label>
   );
 }
@@ -48,16 +66,21 @@ function ToggleSwitch({
   checked,
   onChange,
   label,
+  hint,
   disabled = false,
 }: {
   checked: boolean;
   onChange: (v: boolean) => void;
   label: string;
+  hint?: string;
   disabled?: boolean;
 }) {
   return (
     <div className={`flex items-center justify-between gap-3 py-2 ${disabled ? "opacity-40" : ""}`}>
-      <span className="text-sm text-[#374151] leading-snug">{label}</span>
+      <span className="text-sm text-[#374151] leading-snug">
+        {label}
+        {hint ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}
+      </span>
       <button
         type="button"
         role="switch"
@@ -87,12 +110,14 @@ function ToggleSwitch({
 function NavAccordion({
   title,
   subtitle,
+  hint,
   open,
   onToggle,
   children,
 }: {
   title: string;
   subtitle?: string;
+  hint?: string;
   open: boolean;
   onToggle: () => void;
   children: React.ReactNode;
@@ -106,7 +131,7 @@ function NavAccordion({
         className="group w-full flex items-center justify-between gap-3 px-5 py-4 text-left bg-white text-[#111827] transition-colors hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] disabled:bg-[#f7f7f7] disabled:text-[#b7b7b7]"
       >
         <div className="min-w-0">
-          <h3 className="text-sm font-bold text-current">{title}</h3>
+          <h3 className="text-sm font-bold text-current flex items-center gap-1.5">{title}{hint ? <InfoIcon label={title} hint={hint} /> : null}</h3>
           {subtitle && <p className="text-xs text-[#6b7280] mt-0.5 leading-snug group-hover:text-[#0f5f75]">{subtitle}</p>}
         </div>
         <svg
@@ -124,12 +149,14 @@ function NavAccordion({
 // Styled <select> with chevron + optional help text (matches the Menu Lock control).
 function NavSelect<T extends string>({
   label,
+  hint,
   value,
   onChange,
   options,
   help,
 }: {
   label: string;
+  hint?: string;
   value: T;
   onChange: (v: T) => void;
   options: { value: T; label: string }[];
@@ -137,7 +164,7 @@ function NavSelect<T extends string>({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-xs font-semibold text-[#374151]">{label}</span>
+      <InfoFieldLabel label={label} hint={hint} help={help} />
       <div className="relative">
         <select
           value={value}
@@ -160,18 +187,20 @@ function NavSelect<T extends string>({
 
 function NavTextInput({
   label,
+  hint,
   value,
   onChange,
   placeholder,
 }: {
   label: string;
+  hint?: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-xs font-semibold text-[#374151]">{label}</span>
+      <InfoFieldLabel label={label} hint={hint} />
       <input
         type="text"
         value={value}
@@ -219,6 +248,7 @@ function FooterButtonRow({
   onChange,
   icon,
   label,
+  hint,
   value,
   onTextChange,
 }: {
@@ -226,6 +256,7 @@ function FooterButtonRow({
   onChange: (v: boolean) => void;
   icon: React.ReactNode;
   label: string;
+  hint?: string;
   value: string;
   onTextChange: (v: string) => void;
 }) {
@@ -259,8 +290,13 @@ function FooterButtonRow({
         onChange={(e) => onTextChange(e.target.value)}
         className="flex-1 min-w-0 px-0 py-1 text-sm bg-transparent text-[#374151] border-0 outline-none shadow-none"
       />
+      {hint ? <InfoIcon label={label} hint={hint} className="ml-1" /> : null}
     </div>
   );
+}
+
+function firstDefinedSchemaNode(...nodes: Array<SetupSchemaNode | undefined | null>): SetupSchemaNode | undefined {
+  return nodes.find((node) => node && Object.keys(node).length > 0) ?? undefined;
 }
 
 export function NavigationPage({
@@ -279,10 +315,13 @@ export function NavigationPage({
   const [savedSnapshot, setSavedSnapshot] = useState<NavigationSettings>(defaultNavigationSettings());
   const [pages, setPages] = useState<CoursePageOption[]>([]);
   const [loading, setLoading] = useState(true);
+  usePageLoader(loading);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [assetPickerOpen, setAssetPickerOpen] = useState(false);
   const [externalOpen, setExternalOpen] = useState(false);
+  const [courseSchema, setCourseSchema] = useState<SetupSchemaNode | null>(null);
+  const [configSchema, setConfigSchema] = useState<SetupSchemaNode | null>(null);
   // Single-open accordion: only one section expanded at a time; all collapsed on load.
   const [openSection, setOpenSection] = useState<string>("");
   const acc = (id: string) => ({
@@ -313,6 +352,41 @@ export function NavigationPage({
     return () => { cancelled = true; };
   }, [courseId]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    void Promise.all([getCourseRootSchema(), getConfigRootSchema()])
+      .then(([nextCourseSchema, nextConfigSchema]) => {
+        if (cancelled) return;
+        setCourseSchema(nextCourseSchema);
+        setConfigSchema(nextConfigSchema);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setCourseSchema(null);
+        setConfigSchema(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const startSchema = getSchemaNode(courseSchema, "_start");
+  const navigationSchema = getSchemaNode(courseSchema, "_navigation");
+  const courseMenuSchema = firstDefinedSchemaNode(
+    getSchemaNode(configSchema, "_extensions", "_courseMenu"),
+  );
+  const headerLogoSchema = firstDefinedSchemaNode(
+    getSchemaNode(courseSchema, "_extensions", "_topbarLogos"),
+    getSchemaNode(configSchema, "_extensions", "_topbarLogos"),
+  );
+  const navigationFooterSchema = firstDefinedSchemaNode(
+    getSchemaNode(courseSchema, "_extensions", "_navigationFooter"),
+    getSchemaNode(configSchema, "_extensions", "_navigationFooter"),
+  );
+  const navigationFooterToggleSchema = getSchemaNode(navigationFooterSchema, "_toggleNavigation");
+
   // ── State updaters (settings is deeply nested; keep mutations narrow) ──
   const setStart = (p: Partial<NavigationSettings["start"]>) =>
     setS((prev) => ({ ...prev, start: { ...prev.start, ...p } }));
@@ -329,7 +403,7 @@ export function NavigationPage({
       ...prev,
       start: {
         ...prev.start,
-        _startIds: [...prev.start._startIds, { _id: pages[0].id, _skipIfComplete: false, _className: "" }],
+        _startIds: [...prev.start._startIds, ...createDefaultStartPageSelection(pages)],
       },
     }));
   };
@@ -414,12 +488,31 @@ export function NavigationPage({
     ...pages.map((p) => ({ value: p.id, label: p.title })),
   ];
 
+  useEffect(() => {
+    if (!s.start._isEnabled || s.start._startIds.length > 0 || !pages.length) return;
+    setS((prev) => {
+      if (!prev.start._isEnabled || prev.start._startIds.length > 0 || !pages.length) return prev;
+      return {
+        ...prev,
+        start: {
+          ...prev.start,
+          _startIds: createDefaultStartPageSelection(pages),
+        },
+      };
+    });
+  }, [pages, s.start._isEnabled, s.start._startIds.length]);
+
   return (
     <div className="flex flex-col h-full w-full bg-[#f7f9fb]">
       {/* Header */}
-      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb]">
-        <h2 className="text-xl font-bold text-[var(--life-base-black)]">Navigation</h2>
-        <p className="text-sm text-[#6b7280] mt-0.5">Configure the navigation bar, start behavior, and header/footer for your course.</p>
+      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-center gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-[var(--life-base-black)]">Navigation</h2>
+          <p className="text-sm text-[#6b7280] mt-0.5">Configure the navigation bar, start behavior, and header/footer for your course.</p>
+        </div>
+        <div className="ml-auto">
+          <SaveChangesButton dirty={dirty} saving={saving} disabled={!courseId} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
+        </div>
       </div>
 
       {/* Scrollable settings */}
@@ -435,12 +528,31 @@ export function NavigationPage({
           ) : (
             <>
               {/* ── Start settings ── */}
-              <NavAccordion {...acc("start")} title="Start settings" subtitle="Choose which page(s) learners land on when they open the course.">
-                <ToggleSwitch checked={s.start._isEnabled} onChange={(v) => setStart({ _isEnabled: v })} label="Enable start settings" />
+              <NavAccordion {...acc("start")} title={getSchemaLabel(startSchema, "Start settings")} subtitle="Choose which page(s) learners land on when they open the course.">
+                <ToggleSwitch
+                  checked={s.start._isEnabled}
+                  onChange={(v) => {
+                    setS((prev) => {
+                      const nextStartIds = v && !prev.start._startIds.length && pages.length
+                        ? createDefaultStartPageSelection(pages)
+                        : prev.start._startIds;
+
+                      return {
+                        ...prev,
+                        start: {
+                          ...prev.start,
+                          _isEnabled: v,
+                          _startIds: nextStartIds,
+                        },
+                      };
+                    });
+                  }}
+                  label={getSchemaLabel(getSchemaNode(startSchema, "_isEnabled"), "Enabled?")}
+                />
 
                 {s.start._isEnabled && (
                   <div className="flex flex-col gap-3">
-                    <span className="text-xs font-semibold text-[#374151]">Start list</span>
+                    <InfoFieldLabel label={getSchemaLabel(getSchemaNode(startSchema, "_startIds"), "Start list")} hint={getSchemaHint(getSchemaNode(startSchema, "_startIds"))} />
                     {s.start._startIds.length === 0 && (
                       <p className="text-[11px] text-[var(--life-neutral-300)]">No start pages added yet.</p>
                     )}
@@ -449,7 +561,8 @@ export function NavigationPage({
                         <div className="flex items-end gap-2">
                           <div className="flex-1">
                             <NavSelect
-                              label="Start page"
+                              label={getSchemaLabel(getSchemaNode(startSchema, "_startIds", "_id"), "Start page")}
+                              hint={getSchemaHint(getSchemaNode(startSchema, "_startIds", "_id"))}
                               value={item._id}
                               onChange={(v) => setStartId(i, { _id: v })}
                               options={pageOptions}
@@ -466,8 +579,8 @@ export function NavigationPage({
                             </svg>
                           </button>
                         </div>
-                        <CheckboxRow checked={item._skipIfComplete} onChange={(v) => setStartId(i, { _skipIfComplete: v })} label="Skip if complete?" />
-                        <NavTextInput label="Classes" value={item._className} onChange={(v) => setStartId(i, { _className: v })} placeholder="Optional class matcher" />
+                        <CheckboxRow checked={item._skipIfComplete} onChange={(v) => setStartId(i, { _skipIfComplete: v })} label={getSchemaLabel(getSchemaNode(startSchema, "_startIds", "_skipIfComplete"), "Skip if complete?")} hint={getSchemaHint(getSchemaNode(startSchema, "_startIds", "_skipIfComplete"))} />
+                        <NavTextInput label={getSchemaLabel(getSchemaNode(startSchema, "_startIds", "_className"), "Classes")} hint={getSchemaHint(getSchemaNode(startSchema, "_startIds", "_className"))} value={item._className} onChange={(v) => setStartId(i, { _className: v })} placeholder="Optional class matcher" />
                       </div>
                     ))}
                     <div>
@@ -488,16 +601,17 @@ export function NavigationPage({
                       )}
                     </div>
 
-                    <CheckboxRow checked={s.start._force} onChange={(v) => setStart({ _force: v })} label="Force routing" />
-                    <CheckboxRow checked={s.start._isMenuDisabled} onChange={(v) => setStart({ _isMenuDisabled: v })} label="Disable menu" />
+                    <CheckboxRow checked={s.start._force} onChange={(v) => setStart({ _force: v })} label={getSchemaLabel(getSchemaNode(startSchema, "_force"), "Force routing")} hint={getSchemaHint(getSchemaNode(startSchema, "_force"))} />
+                    <CheckboxRow checked={s.start._isMenuDisabled} onChange={(v) => setStart({ _isMenuDisabled: v })} label={getSchemaLabel(getSchemaNode(startSchema, "_isMenuDisabled"), "Disable menu")} hint={getSchemaHint(getSchemaNode(startSchema, "_isMenuDisabled"))} />
                   </div>
                 )}
               </NavAccordion>
 
               {/* ── Menu Lock Settings ── */}
-              <NavAccordion {...acc("menuLock")} title="Menu Lock Settings" subtitle="Restrict how learners can move between menu items.">
+              <NavAccordion {...acc("menuLock")} title={getSchemaLabel(getSchemaNode(courseSchema, "_lockType"), "Menu Lock Settings")} subtitle="Restrict how learners can move between menu items.">
                 <NavSelect
-                  label="Menu Lock"
+                  label={getSchemaLabel(getSchemaNode(courseSchema, "_lockType"), "Menu Lock")}
+                  hint={getSchemaHint(getSchemaNode(courseSchema, "_lockType"))}
                   value={s.lockType}
                   onChange={(v) => setS((prev) => ({ ...prev, lockType: v }))}
                   options={MENU_LOCK_OPTIONS}
@@ -505,25 +619,26 @@ export function NavigationPage({
               </NavAccordion>
 
               {/* ── Course menu ── */}
-              <NavAccordion {...acc("courseMenu")} title="Course menu" subtitle="Controls whether the top bar exposes the course menu.">
-                <ToggleSwitch checked={s.courseMenu.enabled} onChange={(v) => setCourseMenu({ enabled: v })} label="Enable Course Menu" />
+              <NavAccordion {...acc("courseMenu")} title={getSchemaLabel(courseMenuSchema, "Course menu")} hint={getSchemaHint(courseMenuSchema)} subtitle="Controls whether the top bar exposes the course menu.">
+                <ToggleSwitch checked={s.courseMenu.enabled} onChange={(v) => setCourseMenu({ enabled: v })} label={getSchemaLabel(getSchemaNode(courseMenuSchema, "_isEnabled"), "Enable Course Menu")} />
                 <div className="ml-7">
                   <CheckboxRow
                     checked={s.courseMenu.includeSubmenuInNavigation}
                     onChange={(v) => setCourseMenu({ includeSubmenuInNavigation: v })}
-                    label="Include Submenu in Navigation"
+                    label={getSchemaLabel(getSchemaNode(courseMenuSchema, "_includeSubmenuInNavigation"), "Include Submenu in Navigation")}
+                    hint={getSchemaHint(getSchemaNode(courseMenuSchema, "_includeSubmenuInNavigation"))}
                     disabled={!s.courseMenu.enabled}
                   />
                 </div>
               </NavAccordion>
 
               {/* ── Header logo ── */}
-              <NavAccordion {...acc("headerLogo")} title="Header logo" subtitle="Show a logo in the top navigation bar.">
-                <ToggleSwitch checked={s.headerLogo.enabled} onChange={(v) => setHeaderLogo({ enabled: v })} label="Enable Header Logo" />
+              <NavAccordion {...acc("headerLogo")} title={getSchemaLabel(headerLogoSchema, "Header logo")} hint={getSchemaHint(headerLogoSchema)} subtitle="Show a logo in the top navigation bar.">
+                <ToggleSwitch checked={s.headerLogo.enabled} onChange={(v) => setHeaderLogo({ enabled: v })} label={getSchemaLabel(getSchemaNode(headerLogoSchema, "_isEnabled"), "Enable Header Logo")} hint={getSchemaHint(getSchemaNode(headerLogoSchema, "_isEnabled"))} />
 
                 {s.headerLogo.enabled && (
                   <div className="flex flex-col gap-3">
-                    <span className="text-xs font-semibold text-[#374151]">Logo</span>
+                    <InfoFieldLabel label={getSchemaLabel(getSchemaNode(headerLogoSchema, "_items"), "Logo")} hint={getSchemaHint(getSchemaNode(headerLogoSchema, "_items"))} />
 
                     {s.headerLogo.src ? (
                       <div className="flex items-center gap-3 p-3 border border-[#e5e7eb] rounded-lg bg-white">
@@ -573,7 +688,8 @@ export function NavigationPage({
 
                     {externalOpen && !s.headerLogo.src && (
                       <NavTextInput
-                        label="External asset URL"
+                        label={getSchemaLabel(getSchemaNode(headerLogoSchema, "_items", "src"), "External asset URL")}
+                        hint={getSchemaHint(getSchemaNode(headerLogoSchema, "_items", "src"))}
                         value={s.headerLogo.src}
                         onChange={(v) => setHeaderLogo({ src: v })}
                         placeholder="https://example.com/logo.png"
@@ -587,7 +703,8 @@ export function NavigationPage({
                     </div>
 
                     <NavTextInput
-                      label="Tooltip"
+                      label={getSchemaLabel(getSchemaNode(headerLogoSchema, "_items", "tooltip"), "Tooltip")}
+                      hint={getSchemaHint(getSchemaNode(headerLogoSchema, "_items", "tooltip"))}
                       value={s.headerLogo.tooltip}
                       onChange={(v) => setHeaderLogo({ tooltip: v })}
                       placeholder="e.g. Return to course home"
@@ -597,14 +714,16 @@ export function NavigationPage({
               </NavAccordion>
 
               {/* ── Navigation settings (core nav bar) ── */}
-              <NavAccordion {...acc("navigation")} title="Navigation settings" subtitle="Placement of the primary navigation bar and its labels.">
+              <NavAccordion {...acc("navigation")} title={getSchemaLabel(navigationSchema, "Navigation settings")} hint={getSchemaHint(navigationSchema)} subtitle="Placement of the primary navigation bar and its labels.">
                 <CheckboxRow
                   checked={s.navigation.isDefaultNavigationDisabled}
                   onChange={(v) => setNav({ isDefaultNavigationDisabled: v })}
-                  label="Disable default navigation bar?"
+                  label={getSchemaLabel(getSchemaNode(navigationSchema, "_isDefaultNavigationDisabled"), "Disable default navigation bar?")}
+                  hint={getSchemaHint(getSchemaNode(navigationSchema, "_isDefaultNavigationDisabled"))}
                 />
                 <NavSelect
-                  label="Navigation alignment"
+                  label={getSchemaLabel(getSchemaNode(navigationSchema, "_navigationAlignment"), "Navigation alignment")}
+                  hint={getSchemaHint(getSchemaNode(navigationSchema, "_navigationAlignment"))}
                   value={s.navigation.navigationAlignment}
                   onChange={(v) => setNav({ navigationAlignment: v })}
                   options={[
@@ -616,15 +735,18 @@ export function NavigationPage({
                 <CheckboxRow
                   checked={s.navigation.isBottomOnTouchDevices}
                   onChange={(v) => setNav({ isBottomOnTouchDevices: v })}
-                  label="Is bottom on touch devices?"
+                  label={getSchemaLabel(getSchemaNode(navigationSchema, "_isBottomOnTouchDevices"), "Is bottom on touch devices?")}
+                  hint={getSchemaHint(getSchemaNode(navigationSchema, "_isBottomOnTouchDevices"))}
                 />
                 <CheckboxRow
                   checked={s.navigation.showLabel}
                   onChange={(v) => setNav({ showLabel: v })}
-                  label="Show navigation button labels"
+                  label={getSchemaLabel(getSchemaNode(navigationSchema, "_showLabel"), "Show navigation button labels")}
+                  hint={getSchemaHint(getSchemaNode(navigationSchema, "_showLabel"))}
                 />
                 <NavSelect
-                  label="Show label at this breakpoint and higher"
+                  label={getSchemaLabel(getSchemaNode(navigationSchema, "_showLabelAtWidth"), "Show label at this breakpoint and higher")}
+                  hint={getSchemaHint(getSchemaNode(navigationSchema, "_showLabelAtWidth"))}
                   value={s.navigation.showLabelAtWidth}
                   onChange={(v) => setNav({ showLabelAtWidth: v })}
                   options={[
@@ -636,7 +758,8 @@ export function NavigationPage({
                   help="When the user's browser window is at least this wide, the labels will be shown. Options refer to the standard Adapt breakpoints. The 'any' option will show the label at any size."
                 />
                 <NavSelect
-                  label="Label position"
+                  label={getSchemaLabel(getSchemaNode(navigationSchema, "_labelPosition"), "Label position")}
+                  hint={getSchemaHint(getSchemaNode(navigationSchema, "_labelPosition"))}
                   value={s.navigation.labelPosition}
                   onChange={(v) => setNav({ labelPosition: v })}
                   options={[
@@ -653,14 +776,35 @@ export function NavigationPage({
               {/* ── Navigation Footer (extension) ── */}
               <NavAccordion
                 {...acc("navFooter")}
-                title="Navigation Footer"
-                subtitle="Configure the footer navigation buttons shown on each page."
+                title={getSchemaLabel(navigationFooterSchema, "Navigation Footer")}
+                hint={getSchemaHint(navigationFooterSchema)}
+                subtitle="Configure the footer navigation buttons shown on each topic; these can be overridden on a specific topic/page, if required."
               >
-                <ToggleSwitch checked={s.navFooter.enabled} onChange={(v) => setNavFooter({ enabled: v })} label="Enable Navigation Footer" />
+                <ToggleSwitch checked={s.navFooter.enabled} onChange={(v) => setNavFooter({ enabled: v })} label={getSchemaLabel(getSchemaNode(navigationFooterSchema, "_isEnabled"), "Enable Navigation Footer")} hint={getSchemaHint(getSchemaNode(navigationFooterSchema, "_isEnabled"))} />
 
                 {s.navFooter.enabled && (
                   <div className="flex flex-col gap-3">
-                    <NavTextInput label="Footer text" value={s.navFooter.footerText} onChange={(v) => setNavFooter({ footerText: v })} placeholder="Footer text" />
+                    <div className="flex flex-col gap-1">
+                      <InfoFieldLabel
+                        label={getSchemaLabel(navigationFooterToggleSchema, "Toggle Navigation")}
+                        hint={getSchemaHint(navigationFooterToggleSchema)}
+                      />
+                      <div className="ml-2">
+                        <CheckboxRow
+                          checked={s.navFooter.isLogicalBackNavigation}
+                          onChange={(v) => setNavFooter({ isLogicalBackNavigation: v })}
+                          label={getSchemaLabel(getSchemaNode(navigationFooterToggleSchema, "_isLogicalBackNavigation"), "Logical back navigation")}
+                          hint={getSchemaHint(getSchemaNode(navigationFooterToggleSchema, "_isLogicalBackNavigation"))}
+                        />
+                        <CheckboxRow
+                          checked={s.navFooter.includeSubmenuInNavigation}
+                          onChange={(v) => setNavFooter({ includeSubmenuInNavigation: v })}
+                          label={getSchemaLabel(getSchemaNode(navigationFooterToggleSchema, "_includeSubmenuInNavigation"), "Include submenu in sequential navigation")}
+                          hint={getSchemaHint(getSchemaNode(navigationFooterToggleSchema, "_includeSubmenuInNavigation"))}
+                        />
+                      </div>
+                    </div>
+                    <NavTextInput label="Footer text" hint={getSchemaHint(getSchemaNode(navigationFooterSchema, "_footerText", "text"))} value={s.navFooter.footerText} onChange={(v) => setNavFooter({ footerText: v })} placeholder="Footer text" />
                     <p className="text-[11px] text-[var(--life-neutral-300)] leading-snug">
                       Navigation Footer settings at the course level; can be overridden at the topic/page level, if required.
                     </p>
@@ -672,7 +816,8 @@ export function NavigationPage({
                           checked={s.navFooter.buttons[key]._isEnabled}
                           onChange={(v) => setFooterButton(key, { _isEnabled: v })}
                           icon={icon}
-                          label={label}
+                          label={getSchemaLabel(getSchemaNode(navigationFooterSchema, "_buttons", key), label)}
+                          hint={getSchemaHint(getSchemaNode(navigationFooterSchema, "_buttons", key))}
                           value={s.navFooter.buttons[key].btnText}
                           onTextChange={(v) => setFooterButton(key, { btnText: v })}
                         />
@@ -695,73 +840,8 @@ export function NavigationPage({
       </div>
 
       {/* Floating "Unsaved changes" bar — only while the form is dirty */}
-      {!loading && dirty && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-4 py-3 rounded-xl bg-white border border-[var(--life-warning-100)] shadow-lg animate-fade-in-down">
-          <span className="flex items-center gap-2 text-sm text-[#374151]">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-warning-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
-            </svg>
-            Unsaved changes
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleCancel}
-              disabled={saving}
-              className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] disabled:opacity-50 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving || !courseId}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-[var(--life-base-white)] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] disabled:opacity-50 rounded-lg transition-colors"
-            >
-              {saving && (
-                <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-                </svg>
-              )}
-              {saving ? "Saving…" : "Save Changes"}
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Success / error toast */}
-      {toast && (
-        <div className="fixed top-4 right-4 z-[60] pointer-events-none">
-          <div
-            className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium border pointer-events-auto animate-fade-in-down min-w-[260px] max-w-sm ${
-              toast.type === "success"
-                ? "bg-[var(--life-positive-050)] border-[var(--life-positive-100)] text-[var(--life-positive-500)]"
-                : "bg-[var(--life-critical-050)] border-[var(--life-critical-100)] text-[var(--life-critical-500)]"
-            }`}
-          >
-            {toast.type === "success" ? (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-positive-500)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-            ) : (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-critical-500)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-                <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-              </svg>
-            )}
-            <span className="flex-1">{toast.message}</span>
-            <button
-              type="button"
-              onClick={() => setToast(null)}
-              className="opacity-60 hover:opacity-100 transition-opacity ml-1"
-              aria-label="Dismiss"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      )}
+      <SaveStatusToast toast={toast} onDismiss={() => setToast(null)} autoHideMs={3500} />
 
       {assetPickerOpen && (
         <AssetPickerModal

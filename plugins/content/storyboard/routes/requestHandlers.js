@@ -90,7 +90,7 @@ async function createStoryboard(req, res) {
 async function getStoryboardByCourse(req, res) {
   try {
     const results = await db.retrieve('storyboard', { _courseId: req.params.courseId });
-    const rec = Array.isArray(results) && results.length ? results[0] : null;
+    const rec = Array.isArray(results) && results.length ? toPlain(results[0]) : null;
     return res.status(200).json(rec ? serializeStoryboard(rec) : null);
   } catch (error) {
     return fail(res, error, 'Failed to retrieve storyboard by course');
@@ -256,32 +256,20 @@ async function listComments(req, res) {
   }
 }
 
-// Comments are Page/Article-level only (never Block/Component) — see
-// HEADING_LEVEL_TO_ADAPT in new-ui-source: heading level 1 = Topic/Page,
-// level 2 = Section/Article. The client already resolves the cursor to the
-// nearest enclosing level-1/2 heading before sending blockId; this re-checks
-// it server-side so the rule holds regardless of caller.
-//
-// documentJson is only persisted on explicit Save/Generate/Export, not on
-// every keystroke, so a heading the author just typed may not exist in it
-// yet — fail OPEN when the block can't be found (don't block an in-progress
-// comment on unsaved content) and only reject a CONFIRMED Block/Component
-// target (found, and it's a level-3+ heading or a non-heading block).
-async function findCommentableHeading(storyboardId, blockId) {
+async function validateCommentTarget(storyboardId, blockId) {
   const existing = await db.retrieve('storyboard', { _id: storyboardId });
   if (!Array.isArray(existing) || !existing.length) return { error: 'Storyboard not found', status: 404 };
 
   let blocks = [];
   try {
-    blocks = JSON.parse(toPlain(existing[0]).documentJson || '[]');
+    blocks = safeParse(toPlain(existing[0]).documentJson, []);
   } catch {
     blocks = [];
   }
   const target = Array.isArray(blocks) ? blocks.find((b) => b && b.id === blockId) : null;
   if (!target) return {};
-  const level = target.type === 'heading' ? Number((target.props && target.props.level) ?? 1) : null;
-  if (level === null || level > 2) {
-    return { error: 'Comments can only be attached to a Page (Topic) or Article (Section) heading.', status: 400 };
+  if (typeof target.type !== 'string' || !target.type) {
+    return { error: 'Invalid comment target.', status: 400 };
   }
   return {};
 }
@@ -290,11 +278,11 @@ async function addComment(req, res) {
   try {
     const { userId, tenantId } = userCtx(req);
     const body = req.body || {};
-    if (!body.blockId) return res.status(400).json({ error: 'blockId is required' });
+    if (typeof body.blockId !== 'string' || !body.blockId.trim()) return res.status(400).json({ error: 'blockId is required' });
     if (!body.body) return res.status(400).json({ error: 'body is required' });
 
     if (!body._parentCommentId) {
-      const check = await findCommentableHeading(req.params.id, body.blockId);
+      const check = await validateCommentTarget(req.params.id, body.blockId);
       if (check.error) return res.status(check.status).json({ error: check.error });
     }
 
@@ -327,9 +315,6 @@ async function updateComment(req, res) {
 
     await db.update('storyboardcomment', { _id: req.params.commentId }, delta);
     const results = await db.retrieve('storyboardcomment', { _id: req.params.commentId });
-    if (!Array.isArray(results) || !results.length) {
-      return res.status(404).json({ error: 'Comment not found' });
-    }
     const updated = toPlain(results[0]);
     if (updated._storyboardId) await recomputeStatus(updated._storyboardId, { userId, tenantId });
     return res.status(200).json(updated);
@@ -426,6 +411,7 @@ async function handleAi(req, res) {
 
 async function exportWord(req, res) {
   try {
+    const { userId, tenantId } = userCtx(req);
     const results = await db.retrieve('storyboard', { _id: req.params.id });
     if (!Array.isArray(results) || !results.length) {
       return res.status(404).json({ error: 'Storyboard not found' });
@@ -438,7 +424,6 @@ async function exportWord(req, res) {
     // Explicit user/tenant context so the asset resolver doesn't depend on
     // process.domain.session surviving through async awaits (ADAPT-3785 image
     // embedding fix).
-    const { userId, tenantId } = userCtx(req);
     const ctx = { user: req.user, userId, tenantId };
     // Stamp the course + storyboard id into the exported file so a later
     // import can map it back to this course (ADAPT-3760 import enhancements
@@ -458,6 +443,7 @@ async function exportWord(req, res) {
 
 async function exportPdf(req, res) {
   try {
+    const { userId, tenantId } = userCtx(req);
     const results = await db.retrieve('storyboard', { _id: req.params.id });
     if (!Array.isArray(results) || !results.length) {
       return res.status(404).json({ error: 'Storyboard not found' });
@@ -465,7 +451,6 @@ async function exportPdf(req, res) {
     const rec = toPlain(results[0]);
     const docTitle = (req.query && req.query.title) || rec.title || 'Storyboard';
     const blocks = safeParse(rec.documentJson, []);
-    const { userId, tenantId } = userCtx(req);
     const ctx = { user: req.user, userId, tenantId };
     const buffer = await convert.blocksToPdf(blocks, docTitle, ctx);
     // Filename is keyed on Course ID, not the course title (ADAPT-3760).

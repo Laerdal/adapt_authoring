@@ -14,25 +14,30 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Loader2, PanelLeftOpen, PanelRightOpen } from 'lucide-react';
+import { usePageLoader } from '@/hooks';
 import type {
   ActiveBlockInfo,
+  AssessmentData,
   StoryboardDocument,
   StoryboardEditorHandle,
   StoryboardHeading,
   StoryboardInsertKind,
   StoryboardSummary,
 } from '@/types/storyboard';
+import { isAssessmentKind, validateAssessment } from '@/types/storyboard';
 import { useStoryboard } from '@/hooks/useStoryboard';
 import { useStoryboardReview } from '@/hooks/useStoryboardReview';
 import {
   getCourseStoryboardBlocks,
   saveStoryboardToCourse,
+  addCourseCollaborators,
   exportStoryboardWord,
   exportStoryboardPdf,
   importStoryboardDocument,
   updateStoryboard,
   addStoryboardAudit,
   updateCourse,
+  ensureQuestionFeedbackExtensions,
   type ImportFormat,
   type StoryboardStatus,
 } from '@/api/adaptAuthoring';
@@ -43,6 +48,7 @@ import { isDefaultSchemaTitle, stripPlaceholderHeadings } from './placeholderTit
 import {
   planStoryboardGeneration,
   generateStoryboardCourse,
+  validateStoryboardHierarchy,
   type GenerationPlan,
   type GenerationResult,
 } from '@/api/storyboardGeneration';
@@ -66,6 +72,32 @@ const EMPTY_SUMMARY: StoryboardSummary = {
   hasVisual: false,
   hasAssessment: false,
 };
+
+function collectStoryboardValidationIssues(doc: unknown[]): string[] {
+  const issues = [...validateStoryboardHierarchy(doc)];
+  for (const raw of Array.isArray(doc) ? doc : []) {
+    const block = raw as {
+      type?: string;
+      props?: { kind?: string; title?: string; data?: string };
+    };
+    if (block.type !== 'sbAssessment') continue;
+    const kind = block.props?.kind || '';
+    if (!isAssessmentKind(kind)) continue;
+    let data: AssessmentData = { question: '' };
+    try {
+      data = block.props?.data ? (JSON.parse(block.props.data) as AssessmentData) : { question: '' };
+    } catch {
+      data = { question: '' };
+    }
+    const title = (block.props?.title || '').trim();
+    const assessmentIssues = validateAssessment(kind, data, title);
+    if (assessmentIssues.length) {
+      const label = title || data.question?.replace(/<[^>]*>/g, '').trim() || kind.toUpperCase();
+      issues.push(`${label}: ${assessmentIssues.join(' ')}`);
+    }
+  }
+  return issues;
+}
 
 function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -110,12 +142,15 @@ export default function StoryboardWorkspace({
   courseTitle = '',
   initialDocument,
   onBack,
+  showBackButton = true,
   onTitleChange,
 }: {
   courseId?: string;
   courseTitle?: string;
   initialDocument?: StoryboardDocument;
   onBack?: () => void;
+  /** Forwarded to StoryboardTopBar's own `showBack` — see its doc comment. */
+  showBackButton?: boolean;
   /** Called with the new title after a successful edit here, so callers whose
    *  own state feeds `courseTitle` (StoryboardPage, SetupPage's embedded
    *  panel) stay in sync without needing a full refetch. */
@@ -159,8 +194,6 @@ export default function StoryboardWorkspace({
   const [summary, setSummary] = useState<StoryboardSummary>(EMPTY_SUMMARY);
   const [activeId, setActiveId] = useState<string>();
   const [activeBlock, setActiveBlock] = useState<ActiveBlockInfo | null>(null);
-  // The Page/Article heading a NEW comment will anchor to (resolved from the
-  // cursor's position — comments never attach to a Block/Component).
   const [commentAnchor, setCommentAnchor] = useState<ActiveBlockInfo | null>(null);
   const [showContents, setShowContents] = useState(true);
   const [showReview, setShowReview] = useState(true);
@@ -187,6 +220,13 @@ export default function StoryboardWorkspace({
   const [genPlan, setGenPlan] = useState<GenerationPlan | null>(null);
   const [genRunning, setGenRunning] = useState(false);
   const [genResult, setGenResult] = useState<GenerationResult | null>(null);
+  // Guards the WHOLE handleSave operation, not just the final sb.save() PUT —
+  // a double-click (or clicking again because nothing visibly happened yet)
+  // during the additive generateStoryboardCourse step below used to let two
+  // concurrent runs each independently decide the same not-yet-created block
+  // was "new" and create its own duplicate copy (ADAPT-3760 Save-duplication
+  // fix). Mirrors confirmGenerate's own genRunning guard.
+  const [saveRunning, setSaveRunning] = useState(false);
 
   // Resolve a block id to a human label for the Review panel (AC9).
   const labelFor = (blockId: string): string => {
@@ -201,12 +241,13 @@ export default function StoryboardWorkspace({
   const [booted, setBooted] = useState(false);
   const initialContent = useRef<unknown[]>(STARTER_DOCUMENT);
   const bootstrapped = useRef(false);
+  usePageLoader(sb.loading || !booted);
   // block id → generated content id, for idempotent regeneration (AC11).
   const generatedMap = useRef<Record<string, string>>({});
 
-  const flash = (msg: string) => {
+  const flash = (msg: string, ms: number = 2600) => {
     setToast(msg);
-    window.setTimeout(() => setToast(undefined), 2600);
+    window.setTimeout(() => setToast(undefined), ms);
   };
 
   // Once the storyboard has loaded, decide the editor's initial content. The
@@ -239,14 +280,6 @@ export default function StoryboardWorkspace({
               ? (initialDocument as unknown[])
               : STARTER_DOCUMENT;
       }
-      // Only strip placeholder heading text from a LEGACY fallback snapshot
-      // (a persisted DB record from before the projector always emitted real
-      // structure headings, or one captured from a course later edited to
-      // remove real titles) — never from the live course projection itself,
-      // which now intentionally shows structure headings (Topic/Section/
-      // Content Group), including still-default ones, so the Storyboard
-      // document/TOC mirrors Editor Mode's Structure panel instead of looking
-      // empty for a freshly created structure.
       if (!fromCourse) doc = stripPlaceholderHeadings(doc);
       if (!doc.length) doc = STARTER_DOCUMENT;
       initialContent.current = doc;
@@ -271,6 +304,13 @@ export default function StoryboardWorkspace({
     sb.setDocument(doc as unknown[]); // stage into the hook draft (drives dirty/save)
   };
 
+  useEffect(() => {
+    if (!courseId || !summary.hasAssessment) return;
+    void ensureQuestionFeedbackExtensions(courseId).catch(() => {
+      flash('Could not enable question feedback extensions. Save to retry.');
+    });
+  }, [courseId, summary.hasAssessment]);
+
   const handleNavigate = (blockId: string) => {
     setActiveId(blockId);
     editorRef.current?.focusBlock(blockId);
@@ -282,7 +322,10 @@ export default function StoryboardWorkspace({
   // moves focus out of the editor, and BlockNote can then no longer resolve
   // "where the cursor is" reliably, which previously caused new content to
   // land in the wrong place instead of right after the last active component.
-  const insert = (kind: StoryboardInsertKind) => editorRef.current?.insert(kind, { afterId: activeBlock?.id });
+  const insert = (kind: StoryboardInsertKind) => {
+    const result = editorRef.current?.insert(kind, { afterId: activeBlock?.id });
+    if (result && !result.ok && result.warning) flash(result.warning);
+  };
   const insertHeading = (level: number) => editorRef.current?.insert('heading', { level, afterId: activeBlock?.id });
 
   // Pull the latest backend course structure into the storyboard silently
@@ -328,10 +371,11 @@ export default function StoryboardWorkspace({
     setAiConfig({
       initialText: activeBlock?.text || editorRef.current?.getActiveText() || '',
       onInsert: (text) => {
-        editorRef.current?.insertComponent('text', {
+        const result = editorRef.current?.insertComponent('text', {
           data: { description: text, showTitle: false },
           afterId: activeBlock?.id,
         });
+        if (result && !result.id && result.warning) flash(result.warning);
         setHeadings(editorRef.current?.getHeadings() ?? []);
         setSummary(editorRef.current?.getSummary() ?? EMPTY_SUMMARY);
       },
@@ -340,7 +384,18 @@ export default function StoryboardWorkspace({
   };
 
   const handleSave = async () => {
+    if (saveRunning) return; // a Save is already in flight — see saveRunning's declaration
     const doc = editorRef.current?.getDocument() as unknown[] | undefined;
+    const validationIssues = collectStoryboardValidationIssues(doc ?? []);
+    if (validationIssues.length) {
+      // Show every issue, not just the first few — a consolidated summary is
+      // the whole point of validating on Save; silently dropping the rest
+      // left authors fixing one problem at a time instead of seeing the full
+      // list up front.
+      flash(`Save blocked — fix ${validationIssues.length} issue(s):\n${validationIssues.join('\n')}`, 8000);
+      return;
+    }
+    setSaveRunning(true);
     try {
       let msg = 'Storyboard saved.';
       if (courseId && doc) {
@@ -378,6 +433,8 @@ export default function StoryboardWorkspace({
       flash(msg);
     } catch (e) {
       flash(`Save failed — ${e instanceof Error ? e.message : 'unknown error'}`);
+    } finally {
+      setSaveRunning(false);
     }
   };
 
@@ -437,6 +494,12 @@ export default function StoryboardWorkspace({
   const handleConfirmImport = async (mode: ImportMode) => {
     if (!importPreview) return;
     const { blocks, fileName } = importPreview;
+    const hierarchyIssues = validateStoryboardHierarchy(blocks as unknown[]);
+    if (hierarchyIssues.length > 0) {
+      flash(`Import blocked — ${hierarchyIssues[0]}`);
+      setImportPreview(null);
+      return;
+    }
     setImportPreview(null);
 
     if (mode === 'reimport') {
@@ -444,6 +507,7 @@ export default function StoryboardWorkspace({
       flash('Updating content…');
       try {
         const result = await applyContentOnlyImport(courseId, blocks);
+        await review.refresh();
         const fresh = await getCourseStoryboardBlocks(courseId);
         if (fresh.length) {
           editorRef.current?.setDocument(fresh);
@@ -535,12 +599,7 @@ export default function StoryboardWorkspace({
       // every export, regardless of the `dirty` flag: content projected from
       // the course on load is marked "saved" for the UI (no false "unsaved
       // changes" pill) without ever having been PUT to the backend record.
-      // Pull straight from the live editor and scrub any placeholder-title
-      // headings so the persisted document (and therefore the export) matches
-      // exactly what Preview shows, not the legacy scaffolding.
-      const liveDoc = stripPlaceholderHeadings(
-        (editorRef.current?.getDocument() as unknown[] | undefined) ?? [],
-      );
+      const liveDoc = (editorRef.current?.getDocument() as unknown[] | undefined) ?? [];
       await sb.save(liveDoc);
       const titleForExport = resolvedCourseTitle;
       const { filename, mime, dataBase64 } = isPdf
@@ -563,11 +622,16 @@ export default function StoryboardWorkspace({
       flash('No course to generate into.');
       return;
     }
+    const doc = (editorRef.current?.getDocument() as unknown[]) ?? [];
+    const validationIssues = collectStoryboardValidationIssues(doc);
+    if (validationIssues.length) {
+      flash(`Generation blocked — ${validationIssues.slice(0, 3).join(' ')}`);
+      return;
+    }
     setGenOpen(true);
     setGenResult(null);
     setGenPlan(null);
     try {
-      const doc = (editorRef.current?.getDocument() as unknown[]) ?? [];
       setGenPlan(await planStoryboardGeneration(courseId, doc, generatedMap.current));
     } catch (e) {
       setGenPlan({
@@ -631,13 +695,14 @@ export default function StoryboardWorkspace({
       <StoryboardTopBar
         status={sb.status}
         onBack={() => onBack?.()}
+        showBack={showBackButton}
         onImport={handleImport}
         onExport={handleExport}
         onGenerate={generate}
         onSave={handleSave}
         onShareForReview={() => setShareOpen(true)}
         dirty={sb.dirty}
-        saving={sb.saving}
+        saving={sb.saving || saveRunning}
       />
 
       {sb.error && (
@@ -662,6 +727,7 @@ export default function StoryboardWorkspace({
           <button
             type="button"
             aria-label="Show contents"
+            title="Expand contents"
             onClick={() => setShowContents(true)}
             className="grid w-9 shrink-0 place-items-start border-r pt-3 text-muted-foreground hover:bg-muted"
           >
@@ -721,6 +787,7 @@ export default function StoryboardWorkspace({
                     setActiveBlock(block);
                     setCommentAnchor(editorRef.current?.getCommentAnchor() ?? null);
                   }}
+                  onWarning={flash}
                 />
               ) : (
                 <div className="flex items-center gap-2 py-16 text-sm text-muted-foreground">
@@ -748,6 +815,7 @@ export default function StoryboardWorkspace({
           <button
             type="button"
             aria-label="Show review center"
+            title="Expand review center"
             onClick={() => setShowReview(true)}
             className="grid w-9 shrink-0 place-items-start border-l pt-3 text-muted-foreground hover:bg-muted"
           >
@@ -787,6 +855,7 @@ export default function StoryboardWorkspace({
         <ShareForReviewDialog
           sharedWith={sb.shareWithUsers}
           onShare={async (userIds) => {
+            if (courseId) await addCourseCollaborators(courseId, userIds);
             await sb.share(userIds);
             flash(`Shared with ${userIds.length} reviewer(s).`);
           }}
@@ -830,7 +899,10 @@ export default function StoryboardWorkspace({
       )}
 
       {toast && (
-        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-foreground px-4 py-2 text-sm text-background shadow-lg">
+        <div
+          className="fixed bottom-6 left-1/2 z-50 max-w-lg -translate-x-1/2 whitespace-pre-line rounded-lg bg-foreground px-4 py-2 text-left text-sm text-background shadow-lg"
+          onClick={() => setToast(undefined)}
+        >
           {toast}
         </div>
       )}

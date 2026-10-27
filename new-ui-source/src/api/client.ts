@@ -4,6 +4,7 @@
 // Headroom-compressed payloads). Auth/session handling lives in the auth context.
 
 import { API_BASE_URL } from "@/utils/constants";
+import { redirectToLogin } from "@/utils/authRedirect";
 
 export interface RequestOptions extends RequestInit {
   headers?: Record<string, string>;
@@ -32,8 +33,17 @@ class ApiClient {
       });
 
       if (!response.ok) {
-        // Session expired/dropped → bounce to the engine login, like the old UI.
-        if (response.status === 401) window.location.assign("/");
+        // Session expired/dropped mid-use. The new UI has no login page of its
+        // own (see AuthContext) - redirectToLogin() sends the user wherever
+        // the classic UI itself would (external SSO if configured, otherwise
+        // /classic's own login form). Tell them why they're being moved
+        // instead of a silent bounce, which used to leave people wondering
+        // what just happened. redirectToLogin()'s own guard collapses this
+        // with any other concurrent caller (e.g. AuthContext's initial check)
+        // into a single redirect, so this is safe to call unconditionally.
+        if (response.status === 401) {
+          redirectToLogin("Your session has expired. Please log in again.");
+        }
         const error = await response.json().catch(() => ({ message: response.statusText }));
         // Some services (e.g. plugins/services/ai-tutor) respond with a
         // `{ success: false, error }` envelope instead of `{ message }` — fall

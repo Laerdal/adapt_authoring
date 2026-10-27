@@ -33,6 +33,8 @@ export const DEFAULT_SCHEMA_TITLES = new Set([
   NEW_TOPIC_TITLE,
   NEW_SECTION_TITLE,
   NEW_CONTENT_GROUP_TITLE,
+  'New Section',
+  'New Content',
   // Editor input placeholders / historical seed text
   'Article Title',
   'Block Title',
@@ -56,17 +58,8 @@ export const storyboardLabel = (n: { displayTitle?: string; title?: string }): s
   return DEFAULT_SCHEMA_TITLES.has(t) ? '' : t;
 };
 
-// Strip empty and schema-default heading blocks from a persisted storyboard
-// document. Legacy records — created before the storyboard projector filtered
-// placeholder titles — captured "New Article Title", "New Block Title" etc.
-// as heading text; those bleed into Preview and the Word export until the
-// document is regenerated. Called at load time on any doc used as the editor
-// seed so the user never sees inherited placeholder scaffolding.
-//
-// A block is dropped when it is a heading whose plain-text content is empty or
-// exactly matches one of the known placeholder titles. Every other block
-// (paragraph, sbComponent, sbAssessment, sbPlaceholder, list, etc.) is
-// preserved verbatim.
+// Clear scaffolding text in saved snapshots while retaining heading identities
+// and structural boundaries for generation. Non-heading blocks are unchanged.
 export function stripPlaceholderHeadings(blocks: unknown[]): unknown[] {
   if (!Array.isArray(blocks)) return blocks;
   const inline = (content: unknown): string => {
@@ -76,10 +69,10 @@ export function stripPlaceholderHeadings(blocks: unknown[]): unknown[] {
       .map((n) => (n && typeof (n as { text?: unknown }).text === 'string' ? (n as { text: string }).text : ''))
       .join('');
   };
-  return blocks.filter((b) => {
-    if (!b || typeof b !== 'object') return true;
+  return blocks.map((b) => {
+    if (!b || typeof b !== 'object') return b;
     const block = b as { type?: string; content?: unknown };
-    if (block.type !== 'heading') return true;
-    return !isDefaultSchemaTitle(inline(block.content));
+    if (block.type !== 'heading' || !isDefaultSchemaTitle(inline(block.content))) return b;
+    return { ...block, content: '' };
   });
 }

@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { createPortal } from "react-dom";
 
 export function UnsavedChangesModal({
@@ -23,6 +24,16 @@ export function UnsavedChangesModal({
   saveLabel?: string;
   savingLabel?: string;
 }) {
+  useEffect(() => {
+    if (!isOpen) return;
+
+    document.body.setAttribute("data-unsaved-changes-modal-open", "true");
+
+    return () => {
+      document.body.removeAttribute("data-unsaved-changes-modal-open");
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   return createPortal(

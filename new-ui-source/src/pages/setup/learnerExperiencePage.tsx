@@ -1,5 +1,10 @@
 import React, { useEffect, useState } from "react";
+import InfoIcon, { InfoFieldLabel, shouldRenderFieldInfoIcon } from "../../components/common/InfoIcon";
 import AssetPickerModal from "../../components/common/AssetPickerModal";
+import RichTextEditor from "../../components/common/RichTextEditor";
+import { tagAssetForAiTutor } from "../../api/adaptAuthoring";
+import { SaveChangesButton } from "./SaveChangesButton";
+import { SaveStatusToast } from "./SaveStatusToast";
 import {
   defaultAiTutorSettings,
   defaultCourseFeedbackSettings,
@@ -25,8 +30,17 @@ import {
   type LearningResourcesSettings,
   type LearningResourceFilterText as LrFilterTextHelper,
 } from "../../helpers/learnerExperienceHelper";
+import {
+  getExtensionSchema,
+  getSchemaHint,
+  getSchemaLabel,
+  getSchemaNode,
+  type SetupSchemaNode,
+} from "../../helpers/setupInfoSchema";
+import { usePageLoader } from "../../hooks";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
+import { htmlToPlainText } from "../../utils/ckEditorSamaritan";
 
 /* -------------------------------------------------------------
    LEARNER EXPERIENCE PANEL - Learning Resources accordion
@@ -92,7 +106,11 @@ function newResource(): LearningResource {
     sourceType: "asset",
     assetValue: "",
     urlValue: "",
-    displayOnEveryPage: false,
+    // Matches the `_isGlobal` schema default (true). The Adapt framework's
+    // resources extension filters out any item with `_isGlobal === false`
+    // when the drawer is opened from a page (i.e. always, in practice), so
+    // defaulting this to false silently hid every newly added resource.
+    displayOnEveryPage: true,
   };
 }
 
@@ -108,52 +126,99 @@ function LrToggle({
   onChange,
   label,
   align = "left",
+  help,
+  hint,
 }: {
   checked: boolean;
   onChange: (v: boolean) => void;
   label: string;
   align?: "left" | "right";
+  help?: React.ReactNode;
+  hint?: string;
 }) {
+  const showInfoIcon = shouldRenderFieldInfoIcon({ hint, help });
+
   if (align === "right") {
     return (
-      <div className="flex items-center justify-between gap-3 py-2">
-        <span className="text-sm font-semibold text-[var(--life-base-black)] leading-snug">{label}</span>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={checked}
-          aria-label={label}
-          onClick={() => onChange(!checked)}
-          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] focus:ring-offset-1 ${checked ? "bg-[var(--life-primary-500)]" : "bg-[#d1d5db]"}`}
-        >
-          <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${checked ? "translate-x-5" : "translate-x-1"}`} />
-        </button>
+      <div>
+        <div className="flex items-center justify-between gap-3 py-2">
+          <span className="text-sm font-semibold text-[var(--life-base-black)] leading-snug">{label}{showInfoIcon ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}</span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={checked}
+            aria-label={label}
+            onClick={() => onChange(!checked)}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] focus:ring-offset-1 ${checked ? "bg-[var(--life-primary-500)]" : "bg-[#d1d5db]"}`}
+          >
+            <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${checked ? "translate-x-5" : "translate-x-1"}`} />
+          </button>
+        </div>
+        {help}
       </div>
     );
   }
 
   return (
-    <label className="flex items-center gap-2 cursor-pointer select-none">
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        onClick={() => onChange(!checked)}
-        className={`relative w-9 h-5 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2d6fa8] ${checked ? "bg-[#2d6fa8]" : "bg-[#d1d5db]"}`}
-      >
-        <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-150 ${checked ? "translate-x-4" : ""}`} />
-      </button>
-      <span className="text-sm text-[#374151]">{label}</span>
-    </label>
+    <div>
+      <label className="flex items-center gap-2 cursor-pointer select-none">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={checked}
+          onClick={() => onChange(!checked)}
+          className={`relative w-9 h-5 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2d6fa8] ${checked ? "bg-[#2d6fa8]" : "bg-[#d1d5db]"}`}
+        >
+          <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-150 ${checked ? "translate-x-4" : ""}`} />
+        </button>
+        <span className="text-sm text-[#374151]">{label}{showInfoIcon ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}</span>
+      </label>
+      {help}
+    </div>
   );
 }
 
-function LrField({ label, children }: { label: string; children: React.ReactNode }) {
+function LrField({ label, hint, help, children }: { label: string; hint?: string; help?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="text-xs font-semibold text-[#374151]">{label}</label>
+      <InfoFieldLabel label={label} hint={hint} help={help} className="text-[#374151]" />
+      {help}
       {children}
     </div>
+  );
+}
+
+function LrHelp({ children }: { children: React.ReactNode }) {
+  return <p className="text-xs text-[#6b7280] mt-1 leading-snug">{children}</p>;
+}
+
+function ClickToEditRichText({
+  value,
+  onChange,
+  placeholder,
+  courseContext,
+}: {
+  value: string;
+  onChange: (html: string) => void;
+  placeholder: string;
+  courseContext: string;
+}) {
+  const [editing, setEditing] = useState(false);
+
+  if (editing) {
+    return <RichTextEditor value={value} onChange={onChange} placeholder={placeholder} courseContext={courseContext} />;
+  }
+
+  const preview = htmlToPlainText(value).trim();
+  return (
+    <button
+      type="button"
+      onClick={() => setEditing(true)}
+      className="w-full min-h-[96px] px-3 py-2 text-left text-sm rounded-lg border border-[#e5e7eb] bg-white text-[#374151] hover:border-[#2d6fa8] hover:bg-[#f8fbff] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8]"
+      aria-label={preview ? "Click to edit thank you message" : placeholder}
+    >
+      {preview || <span className="text-[#9ca3af]">{placeholder}</span>}
+    </button>
   );
 }
 
@@ -161,14 +226,27 @@ const LR_INPUT = "w-full px-3 py-2 text-sm rounded-lg border border-[#e5e7eb] bg
 const LR_TEXTAREA = `${LR_INPUT} resize-none`;
 
 /* Demo video placeholder shown at top of each accordion section */
-function DemoVideoPlaceholder({ label }: { label?: string }) {
+function DemoVideoPlaceholder({ label, src }: { label?: string; src?: string }) {
   return (
     <div className="rounded-lg overflow-hidden border border-[#e5e7eb]">
-      <div className="relative bg-[#1b3a4b] flex flex-col items-center justify-center gap-2.5" style={{ aspectRatio: '16/9' }}>
-        <div className="w-12 h-12 rounded-full bg-white/15 border-2 border-white/35 flex items-center justify-center backdrop-blur-sm">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="rgba(255,255,255,0.8)"><polygon points="5,3 19,12 5,21"/></svg>
-        </div>
-        <span className="text-xs text-white/50 font-medium">{label ?? 'Demo video coming soon'}</span>
+      <div className="relative bg-[#1b3a4b] flex flex-col items-center justify-center gap-2.5 overflow-hidden" style={{ aspectRatio: '16/9' }}>
+        {src ? (
+          <video
+            src={src}
+            muted
+            playsInline
+            controls
+            aria-label={label ?? "Demo video"}
+            className="block w-full h-full object-cover"
+          />
+        ) : (
+          <>
+            <div className="w-12 h-12 rounded-full bg-white/15 border-2 border-white/35 flex items-center justify-center backdrop-blur-sm">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="rgba(255,255,255,0.8)"><polygon points="5,3 19,12 5,21"/></svg>
+            </div>
+            <span className="text-xs text-white/50 font-medium">{label ?? 'Demo video coming soon'}</span>
+          </>
+        )}
       </div>
     </div>
   );
@@ -184,6 +262,7 @@ function AddResourceDialog({
   onAdd: (r: LearningResource) => void;
   onCancel: () => void;
 }) {
+  const isEditing = !!initial;
   const [res, setRes] = useState<LearningResource>(initial ?? newResource());
   const [assetPickerOpen, setAssetPickerOpen] = useState(false);
   const [errors, setErrors] = useState<{ title?: string; format?: string; source?: string }>({});
@@ -216,7 +295,7 @@ function AddResourceDialog({
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 flex flex-col max-h-[90vh] overflow-hidden">
         {/* header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-[#f3f4f6] shrink-0">
-          <h3 className="text-base font-bold text-[#111827]">Add Resource</h3>
+          <h3 className="text-base font-bold text-[#111827]">{isEditing ? "Edit Resource" : "Add Resource"}</h3>
           <button type="button" onClick={onCancel} className="p-1.5 rounded-lg text-[#6b7280] hover:bg-[#f3f4f6] transition-colors">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -255,6 +334,7 @@ function AddResourceDialog({
             checked={res.forceDownload}
             onChange={(v) => set("forceDownload", v)}
             label="Force download"
+            hint="Forces the resource to be downloaded rather than opened in the browser. Only supported in browsers that support the 'download' attribute and for resources that are part of the course content/hosted on the same URL."
           />
 
           {/* Title */}
@@ -273,7 +353,7 @@ function AddResourceDialog({
           </LrField>
 
           {/* File Name */}
-          <LrField label="File Name">
+          <LrField label="File Name" hint="Used to set the name of the downloaded file to something different to the source filename. Only supported in browsers that support the 'download' attribute and for resources that are part of the course content/hosted on the same URL. Forces the file to be downloaded regardless of what 'Force download' is set to.">
             <input
               type="text"
               value={res.fileName}
@@ -348,7 +428,7 @@ function AddResourceDialog({
           <LrToggle
             checked={res.displayOnEveryPage}
             onChange={(v) => set("displayOnEveryPage", v)}
-            label="Is display on every page?"
+            label="Is displayed on every page?"
           />
         </div>
 
@@ -366,7 +446,7 @@ function AddResourceDialog({
             onClick={handleAddClick}
             className="px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors"
           >
-            Add
+            {isEditing ? "Save" : "Add"}
           </button>
         </div>
       </div>
@@ -377,6 +457,7 @@ function AddResourceDialog({
         assetType={learningResourcePickerType(res.format)}
         onSelect={(asset) => {
           set("assetValue", asset.assetLink);
+          set("assetId", asset.id);
           setErrors((prev) => ({ ...prev, source: undefined }));
           setAssetPickerOpen(false);
         }}
@@ -433,9 +514,9 @@ function ResourceFormatIcon({ format }: { format: ResourceFormat }) {
 /* -- Course Feedback types -- */
 type CourseFeedbackState = CourseFeedbackSettings;
 
-const COURSE_FEEDBACK_OPTIONS: { value: CourseFeedbackOption; label: string }[] = [
-  { value: "autoOpen",        label: "Auto-open on course complete" },
-  { value: "hideAfterSubmit", label: "Hide button after submission" },
+const COURSE_FEEDBACK_OPTIONS: { value: CourseFeedbackOption; label: string; help: string }[] = [
+  { value: "autoOpen",        label: "Auto-open on course complete", help: "If the feedback widget hasn’t been opened or submitted, it will automatically open when the course is completed. The feedback button remains visible regardless of this setting." },
+  { value: "hideAfterSubmit", label: "Hide button after submission", help: "Hide the feedback button after the user submits feedback. By default, the button remains visible." },
 ];
 
 /* -- Ask AI Tutor types -- */
@@ -467,7 +548,7 @@ function LrCheckList<T extends string>({
   selected,
   onChange,
 }: {
-  options: { value: T; label: string }[];
+  options: { value: T; label: string; help?: string }[];
   selected: T[];
   onChange: (v: T[]) => void;
 }) {
@@ -480,7 +561,7 @@ function LrCheckList<T extends string>({
   }
   return (
     <div className="space-y-1">
-      {options.map(({ value, label }) => {
+      {options.map(({ value, label, help }) => {
         const checked = selected.includes(value);
         return (
           <label
@@ -501,7 +582,10 @@ function LrCheckList<T extends string>({
                 </svg>
               )}
             </div>
-            <span className="text-sm text-[#374151] leading-snug">{label}</span>
+            <span className="text-sm text-[#374151] leading-snug">
+              {label}
+              {help && <span className="block mt-1"><LrHelp>{help}</LrHelp></span>}
+            </span>
           </label>
         );
       })}
@@ -592,12 +676,14 @@ function LeAccordion({
   onToggle,
   icon,
   title,
+  hint,
   children,
 }: {
   open: boolean;
   onToggle: () => void;
   icon: React.ReactNode;
   title: string;
+  hint?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -609,7 +695,7 @@ function LeAccordion({
       >
         <div className="flex items-center gap-2.5">
           <span className="text-current">{icon}</span>
-          <span className="text-sm font-semibold text-current">{title}</span>
+          <span className="text-sm font-semibold text-current flex items-center gap-1.5">{title}{hint ? <InfoIcon label={title} hint={hint} /> : null}</span>
         </div>
         <svg
           width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
@@ -644,6 +730,7 @@ export function LearnerExperiencePanel({
   const [lrLoading, setLrLoading] = useState(false);
   const [lrSaving, setLrSaving] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [editingResource, setEditingResource] = useState<LearningResource | null>(null);
   const [openAccordion, setOpenAccordion] = useState<LearnerExperienceAccordion | "">("");
   const toggleAccordion = (accordion: LearnerExperienceAccordion) => {
     setOpenAccordion((current) => (current === accordion ? "" : accordion));
@@ -665,6 +752,14 @@ export function LearnerExperiencePanel({
     setShowAddDialog(false);
   }
 
+  function handleUpdateResource(r: LearningResource) {
+    setLrState((prev) => ({
+      ...prev,
+      resources: prev.resources.map((existing) => (existing.id === r.id ? r : existing)),
+    }));
+    setEditingResource(null);
+  }
+
   function handleRemoveResource(id: string) {
     setLrState((prev) => ({ ...prev, resources: prev.resources.filter((r) => r.id !== id) }));
   }
@@ -676,6 +771,7 @@ export function LearnerExperiencePanel({
   const [lsLoading, setLsLoading] = useState(false);
   const [atLoading, setAtLoading] = useState(false);
   const [cfLoading, setCfLoading] = useState(false);
+  usePageLoader(lrLoading || lnLoading || lsLoading || atLoading || cfLoading);
   const [lnSaving, setLnSaving] = useState(false);
   const [lnToast, setLnToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [lrFieldErrors, setLrFieldErrors] = useState<{ sectionTitle?: string }>({});
@@ -687,6 +783,17 @@ export function LearnerExperiencePanel({
   const [atState, setAtState] = useState<AiTutorState>(defaultAiTutorSettings());
   const [savedAtState, setSavedAtState] = useState<AiTutorState>(defaultAiTutorSettings());
   const [assetPickerOpen, setAssetPickerOpen] = useState(false);
+  const [resourcesSchema, setResourcesSchema] = useState<SetupSchemaNode | null>(null);
+  const [notesSchema, setNotesSchema] = useState<SetupSchemaNode | null>(null);
+  const [searchSchema, setSearchSchema] = useState<SetupSchemaNode | null>(null);
+  const [feedbackSchema, setFeedbackSchema] = useState<SetupSchemaNode | null>(null);
+  const [aiTutorSchema, setAiTutorSchema] = useState<SetupSchemaNode | null>(null);
+
+  const resourcesFieldsSchema = getSchemaNode(resourcesSchema, "pluginLocations", "course", "_resources");
+  const notesFieldsSchema = getSchemaNode(notesSchema, "pluginLocations", "course", "_courseNotes");
+  const searchFieldsSchema = getSchemaNode(searchSchema, "pluginLocations", "course", "_search");
+  const feedbackFieldsSchema = getSchemaNode(feedbackSchema, "pluginLocations", "config", "_courseFeedback");
+  const aiTutorFieldsSchema = getSchemaNode(aiTutorSchema, "pluginLocations", "config", "_aiTutor");
 
   const setLn = <K extends keyof LearnerNotesState>(k: K, v: LearnerNotesState[K]) =>
     setLnState((prev) => ({ ...prev, [k]: v }));
@@ -760,6 +867,33 @@ export function LearnerExperiencePanel({
       cancelled = true;
     };
   }, [courseId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      getExtensionSchema("adapt-contrib-resources"),
+      getExtensionSchema("adapt-courseNotes"),
+      getExtensionSchema("adapt-search"),
+      getExtensionSchema("laerdal-course-feedback"),
+      getExtensionSchema("adapt-laerdal-ai-tutor"),
+    ]).then(([
+      nextResourcesSchema,
+      nextNotesSchema,
+      nextSearchSchema,
+      nextFeedbackSchema,
+      nextAiTutorSchema,
+    ]) => {
+      if (cancelled) return;
+      setResourcesSchema(nextResourcesSchema);
+      setNotesSchema(nextNotesSchema);
+      setSearchSchema(nextSearchSchema);
+      setFeedbackSchema(nextFeedbackSchema);
+      setAiTutorSchema(nextAiTutorSchema);
+    }).catch(() => {
+      if (cancelled) return;
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (!courseId) {
@@ -1001,9 +1135,14 @@ export function LearnerExperiencePanel({
   return (
     <div className="flex flex-col h-full w-full bg-[#f7f9fb]">
       {/* header */}
-      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb]">
-        <h2 className="text-xl font-bold text-[#111827]">Learner Experience</h2>
-        <p className="text-sm text-[#6b7280] mt-0.5">Configure what learners see and can access throughout the course.</p>
+      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-center gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-[#111827]">Learner Experience</h2>
+          <p className="text-sm text-[#6b7280] mt-0.5">Configure what learners see and can access throughout the course.</p>
+        </div>
+        <div className="ml-auto">
+          <SaveChangesButton dirty={hasChanges} saving={lnSaving} disabled={!courseId} onClick={() => void handleLnSave()} portalTargetId="setup-save-button-slot" />
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto min-h-0">
@@ -1013,7 +1152,8 @@ export function LearnerExperiencePanel({
         <LeAccordion
           open={openAccordion === "learningResources"}
           onToggle={() => toggleAccordion("learningResources")}
-          title="Learning Resources"
+          title={getSchemaLabel(resourcesSchema, "Learning Resources")}
+          hint={getSchemaHint(resourcesSchema)}
           icon={
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
@@ -1021,7 +1161,10 @@ export function LearnerExperiencePanel({
           }
         >
           {/* Enable toggle */}
-          <DemoVideoPlaceholder label="See how Learning Resources works" />
+          <DemoVideoPlaceholder
+            label="See how Learning Resources works"
+            src="https://cdn-esim.contentservice.net/DEV/Resource_Help_9dc10de290-muxs5jn5.mp4"
+          />
           {lrLoading && (
             <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-3 py-2 text-sm text-[#6b7280]">
               Loading Learning Resources settings...
@@ -1031,7 +1174,7 @@ export function LearnerExperiencePanel({
             <LrToggle
               checked={lrState.enabled}
               onChange={(v) => setLr("enabled", v)}
-              label="Enable Learning Resources"
+              label={getSchemaLabel(getSchemaNode(resourcesFieldsSchema, "_isEnabled"), "Enable Learning Resources")}
               align="right"
             />
           </div>
@@ -1039,7 +1182,7 @@ export function LearnerExperiencePanel({
           {lrState.enabled && (
             <>
               {/* Drawer order */}
-              <LrField label="Drawer order">
+              <LrField label={getSchemaLabel(getSchemaNode(resourcesFieldsSchema, "_drawerOrder"), "Drawer order")} hint={getSchemaHint(getSchemaNode(resourcesFieldsSchema, "_drawerOrder"))}>
                 <input
                   type="number"
                   min={0}
@@ -1050,7 +1193,7 @@ export function LearnerExperiencePanel({
               </LrField>
 
               {/* Section Title */}
-              <LrField label="Title">
+              <LrField label={getSchemaLabel(getSchemaNode(resourcesFieldsSchema, "displayTitle"), "Title")} hint={getSchemaHint(getSchemaNode(resourcesFieldsSchema, "displayTitle"))}>
                 <input
                   type="text"
                   value={lrState.sectionTitle}
@@ -1065,7 +1208,7 @@ export function LearnerExperiencePanel({
               </LrField>
 
               {/* Description */}
-              <LrField label="Description">
+              <LrField label={getSchemaLabel(getSchemaNode(resourcesFieldsSchema, "description"), "Description")} hint={getSchemaHint(getSchemaNode(resourcesFieldsSchema, "description"))} help={<LrHelp>The description text for the resources button which displays when more than one extension is using the drawer.</LrHelp>}>
                 <textarea
                   value={lrState.description}
                   onChange={(e) => setLr("description", e.target.value)}
@@ -1075,7 +1218,7 @@ export function LearnerExperiencePanel({
                 />
               </LrField>
 
-              <LrField label="Body">
+              <LrField label={getSchemaLabel(getSchemaNode(resourcesFieldsSchema, "body"), "Body")} hint={getSchemaHint(getSchemaNode(resourcesFieldsSchema, "body"))} help={<LrHelp>The body text for the resources which displays at the top of the resources drawer.</LrHelp>}>
                 <input
                   type="text"
                   value={lrState.body}
@@ -1085,7 +1228,7 @@ export function LearnerExperiencePanel({
                 />
               </LrField>
 
-              <LrField label="Instruction">
+              <LrField label={getSchemaLabel(getSchemaNode(resourcesFieldsSchema, "instruction"), "Instruction")} hint={getSchemaHint(getSchemaNode(resourcesFieldsSchema, "instruction"))}>
                 <input
                   type="text"
                   value={lrState.instruction}
@@ -1098,7 +1241,9 @@ export function LearnerExperiencePanel({
               <LrToggle
                 checked={lrState.enableFilterButton}
                 onChange={(v) => setLr("enableFilterButton", v)}
-                label="Enable filter button"
+                label={getSchemaLabel(getSchemaNode(resourcesFieldsSchema, "_enableFilters"), "Enable filter button")}
+                hint={getSchemaHint(getSchemaNode(resourcesFieldsSchema, "_enableFilters"))}
+                help={<LrHelp>Turns the filter buttons on and off. Note that the filter buttons will be automatically disabled if all resource items have the same Type value.</LrHelp>}
               />
 
               <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
@@ -1145,10 +1290,25 @@ export function LearnerExperiencePanel({
                   {lrState.resources.map((r) => (
                     <div key={r.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-[#e5e7eb] bg-[#f9fafb]">
                       <ResourceFormatIcon format={r.format} />
-                      <div className="flex-1 min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => setEditingResource(r)}
+                        className="flex-1 min-w-0 text-left"
+                        title="Edit resource"
+                      >
                         <p className="text-sm font-medium text-[#111827] truncate">{r.title || <span className="text-[#9ca3af] font-normal">Untitled resource</span>}</p>
                         <p className="text-xs text-[#6b7280]">{getResourceFormatLabel(r.format)}{r.displayOnEveryPage ? " · Every page" : ""}</p>
-                      </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingResource(r)}
+                        className="p-1 rounded text-[#9ca3af] hover:text-[#2d6fa8] hover:bg-[#eaf3fb] transition-colors shrink-0"
+                        title="Edit resource"
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+                        </svg>
+                      </button>
                       <button
                         type="button"
                         onClick={() => handleRemoveResource(r.id)}
@@ -1183,14 +1343,18 @@ export function LearnerExperiencePanel({
         <LeAccordion
           open={openAccordion === "learnerNotes"}
           onToggle={() => toggleAccordion("learnerNotes")}
-          title="Learner Notes"
+          title={getSchemaLabel(notesSchema, "Learner Notes")}
+          hint={getSchemaHint(notesSchema)}
           icon={
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
             </svg>
           }
         >
-          <DemoVideoPlaceholder label="See how Learner Notes works" />
+          <DemoVideoPlaceholder
+            label="See how Learner Notes works"
+            src="https://cdn-esim.contentservice.net/DEV/course_notes_e4decc897c-muxs5x00.mp4"
+          />
           {lnLoading && (
             <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-3 py-2 text-sm text-[#6b7280]">
               Loading Learner Notes settings...
@@ -1200,23 +1364,23 @@ export function LearnerExperiencePanel({
             <LrToggle
               checked={lnState.enabled}
               onChange={(v) => setLn("enabled", v)}
-              label="Enable Notes"
+              label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "_isEnabled"), "Enable Notes")}
               align="right"
             />
           </div>
 
           {lnState.enabled && (
             <>
-              <LrField label="Title">
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "displayTitle"), "Title")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "displayTitle"))}>
                 <input type="text" value={lnState.title} onChange={(e) => setLn("title", e.target.value)} placeholder="e.g. My Notes" className={LR_INPUT} />
               </LrField>
-              <LrField label="Instruction">
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "instruction"), "Instruction")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "instruction"))}>
                 <input type="text" value={lnState.instruction} onChange={(e) => setLn("instruction", e.target.value)} placeholder="e.g. Write your notes here" className={LR_INPUT} />
               </LrField>
-              <LrField label="Placeholder">
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "placeholder"), "Placeholder")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "placeholder"))}>
                 <input type="text" value={lnState.placeholder} onChange={(e) => setLn("placeholder", e.target.value)} placeholder="e.g. Start typing your notes..." className={LR_INPUT} />
               </LrField>
-              <LrField label="Search Error Message">
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "errorMessageSearch"), "Search Error Message")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "errorMessageSearch"))}>
                 <input
                   type="text"
                   value={lnState.searchErrorMessage}
@@ -1229,7 +1393,7 @@ export function LearnerExperiencePanel({
                 />
                 {lnFieldErrors.searchErrorMessage && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.searchErrorMessage}</p>}
               </LrField>
-              <LrField label="Success Message">
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "successMessage"), "Success Message")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "successMessage"))}>
                 <input
                   type="text"
                   value={lnState.successMessage}
@@ -1242,7 +1406,7 @@ export function LearnerExperiencePanel({
                 />
                 {lnFieldErrors.successMessage && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.successMessage}</p>}
               </LrField>
-              <LrField label="Error Message">
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "errorMessage"), "Error Message")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "errorMessage"))}>
                 <input
                   type="text"
                   value={lnState.errorMessage}
@@ -1255,7 +1419,7 @@ export function LearnerExperiencePanel({
                 />
                 {lnFieldErrors.errorMessage && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.errorMessage}</p>}
               </LrField>
-              <LrField label="Create a New Note">
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "newNote"), "Create a New Note")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "newNote"))}>
                 <input
                   type="text"
                   value={lnState.createANewNote}
@@ -1268,7 +1432,7 @@ export function LearnerExperiencePanel({
                 />
                 {lnFieldErrors.createANewNote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.createANewNote}</p>}
               </LrField>
-              <LrField label="Export a Note">
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "exportNote"), "Export a Note")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "exportNote"))}>
                 <input
                   type="text"
                   value={lnState.exportANote}
@@ -1281,7 +1445,7 @@ export function LearnerExperiencePanel({
                 />
                 {lnFieldErrors.exportANote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.exportANote}</p>}
               </LrField>
-              <LrField label="Save Note">
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "saveNote"), "Save Note")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "saveNote"))}>
                 <input
                   type="text"
                   value={lnState.saveNote}
@@ -1294,7 +1458,7 @@ export function LearnerExperiencePanel({
                 />
                 {lnFieldErrors.saveNote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.saveNote}</p>}
               </LrField>
-              <LrField label="Download a Note">
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "downloadNote"), "Download a Note")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "downloadNote"))}>
                 <input
                   type="text"
                   value={lnState.downloadANote}
@@ -1307,7 +1471,7 @@ export function LearnerExperiencePanel({
                 />
                 {lnFieldErrors.downloadANote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.downloadANote}</p>}
               </LrField>
-              <LrField label="Upload a Note">
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "uploadNote"), "Upload a Note")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "uploadNote"))}>
                 <input
                   type="text"
                   value={lnState.uploadANote}
@@ -1320,7 +1484,7 @@ export function LearnerExperiencePanel({
                 />
                 {lnFieldErrors.uploadANote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.uploadANote}</p>}
               </LrField>
-              <LrField label="Search Note">
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "searchNote"), "Search Note")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "searchNote"))}>
                 <input
                   type="text"
                   value={lnState.searchNote}
@@ -1333,7 +1497,7 @@ export function LearnerExperiencePanel({
                 />
                 {lnFieldErrors.searchNote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.searchNote}</p>}
               </LrField>
-              <LrField label="Delete Note">
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "deleteNote"), "Delete Note")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "deleteNote"))}>
                 <input
                   type="text"
                   value={lnState.deleteNote}
@@ -1346,7 +1510,7 @@ export function LearnerExperiencePanel({
                 />
                 {lnFieldErrors.deleteNote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.deleteNote}</p>}
               </LrField>
-              <LrField label="Cancel">
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "cancelNote"), "Cancel")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "cancelNote"))}>
                 <input
                   type="text"
                   value={lnState.cancel}
@@ -1359,7 +1523,7 @@ export function LearnerExperiencePanel({
                 />
                 {lnFieldErrors.cancel && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.cancel}</p>}
               </LrField>
-              <LrField label="Edit Note">
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "editNote"), "Edit Note")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "editNote"))}>
                 <input
                   type="text"
                   value={lnState.editNote}
@@ -1380,21 +1544,25 @@ export function LearnerExperiencePanel({
         <LeAccordion
           open={openAccordion === "learnerSearch"}
           onToggle={() => toggleAccordion("learnerSearch")}
-          title="Learner Search"
+          title={getSchemaLabel(searchSchema, "Learner Search")}
+          hint={getSchemaHint(searchSchema)}
           icon={
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
             </svg>
           }
         >
-          <DemoVideoPlaceholder label="See how Learner Search works" />
+          <DemoVideoPlaceholder
+            label="See how Learner Search works"
+            src="https://cdn-esim.contentservice.net/DEV/Search_video_11c7429678-muxs6p06.mp4"
+          />
           {lsLoading && (
             <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-3 py-2 text-sm text-[#6b7280]">
               Loading Learner Search settings...
             </div>
           )}
           <div className={`pt-3${lsState.enabled ? " pb-4 border-b border-[#e5e7eb]" : ""}`}>
-            <LrToggle checked={lsState.enabled} onChange={(v) => setLs("enabled", v)} label="Enable Search" align="right" />
+            <LrToggle checked={lsState.enabled} onChange={(v) => setLs("enabled", v)} label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "_isEnabled"), "Enable Search")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "_isEnabled"))} align="right" />
           </div>
 
           {lsState.enabled && (
@@ -1406,21 +1574,11 @@ export function LearnerExperiencePanel({
                   <p className="text-xs text-[#6b7280] mt-1">Select which word-matching strategies are active.</p>
                 </div>
                 <div className="px-4 py-4 space-y-3">
-                  <LrToggle checked={lsState.matchOn.contentWordBeginsPhraseWord} onChange={(v) => setMatchOn("contentWordBeginsPhraseWord", v)} label="A word in the content begins the search phrase word" />
-                  <LrToggle checked={lsState.matchOn.contentWordContainsPhraseWord} onChange={(v) => setMatchOn("contentWordContainsPhraseWord", v)} label="A word in the content contains the search phrase word" />
-                  <LrToggle checked={lsState.matchOn.contentWordEqualsPhraseWord} onChange={(v) => setMatchOn("contentWordEqualsPhraseWord", v)} label="A word in the content equals the search phrase word" />
-                  <LrToggle checked={lsState.matchOn.phraseWordBeginsContentWord} onChange={(v) => setMatchOn("phraseWordBeginsContentWord", v)} label="A word in the content starts with the search phrase word" />
+                  <LrToggle checked={lsState.matchOn.contentWordBeginsPhraseWord} onChange={(v) => setMatchOn("contentWordBeginsPhraseWord", v)} label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "_matchOn", "_contentWordBeginsPhraseWord"), "A word in the content begins the search phrase word")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "_matchOn", "_contentWordBeginsPhraseWord"))} />
+                  <LrToggle checked={lsState.matchOn.contentWordContainsPhraseWord} onChange={(v) => setMatchOn("contentWordContainsPhraseWord", v)} label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "_matchOn", "_contentWordContainsPhraseWord"), "A word in the content contains the search phrase word")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "_matchOn", "_contentWordContainsPhraseWord"))} />
+                  <LrToggle checked={lsState.matchOn.contentWordEqualsPhraseWord} onChange={(v) => setMatchOn("contentWordEqualsPhraseWord", v)} label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "_matchOn", "_contentWordEqualsPhraseWord"), "A word in the content equals the search phrase word")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "_matchOn", "_contentWordEqualsPhraseWord"))} />
+                  <LrToggle checked={lsState.matchOn.phraseWordBeginsContentWord} onChange={(v) => setMatchOn("phraseWordBeginsContentWord", v)} label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "_matchOn", "_phraseWordBeginsContentWord"), "A word in the content starts with the search phrase word")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "_matchOn", "_phraseWordBeginsContentWord"))} />
                 </div>
-              </div>
-
-              {/* Preview */}
-              <div className="grid grid-cols-2 gap-4">
-                <LrField label="Preview Words">
-                  <input type="number" min={0} value={lsState.previewWords} onChange={(e) => setLs("previewWords", Number(e.target.value))} className={LR_INPUT} />
-                </LrField>
-                <LrField label="Preview Characters">
-                  <input type="number" min={0} value={lsState.previewCharacters} onChange={(e) => setLs("previewCharacters", Number(e.target.value))} className={LR_INPUT} />
-                </LrField>
               </div>
 
               {/* Display options */}
@@ -1429,41 +1587,38 @@ export function LearnerExperiencePanel({
                   <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Display Options</p>
                 </div>
                 <div className="px-4 py-4 space-y-3">
-                  <LrToggle checked={lsState.showFoundWords} onChange={(v) => setLs("showFoundWords", v)} label="Show found words" />
-                  <LrToggle checked={lsState.showHighlights} onChange={(v) => setLs("showHighlights", v)} label="Show highlights" />
+                  <LrToggle checked={lsState.showFoundWords} onChange={(v) => setLs("showFoundWords", v)} label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "_showFoundWords"), "Show found words")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "_showFoundWords"))} />
+                  <LrToggle checked={lsState.showHighlights} onChange={(v) => setLs("showHighlights", v)} label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "_showHighlights"), "Show highlights")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "_showHighlights"))} />
                 </div>
               </div>
 
               {/* Ignored Words */}
-              <LrField label="Ignored Words">
+              <LrField label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "_ignoreWords"), "Ignored Words")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "_ignoreWords"))}>
                 <IgnoredWordsInput words={lsState.ignoredWords} onChange={(w) => setLs("ignoredWords", w)} />
                 <p className="text-xs text-[#9ca3af] mt-1">Type a word and press Enter to add. These words are excluded from search indexing.</p>
               </LrField>
 
               {/* Numeric settings */}
               <div className="grid grid-cols-2 gap-4">
-                <LrField label="Minimum Word Length">
+                <LrField label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "_minimumWordLength"), "Minimum Word Length")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "_minimumWordLength"))}>
                   <input type="number" min={1} value={lsState.minimumWordLength} onChange={(e) => setLs("minimumWordLength", Number(e.target.value))} className={LR_INPUT} />
-                </LrField>
-                <LrField label="Frequency Importance">
-                  <input type="number" min={0} value={lsState.frequencyImportance} onChange={(e) => setLs("frequencyImportance", Number(e.target.value))} className={LR_INPUT} />
                 </LrField>
               </div>
 
               {/* Text fields */}
-              <LrField label="Title">
+              <LrField label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "title"), "Title")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "title"))}>
                 <input type="text" value={lsState.title} onChange={(e) => setLs("title", e.target.value)} placeholder="e.g. How can we help?" className={LR_INPUT} />
               </LrField>
-              <LrField label="Placeholder">
+              <LrField label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "description"), "Placeholder")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "description"))}>
                 <input type="text" value={lsState.placeholder} onChange={(e) => setLs("placeholder", e.target.value)} placeholder="e.g. Type in search words" className={LR_INPUT} />
               </LrField>
-              <LrField label="Placeholder Text for the Search Box">
+              <LrField label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "placeholder"), "Placeholder Text for the Search Box")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "placeholder"))}>
                 <input type="text" value={lsState.searchBoxPlaceholder} onChange={(e) => setLs("searchBoxPlaceholder", e.target.value)} placeholder="e.g. Enter search criteria" className={LR_INPUT} />
               </LrField>
-              <LrField label="No Results Message">
+              <LrField label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "noResultsMessage"), "No Results Message")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "noResultsMessage"))}>
                 <input type="text" value={lsState.noResultsMessage} onChange={(e) => setLs("noResultsMessage", e.target.value)} placeholder="e.g. Sorry, no results were found" className={LR_INPUT} />
               </LrField>
-              <LrField label="Processing Results Message">
+              <LrField label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "awaitingResultsMessage"), "Processing Results Message")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "awaitingResultsMessage"))}>
                 <input type="text" value={lsState.processingResultsMessage} onChange={(e) => setLs("processingResultsMessage", e.target.value)} placeholder="e.g. Formulating results..." className={LR_INPUT} />
               </LrField>
             </>
@@ -1474,7 +1629,8 @@ export function LearnerExperiencePanel({
         <LeAccordion
           open={openAccordion === "aiTutor"}
           onToggle={() => toggleAccordion("aiTutor")}
-          title="Ask AI Tutor"
+          title={getSchemaLabel(aiTutorSchema, "Ask AI Tutor")}
+          hint={getSchemaHint(aiTutorSchema)}
           icon={
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 2a10 10 0 0 1 10 10c0 5.52-4.48 10-10 10S2 17.52 2 12 6.48 2 12 2z"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>
@@ -1482,7 +1638,10 @@ export function LearnerExperiencePanel({
           }
         >
           {/* Enable toggle */}
-          <DemoVideoPlaceholder label="See how Ask AI Tutor works" />
+          <DemoVideoPlaceholder
+            label="See how Ask AI Tutor works"
+            src="https://cdn-esim.contentservice.net/LA/AI_Tutor_3c4e313383-muy1qy02.mp4"
+          />
           {atLoading && (
             <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-3 py-2 text-sm text-[#6b7280]">
               Loading Ask AI Tutor settings...
@@ -1492,7 +1651,7 @@ export function LearnerExperiencePanel({
             <LrToggle
               checked={atState.enabled}
               onChange={(v) => setAt("enabled", v)}
-              label="Enable AI Tutor"
+              label={getSchemaLabel(getSchemaNode(aiTutorFieldsSchema, "_isEnabled"), "Enable AI Tutor")}
               align="right"
             />
           </div>
@@ -1500,7 +1659,7 @@ export function LearnerExperiencePanel({
           {atState.enabled && (
             <>
               {/* Title */}
-              <LrField label="Title">
+              <LrField label={getSchemaLabel(getSchemaNode(aiTutorFieldsSchema, "_aiTutorTitle"), "Title")} hint={getSchemaHint(getSchemaNode(aiTutorFieldsSchema, "_aiTutorTitle"))}>
                 <input
                   type="text"
                   value={atState.title}
@@ -1511,7 +1670,7 @@ export function LearnerExperiencePanel({
               </LrField>
 
               {/* Placeholder Text */}
-              <LrField label="Placeholder Text">
+              <LrField label={getSchemaLabel(getSchemaNode(aiTutorFieldsSchema, "_placeHolderText"), "Placeholder Text")} hint={getSchemaHint(getSchemaNode(aiTutorFieldsSchema, "_placeHolderText"))}>
                 <input
                   type="text"
                   value={atState.placeholderText}
@@ -1522,7 +1681,7 @@ export function LearnerExperiencePanel({
               </LrField>
 
               {/* Language Code */}
-              <LrField label="Language Code">
+              <LrField label={getSchemaLabel(getSchemaNode(aiTutorFieldsSchema, "_languageCode"), "Language Code")} hint={getSchemaHint(getSchemaNode(aiTutorFieldsSchema, "_languageCode"))}>
                 <input
                   type="text"
                   value={atState.languageCode}
@@ -1581,7 +1740,8 @@ export function LearnerExperiencePanel({
         <LeAccordion
           open={openAccordion === "courseFeedback"}
           onToggle={() => toggleAccordion("courseFeedback")}
-          title="Laerdal Course Feedback"
+          title={getSchemaLabel(feedbackSchema, "Laerdal Course Feedback")}
+          hint={getSchemaHint(feedbackSchema)}
           icon={
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
@@ -1589,12 +1749,15 @@ export function LearnerExperiencePanel({
           }
         >
           {/* Enable toggle */}
-          <DemoVideoPlaceholder label="See how Laerdal Course Feedback works" />
+          <DemoVideoPlaceholder
+            label="See how Laerdal Course Feedback works"
+            src="https://cdn-esim.contentservice.net/DEV/course_Feedback_4_e8eaa74e92-muxs7da9.mp4"
+          />
           <div className={`pt-3${cfState.enabled ? " pb-4 border-b border-[#e5e7eb]" : ""}`}>
             <LrToggle
               checked={cfState.enabled}
               onChange={(v) => setCf("enabled", v)}
-              label="Enable Laerdal Course Feedback"
+              label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_isEnabled"), "Enable Laerdal Course Feedback")}
               align="right"
             />
           </div>
@@ -1621,7 +1784,7 @@ export function LearnerExperiencePanel({
                   <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Trigger Button</p>
                 </div>
                 <div className="px-4 py-4 space-y-3">
-                  <LrField label="Button text">
+                  <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_triggerButton", "text"), "Button text")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_triggerButton", "text"))}>
                     <input
                       type="text"
                       value={cfState.buttonText}
@@ -1630,7 +1793,7 @@ export function LearnerExperiencePanel({
                       className={LR_INPUT}
                     />
                   </LrField>
-                  <LrField label="Aria label">
+                  <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_triggerButton", "ariaLabel"), "Aria label")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_triggerButton", "ariaLabel"))}>
                     <input
                       type="text"
                       value={cfState.buttonAriaLabel}
@@ -1653,7 +1816,7 @@ export function LearnerExperiencePanel({
                       <p className="text-xs font-semibold text-[#374151] uppercase tracking-wide">Rating Step</p>
                     </div>
                     <div className="px-3.5 py-3 space-y-3">
-                      <LrField label="Title">
+                      <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_rating", "title"), "Title")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_rating", "title"))}>
                         <input
                           type="text"
                           value={cfState.ratingTitle}
@@ -1662,7 +1825,7 @@ export function LearnerExperiencePanel({
                           className={LR_INPUT}
                         />
                       </LrField>
-                      <LrField label="Aria label">
+                      <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_rating", "ariaLabel"), "Aria label")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_rating", "ariaLabel"))}>
                         <input
                           type="text"
                           value={cfState.ratingAriaLabel}
@@ -1672,7 +1835,7 @@ export function LearnerExperiencePanel({
                         />
                       </LrField>
                       <div className="grid grid-cols-2 gap-3">
-                        <LrField label="Lowest rating label">
+                        <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_rating", "labelLow"), "Lowest rating label")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_rating", "labelLow"))}>
                           <input
                             type="text"
                             value={cfState.lowestRatingLabel}
@@ -1681,7 +1844,7 @@ export function LearnerExperiencePanel({
                             className={LR_INPUT}
                           />
                         </LrField>
-                        <LrField label="Highest rating label">
+                        <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_rating", "labelHigh"), "Highest rating label")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_rating", "labelHigh"))}>
                           <input
                             type="text"
                             value={cfState.highestRatingLabel}
@@ -1699,7 +1862,7 @@ export function LearnerExperiencePanel({
                       <p className="text-xs font-semibold text-[#374151] uppercase tracking-wide">Common Step</p>
                     </div>
                     <div className="px-3.5 py-3 space-y-3">
-                      <LrField label="Title">
+                      <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_comment", "title"), "Title")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_comment", "title"))}>
                         <input
                           type="text"
                           value={cfState.commonTitle}
@@ -1708,7 +1871,7 @@ export function LearnerExperiencePanel({
                           className={LR_INPUT}
                         />
                       </LrField>
-                      <LrField label="Placeholder">
+                      <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_comment", "placeholder"), "Placeholder")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_comment", "placeholder"))}>
                         <input
                           type="text"
                           value={cfState.commonPlaceholder}
@@ -1717,7 +1880,7 @@ export function LearnerExperiencePanel({
                           className={LR_INPUT}
                         />
                       </LrField>
-                      <LrField label="Aria label">
+                      <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_comment", "ariaLabel"), "Aria label")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_comment", "ariaLabel"))}>
                         <input
                           type="text"
                           value={cfState.commonAriaLabel}
@@ -1726,7 +1889,7 @@ export function LearnerExperiencePanel({
                           className={LR_INPUT}
                         />
                       </LrField>
-                      <LrField label="Maximum character length">
+                      <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_comment", "maxLength"), "Maximum character length")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_comment", "maxLength"))} help={<LrHelp>Maximum characters allowed (for SCORM 1.2 compatibility, recommended 250 or less)</LrHelp>}>
                         <input
                           type="number"
                           min={0}
@@ -1743,7 +1906,7 @@ export function LearnerExperiencePanel({
                       <p className="text-xs font-semibold text-[#374151] uppercase tracking-wide">Buttons</p>
                     </div>
                     <div className="px-3.5 py-3 space-y-3">
-                      <LrField label="Next button text">
+                      <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_buttons", "next"), "Next button text")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_buttons", "next"))}>
                         <input
                           type="text"
                           value={cfState.nextButtonText}
@@ -1752,7 +1915,7 @@ export function LearnerExperiencePanel({
                           className={LR_INPUT}
                         />
                       </LrField>
-                      <LrField label="Close button text">
+                      <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_buttons", "close"), "Close button text")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_buttons", "close"))}>
                         <input
                           type="text"
                           value={cfState.closeButtonText}
@@ -1766,19 +1929,18 @@ export function LearnerExperiencePanel({
                 </div>
               </div>
 
-              {/* Thankyou message */}
+              {/* Thank you message */}
               <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
                 <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
-                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Thankyou Message</p>
+                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">THANK YOU MESSAGE</p>
                 </div>
                 <div className="px-4 py-4">
-                  <LrField label="Body">
-                    <textarea
+                  <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_thankYou", "body"), "Body")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_thankYou", "body"))}>
+                    <ClickToEditRichText
                       value={cfState.thankYouBody}
-                      onChange={(e) => setCf("thankYouBody", e.target.value)}
+                      onChange={(html) => setCf("thankYouBody", html)}
                       placeholder="e.g. Thank you for your feedback!"
-                      rows={3}
-                      className={LR_TEXTAREA}
+                      courseContext={courseId}
                     />
                   </LrField>
                 </div>
@@ -1786,6 +1948,13 @@ export function LearnerExperiencePanel({
             </>
           )}
         </LeAccordion>
+
+        <div className="flex items-start gap-2.5 rounded-lg bg-[#fff7ed] border border-[#fed7aa] px-4 py-3">
+          <span className="text-base leading-none mt-0.5" aria-hidden="true">💡</span>
+          <p className="text-sm text-[#9a3412] leading-snug">
+            <span className="font-semibold">Tip:</span> Manage learner engagement features including Feedback, AI Tutor, Resources, Notes, and Search. Feedback submissions are reported in Course Insights, while AI Tutor activity is retained in backend logs and available through the ELT team.
+          </p>
+        </div>
 
       </div>
 
@@ -1796,79 +1965,23 @@ export function LearnerExperiencePanel({
         />
       )}
 
+      {editingResource && (
+        <AddResourceDialog
+          initial={editingResource}
+          onAdd={handleUpdateResource}
+          onCancel={() => setEditingResource(null)}
+        />
+      )}
+
       <div className="h-8" />
       </div>
 
-      {!lnLoading && !lsLoading && !cfLoading && !atLoading && hasChanges && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-4 py-3 rounded-xl bg-white border border-[var(--life-warning-100)] shadow-lg animate-fade-in-down">
-          <span className="flex items-center gap-2 text-sm text-[#374151]">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-warning-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
-            </svg>
-            Unsaved changes
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleLnCancel}
-              disabled={lnSaving}
-              className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] disabled:opacity-50 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleLnSave}
-              disabled={lnSaving || !courseId}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-[var(--life-base-white)] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] disabled:opacity-50 rounded-lg transition-colors"
-            >
-              {lnSaving && (
-                <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-                </svg>
-              )}
-              {lnSaving ? "Saving…" : "Save Changes"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {lnToast && (
-        <div className="fixed top-4 right-4 z-[60] pointer-events-none">
-          <div
-            className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium border pointer-events-auto animate-fade-in-down min-w-[260px] max-w-sm ${
-              lnToast.type === "success"
-                ? "bg-[var(--life-positive-050)] border-[var(--life-positive-100)] text-[var(--life-positive-500)]"
-                : "bg-[var(--life-critical-050)] border-[var(--life-critical-100)] text-[var(--life-critical-500)]"
-            }`}
-          >
-            {lnToast.type === "success" ? (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-positive-500)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-            ) : (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-critical-500)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-                <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-              </svg>
-            )}
-            <span className="flex-1">{lnToast.message}</span>
-            <button
-              type="button"
-              onClick={() => setLnToast(null)}
-              className="opacity-60 hover:opacity-100 transition-opacity ml-1"
-              aria-label="Dismiss"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      )}
+      <SaveStatusToast toast={lnToast} onDismiss={() => setLnToast(null)} autoHideMs={3500} />
 
       {assetPickerOpen && (
         <AssetPickerModal
           assetType="other"
+          aiTutorCourseId={courseId}
           onSelect={(asset) => {
             const name = asset.assetLink.split("/").pop() ?? asset.assetLink;
             setAtState((prev) => ({
@@ -1876,6 +1989,7 @@ export function LearnerExperiencePanel({
               documents: [...prev.documents, { id: asset.id, name, document: asset.assetLink }],
             }));
             setAssetPickerOpen(false);
+            void tagAssetForAiTutor(asset.id, courseId);
           }}
           onClose={() => setAssetPickerOpen(false)}
         />

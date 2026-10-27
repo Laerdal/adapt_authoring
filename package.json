@@ -21,7 +21,8 @@
     "postinstall": "node ./installPlugins.js",
     "new-ui:sync": "node scripts/sync-new-ui.js",
     "new-ui:sync-from-bundle": "node scripts/sync-new-ui.js",
-    "new-ui:build-and-sync": "npm run new-ui:sync"
+    "new-ui:build-and-sync": "npm run new-ui:sync",
+    "prepare": "husky || true"
   },
   "dependencies": {
     "@babel/core": "^7.19.6",
@@ -30,6 +31,7 @@
     "adm-zip": "^0.5.10",
     "archiver": "^3.1.1",
     "async": "^3.2.6",
+    "axios": "^1.20.0",
     "bcrypt-nodejs": "0.0.3",
     "body-parser": "^1.20.3",
     "bower": "^1.8.14",
@@ -74,6 +76,7 @@
     "json-schema-mapper": "0.0.2",
     "junk": "^3.1.0",
     "less": "^3.13.1",
+    "libxmljs2": "^0.35.0",
     "log-update": "^4.0.0",
     "mammoth": "^1.11.0",
     "matchdep": "^2.0.0",
@@ -105,16 +108,19 @@
     "semver": "^6.3.0",
     "serve-favicon": "^2.5.0",
     "sharp": "^0.34.5",
+    "svg-to-pdfkit": "^0.1.8",
     "traverse": "^0.6.7",
     "underscore": "^1.13.8",
     "unzipper": "^0.10.11",
     "validator": "^13.15.35",
     "winston": "^3.7.2",
     "workerpool": "^10.0.1",
+    "xliff": "^6.4.0",
     "xss": "^1.0.14",
     "yauzl": "^2.10.0"
   },
   "devDependencies": {
+    "husky": "^9.1.7",
     "mocha": "^6.2.3",
     "mocha-multi": "^1.1.6",
     "mocha-simple-html-reporter": "^1.1.0",

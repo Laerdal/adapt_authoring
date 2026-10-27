@@ -35,26 +35,32 @@ export interface CourseStructureTreeProps {
   onOpenTopic: (topicId: string) => void;
 }
 
-interface Dragged { level: StructureLevel; id: string; }
-interface RowRef { level: StructureLevel; id: string; parentId: string; parentLevel: ContainerLevel; }
-type DropPlan = { newParentId: string; beforeId: string | null; mode: 'before' | 'into' };
+export interface Dragged { level: StructureLevel; id: string; }
+export interface RowRef { level: StructureLevel; id: string; parentId: string; parentLevel: ContainerLevel; nextSiblingId?: string | null; }
+type DropPlan = { newParentId: string; beforeId: string | null; mode: 'before' | 'after' | 'into' };
 
 // Resolve a drop of `dragged` onto `row`:
 //  • same level          → reorder / move as a sibling before that row
 //  • different level, row is a valid container for it → move INTO the row
 //  • different level, but a sibling is valid          → move as a sibling
-function computeDrop(dragged: Dragged, row: RowRef): DropPlan | null {
+export function computeDrop(dragged: Dragged, row: RowRef, position: 'before' | 'after' = 'before'): DropPlan | null {
   if (dragged.id === row.id) return null;
+  if (position === 'after' && row.nextSiblingId === dragged.id) return null;
+  const siblingPlan = (): DropPlan => ({
+    newParentId: row.parentId,
+    beforeId: position === 'after' ? row.nextSiblingId ?? null : row.id,
+    mode: position,
+  });
   if (dragged.level === row.level) {
     return acceptsChild(row.parentLevel, dragged.level)
-      ? { newParentId: row.parentId, beforeId: row.id, mode: 'before' }
+      ? siblingPlan()
       : null;
   }
   if (acceptsChild(row.level, dragged.level)) {
     return { newParentId: row.id, beforeId: null, mode: 'into' };
   }
   if (acceptsChild(row.parentLevel, dragged.level)) {
-    return { newParentId: row.parentId, beforeId: row.id, mode: 'before' };
+    return siblingPlan();
   }
   return null;
 }
@@ -111,20 +117,38 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [inlineId, setInlineId] = useState<string | null>(null);
   const [inlineValue, setInlineValue] = useState('');
+  const [inlineOriginalValue, setInlineOriginalValue] = useState('');
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [drag, setDrag] = useState<Dragged | null>(null);
-  const [dropTarget, setDropTarget] = useState<{ rowId: string; mode: 'before' | 'into' } | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ rowId: string; mode: 'before' | 'after' | 'into' } | null>(null);
 
   const isOpen = (id: string) => collapsed[id] !== true;
   const toggle = (id: string) => setCollapsed((p) => ({ ...p, [id]: p[id] ? false : true }));
 
-  function startRename(id: string, title: string) { setInlineId(id); setInlineValue(title); }
+  function startRename(id: string, title: string) {
+    setInlineId(id);
+    setInlineValue(title);
+    setInlineOriginalValue(title);
+  }
+  function handleInlineChange(level: StructureLevel, id: string, value: string) {
+    setInlineValue(value);
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    props.onRename(level, id, trimmed);
+  }
   function commitRename(level: StructureLevel) {
     if (!inlineId) return;
     const v = inlineValue.trim();
     const id = inlineId;
     setInlineId(null);
+    setInlineOriginalValue('');
     if (v) props.onRename(level, id, v);
+  }
+  function cancelRename(level: StructureLevel, id: string) {
+    props.onRename(level, id, inlineOriginalValue);
+    setInlineId(null);
+    setInlineValue('');
+    setInlineOriginalValue('');
   }
   function clearDrag() { setDrag(null); setDropTarget(null); }
 
@@ -149,11 +173,23 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
     const isDropInto = dropTarget?.rowId === p.id && dropTarget.mode === 'into';
     const isDropBefore = dropTarget?.rowId === p.id && dropTarget.mode === 'before';
 
+    const deleteMessage = p.level === 'module'
+      ? <>Are you sure you want to delete this module?<br />You will lose all the contents of this module.</>
+      : p.level === 'topic'
+        ? <>Are you sure you want to delete this topic?<br />You will lose all the contents of this topic</>
+        : p.level === 'section'
+          ? <>Are you sure you want to delete this section?<br />This will remove any content groups and components inside this section.</>
+          : p.level === 'contentGroup'
+            ? <>Are you sure you want to delete this content group?<br />This will remove any components inside this section.</>
+            : <>Are you sure you want to delete the component.<br />This action cannot be undone.</>;
+
     if (deleteId === p.id) {
       return (
         <div className="px-2 py-2 rounded-lg bg-[#fef2f2] border border-[#fecaca] text-sm">
           <div className="flex items-center gap-2">
-            <span className="flex-1 text-[#991b1b] font-medium truncate">Delete “{p.title}”?</span>
+            <span className="flex-1 text-[#991b1b] font-medium">
+              {deleteMessage}
+            </span>
             <button type="button" onClick={() => setDeleteId(null)} className="px-2 py-1 text-xs rounded text-[#6b7280] hover:bg-[#f3f4f6]">Cancel</button>
             <button type="button" onClick={() => { setDeleteId(null); props.onRemove(p.level, p.id); }} className="px-2 py-1 text-xs rounded bg-[#dc2626] text-white hover:bg-[#b91c1c] font-medium">Delete</button>
           </div>
@@ -210,8 +246,8 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
               <input
                 autoFocus
                 value={inlineValue}
-                onChange={(e) => setInlineValue(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitRename(p.level); } else if (e.key === 'Escape') { e.preventDefault(); setInlineId(null); } }}
+                onChange={(e) => handleInlineChange(p.level, p.id, e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitRename(p.level); } else if (e.key === 'Escape') { e.preventDefault(); cancelRename(p.level, p.id); } }}
                 onBlur={() => commitRename(p.level)}
                 onClick={(e) => e.stopPropagation()}
                 aria-label="Edit title"
@@ -231,7 +267,10 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
             {!editing && (isModule ? (
               <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[#3d8f7c] bg-[#e6f4f1] rounded px-1.5 py-0.5">{labels.module}</span>
             ) : (
-              <span className="shrink-0 text-[11px] uppercase tracking-wide text-[#c5cad1]">{labels[p.level]}</span>
+              <span className="shrink-0 text-[11px] uppercase tracking-wide text-[#c5cad1]">
+                {labels[p.level]}
+                {p.level === 'topic' ? ' (Page)' : p.level === 'section' ? ' (Article)' : p.level === 'contentGroup' ? ' (Block)' : ''}
+              </span>
             ))}
           </div>
 
@@ -247,7 +286,7 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
 
   function AddLink({ label, onClick }: { label: string; onClick: () => void }) {
     return (
-      <button type="button" onClick={onClick} aria-label={label} className="flex items-center gap-1.5 text-xs text-[#9ca3af] hover:text-[#2d6fa8] px-2 py-1 rounded hover:bg-[#f0f7ff] transition-colors">
+      <button type="button" onClick={onClick} aria-label={label} className="flex items-center gap-1.5 text-xs  hover:text-[#2d6fa8] px-2 py-1 rounded hover:bg-[#f0f7ff] transition-colors">
         <Plus size={11} />
         {label}
       </button>

@@ -4,10 +4,13 @@ import ImageCropper from "@/components/common/ImageCropper";
 import AssetPickerModal from "@/components/common/AssetPickerModal";
 import TagOverflowList from "@/components/common/TagOverflowList";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
+import ErrorDialog from "@/components/common/ErrorDialog";
+import { stripHtmlToText } from "@/utils/format";
 
 interface CourseCardProps {
   id: number;
   title: string;
+  body?: string;
   description: string;
   savedDate: string;
   authorName?: string | null;
@@ -18,7 +21,7 @@ interface CourseCardProps {
   showAuthor?: boolean;
   canManageCourses?: boolean;
   onPermissionDenied?: (action: "create" | "edit" | "delete") => void;
-  onUpdate: (patch: { title?: string; description?: string; heroAssetId?: string | null; tags?: string[] }) => void;
+  onUpdate: (patch: { title?: string; body?: string; heroAssetId?: string | null; tags?: string[] }) => void;
   onCopy: () => void;
   onCopyId: () => void;
   onDelete: () => void;
@@ -26,18 +29,21 @@ interface CourseCardProps {
 }
 
 export default function CourseCard({
-  id, title, description, savedDate, authorName = null, imageUrl, heroAssetId = null, tags = [],
+  id, title, body, description, savedDate, authorName = null, imageUrl, heroAssetId = null, tags = [],
   view = "grid", showAuthor = false, canManageCourses = true, onPermissionDenied, onUpdate, onCopy, onCopyId, onDelete, viewHref,
 }: CourseCardProps) {
   const [modalOpen, setModalOpen]           = useState(false);
   const [menuOpen, setMenuOpen]             = useState(false);
   const [deleteOpen, setDeleteOpen]         = useState(false);
   const [editTitle, setEditTitle]           = useState(title);
-  const [editDesc, setEditDesc]             = useState(description);
+  const cardDescription = (body && body.trim()) ? body : description;
+  const displayDescription = stripHtmlToText(cardDescription);
+  const [editDesc, setEditDesc]             = useState(displayDescription);
   const [editImage, setEditImage]           = useState<string | null>(imageUrl ?? null);
   const [editHeroAssetId, setEditHeroAssetId] = useState<string | null>(heroAssetId);
   const [editTags, setEditTags]             = useState<string[]>(tags);
   const [tagInput, setTagInput]             = useState("");
+  const [tagError, setTagError]             = useState<string | null>(null);
   const [cropSrc, setCropSrc]               = useState<string | null>(null);
   const [assetPickerOpen, setAssetPickerOpen] = useState(false);
   const menuRef                             = useRef<HTMLDivElement>(null);
@@ -45,7 +51,18 @@ export default function CourseCard({
 
   function addTag() {
     const t = tagInput.trim();
-    if (!t || editTags.includes(t)) { setTagInput(""); return; }
+    if (!t) {
+      setTagError(null);
+      return;
+    }
+
+    if (editTags.includes(t)) {
+      setTagError(`Tag "${t}" already exists.`);
+      setTagInput("");
+      return;
+    }
+
+    setTagError(null);
     setEditTags((prev) => [...prev, t]);
     setTagInput("");
   }
@@ -60,18 +77,19 @@ export default function CourseCard({
       return;
     }
     setEditTitle(title);
-    setEditDesc(description);
+    setEditDesc(displayDescription);
     setEditImage(imageUrl ?? null);
     setEditHeroAssetId(heroAssetId);
     setEditTags(tags);
     setTagInput("");
+    setTagError(null);
     setCropSrc(null);
     setModalOpen(true);
   }
 
   function handleSave() {
     if (!trimmedTitle) return; // reject empty / whitespace-only titles
-    onUpdate({ title: trimmedTitle, description: editDesc.trim(), heroAssetId: editHeroAssetId, tags: editTags });
+    onUpdate({ title: trimmedTitle, body: editDesc.trim(), heroAssetId: editHeroAssetId, tags: editTags });
     setModalOpen(false);
   }
 
@@ -227,7 +245,7 @@ export default function CourseCard({
                 {menuOpen && <MoreMenu />}
               </div>
             </div>
-            <p title={description} className="text-xs text-[#6b7280] leading-relaxed line-clamp-2 flex-1">{description}</p>
+            <p title={displayDescription} className="text-xs text-[#6b7280] leading-relaxed line-clamp-2 flex-1">{displayDescription}</p>
             <TagOverflowList tags={tags} />
             <div className="flex items-center gap-1.5 text-xs text-[#9ca3af]">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -263,7 +281,7 @@ export default function CourseCard({
           {/* Main content */}
           <div className="flex-1 min-w-0">
             <h3 title={title} className="font-semibold text-[#111827] text-sm leading-snug truncate">{title}</h3>
-            <p title={description} className="text-xs text-[#6b7280] mt-0.5 line-clamp-1 leading-relaxed">{description}</p>
+            <p title={displayDescription} className="text-xs text-[#6b7280] mt-0.5 line-clamp-1 leading-relaxed">{displayDescription}</p>
             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
               <div className="flex items-center gap-1 text-xs text-[#9ca3af]">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -339,10 +357,15 @@ export default function CourseCard({
       {/* ── EDIT MODAL ── */}
       {modalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
-          onClick={(e) => { if (e.target === e.currentTarget && !cropSrc) setModalOpen(false); }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !cropSrc) {
+              setModalOpen(false);
+              setTagError(null);
+            }
+          }}
         >
-          <div className={`bg-white rounded-2xl shadow-xl flex flex-col overflow-hidden ${cropSrc ? "w-full max-w-xl" : "w-full max-w-md"}`}>
+          <div className={`bg-white rounded-2xl shadow-xl flex flex-col min-h-0 ${cropSrc ? "w-full max-w-xl max-h-[calc(100vh-2rem)] overflow-y-auto" : "w-full max-w-md max-h-[calc(100vh-2rem)] overflow-hidden"}`}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-[#e5e7eb] shrink-0">
               <h2 className="font-semibold text-[#111827] text-base">
                 {cropSrc ? "Crop & Adjust Image" : "Edit Course Details"}
@@ -358,7 +381,7 @@ export default function CourseCard({
 
             {/* ── Crop view ── */}
             {cropSrc ? (
-              <div className="px-5 py-5">
+              <div className="px-5 py-5 overflow-y-auto">
                 <ImageCropper
                   src={cropSrc}
                   aspectRatio={16 / 9}
@@ -368,7 +391,7 @@ export default function CourseCard({
               </div>
             ) : (
             <>
-            <div className="px-5 py-5 flex flex-col gap-4 overflow-y-auto">
+            <div className="px-5 py-5 flex flex-col gap-4 overflow-y-auto min-h-0">
               <div>
                 <label className="block text-sm font-medium text-[#374151] mb-2">Cover Image</label>
                 {/* Preview + actions row when image exists */}
@@ -454,7 +477,11 @@ export default function CourseCard({
                   <input
                     type="text"
                     value={tagInput}
-                    onChange={(e) => setTagInput(e.target.value)}
+                    aria-invalid={Boolean(tagError)}
+                    onChange={(e) => {
+                      setTagInput(e.target.value);
+                      if (tagError) setTagError(null);
+                    }}
                     onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTag(); } }}
                     placeholder="Add a tag and press Enter"
                     className="flex-1 px-3 py-2 text-sm border border-[#d1d5db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent text-[#111827]"
@@ -493,6 +520,13 @@ export default function CourseCard({
         note="This action cannot be undone. The course and all its content will be permanently deleted."
         onCancel={() => setDeleteOpen(false)}
         onConfirm={() => { setDeleteOpen(false); onDelete(); }}
+      />
+
+      <ErrorDialog
+        open={Boolean(tagError)}
+        title="Tag already added"
+        message={tagError ?? ""}
+        onClose={() => setTagError(null)}
       />
 
       {/* ── ASSET PICKER MODAL ── */}

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { logout } from "@/api/adaptAuthoring";
+import { redirectToLogin } from "@/utils/authRedirect";
+import EditorMaskIcon from "@/components/editor/EditorMaskIcon";
 
 function getInitials(firstName?: string, lastName?: string, email?: string) {
   const initials = [firstName?.trim()[0], lastName?.trim()[0]].filter(Boolean).join("").toUpperCase();
@@ -35,7 +37,11 @@ export default function ProfileMenu() {
     try {
       await logout();
     } finally {
-      window.location.assign("/");
+      // Straight to the real login target (SSO or /classic) in one hop -
+      // reloading "/" first and letting AuthContext redirect a second time
+      // fires two navigations back to back, which Chrome's flood-protection
+      // throttles, leaving the page looking stuck instead of redirecting.
+      redirectToLogin();
     }
   }
 
@@ -48,6 +54,11 @@ export default function ProfileMenu() {
     document.addEventListener("mousedown", handleMouseDown);
     return () => document.removeEventListener("mousedown", handleMouseDown);
   }, []);
+
+  function switchToClassic() {
+    setProfileOpen(false);
+    window.location.href = "/classic";
+  }
 
   return (
     <div ref={profileRef} className="relative shrink-0">
@@ -71,18 +82,21 @@ export default function ProfileMenu() {
 
           <div className="py-1">
             <button type="button" onClick={() => { setProfileOpen(false); openFeedback(); }} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-[#374151] hover:text-[var(--life-primary-700)] transition-colors cursor-pointer">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="shrink-0">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-              </svg>
+              <EditorMaskIcon file="feedback-icon.svg" className="block w-[15px] h-[15px] shrink-0 bg-current" />
               Feedback
             </button>
             <button type="button" onClick={() => { setProfileOpen(false); openSupport(); }} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-[#374151] hover:text-[var(--life-primary-700)] transition-colors cursor-pointer">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="shrink-0">
-                <circle cx="12" cy="12" r="9" />
-                <path d="M9.5 9a2.6 2.6 0 1 1 4.3 2c-.9.7-1.8 1.1-1.8 2.3" />
-                <path d="M12 17h.01" />
-              </svg>
+              <EditorMaskIcon file="support-icon.svg" className="block w-[15px] h-[15px] shrink-0 bg-current" />
               Support
+            </button>
+          </div>
+
+          <div className="border-t border-[#f3f4f6] py-1">
+            <button type="button" onClick={switchToClassic} className="w-full flex items-center justify-between gap-2.5 px-4 py-2.5 text-sm text-[#374151] hover:text-[var(--life-primary-700)] transition-colors cursor-pointer">
+              <span>Switch to Classic</span>
+              <span className="relative inline-flex h-4 w-7 shrink-0 items-center rounded-full bg-[#e5e7eb]" aria-hidden="true">
+                <span className="inline-block h-3 w-3 translate-x-0.5 rounded-full bg-white shadow" />
+              </span>
             </button>
           </div>
 

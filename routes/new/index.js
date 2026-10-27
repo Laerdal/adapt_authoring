@@ -10,23 +10,53 @@ const server = module.exports = express();
 
 server.use(require('./courses'));
 
-// The SPA shell is public (all data comes from gated /api/* calls), so exempt
-// /new/* from the permissions gate — same posture as the login page and root.
-permissions.ignoreRoute(/^\/new\/?.*$/);
+// Every other top-level path prefix already owned by another routes/* folder
+// (or by dynamically-registered /api/* content routes). The catch-all below
+// must never swallow one of these, whatever order routes/* happens to load in
+// - so it checks this list explicitly rather than relying on registration
+// order, which Node's fs.readdir does not guarantee across platforms.
+// Keep this in sync with routes/* and any other top-level mount point added
+// in future - it's the one place that has to know about all of them.
+const RESERVED_PREFIXES = [
+  'api', 'classic', 'preview', 'studio', 'download', 'export', 'webhooks',
+  'install', 'lang', 'config', 'loading', 'poll', 'support', 'translation',
+  'health', 'assetmanagementv2', 'import'
+];
+const RESERVED_PATH_RE = new RegExp('^/(' + RESERVED_PREFIXES.join('|') + ')(/|$)');
 
-// Directory that scripts/sync-new-ui.js populates and express.static('public') serves.
+function isReservedPath(p) {
+  return RESERVED_PATH_RE.test(p);
+}
+
+// The SPA shell is public (all data comes from gated /api/* calls) - exempt
+// every non-reserved top-level path from the permissions gate, same posture
+// the bare "/" and the login page already had. This is a regex allowlist
+// (not routing), so it's independent of Express's registration order, but it
+// must exclude the same reserved prefixes above or it would accidentally make
+// a gated /api/* (or /preview, /studio, etc.) route publicly readable.
+permissions.ignoreRoute(new RegExp('^/(?!(?:' + RESERVED_PREFIXES.join('|') + ')(?:/|$)).*$'));
+
+// Directory that scripts/sync-new-ui.js populates from new-ui-source/dist.
 const NEW_UI_ROOT = path.join(configuration.serverRoot, 'public', 'new');
 
-// Normalise the bare mount so the SPA's root-relative asset URLs resolve.
-// (express.static usually 301s this already; this is the un-synced/safety path.)
-server.get('/new', (req, res) => res.redirect(301, '/new/'));
+// Backward-compat for old /new bookmarks/links - one redirect, not a live
+// route. Must be registered before the catch-all below, or that would claim
+// /new/* itself and this would never be reached.
+server.get(/^\/new(\/.*)?$/, (req, res) => res.redirect(301, req.params[0] || '/'));
 
-// SPA history fallback. express.static('public') is registered earlier in the
-// middleware chain, so real files (/new/assets/*, /new/index.html) are served
-// before this runs. Only unmatched, extension-less /new/* paths reach here — hand
-// them the SPA shell so client-side routing resolves them. Touches no /api/* route.
-server.get('/new/*', (req, res, next) => {
+// New UI is the primary UI: it's served directly at the site root - no /new
+// prefix anywhere, no redirect hop to get there. Its own express.static mount
+// (separate from the app-wide express.static('public') in lib/application.js)
+// serves index.html/assets from the same build directory as before; only the
+// URL they're served AT has changed, not where they live on disk.
+server.use(express.static(NEW_UI_ROOT));
+
+// SPA history fallback for real, direct-load, client-side-routed paths
+// (e.g. /dashboard, /course/:id) - only reached once express.static above and
+// every other routes/* handler has had a chance to claim the request first.
+server.get('/*', (req, res, next) => {
   if (path.extname(req.path)) return next(); // let genuinely-missing assets 404, not HTML
+  if (isReservedPath(req.path)) return next(); // never swallow a reserved backend path
   res.sendFile('index.html', { root: NEW_UI_ROOT }, (error) => {
     if (!error) return;
     logger.log('error', `New UI shell missing at ${NEW_UI_ROOT}. Run "npm run new-ui:sync".`);

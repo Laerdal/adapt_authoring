@@ -11,7 +11,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Plus,
   Type,
   Layers,
   Image as ImageIcon,
@@ -25,7 +24,6 @@ import {
   ArrowUpDown,
   ListChecks,
   SlidersHorizontal,
-  Trophy,
   ChevronDown,
 } from 'lucide-react';
 import type { StoryboardInsertKind } from '@/types/storyboard';
@@ -56,7 +54,7 @@ const GROUPS: MenuGroup[] = [
     items: [
       { kind: 'video', label: 'Video', Icon: Film },
       { kind: 'audio', label: 'Audio', Icon: Mic },
-      { kind: 'h5p', label: 'H5P', Icon: Puzzle },
+      // { kind: 'h5p', label: 'H5P', Icon: Puzzle },
     ],
   },
   {
@@ -73,7 +71,6 @@ const GROUPS: MenuGroup[] = [
       { kind: 'reorder', label: 'Sentence Reordering', Icon: ArrowUpDown },
       { kind: 'checklist', label: 'Checklist', Icon: ListChecks },
       { kind: 'slider', label: 'Slider', Icon: SlidersHorizontal },
-      { kind: 'assessmentResult', label: 'Assessment Result', Icon: Trophy },
     ],
   },
 ];
@@ -139,7 +136,7 @@ export default function AddContentMenu({ onInsert }: { onInsert: (kind: Storyboa
         aria-haspopup="menu"
         aria-expanded={open}
       >
-        <Plus className="h-3.5 w-3.5" /> Add Content
+        Add Content
         <ChevronDown className="h-3.5 w-3.5" style={{ color: 'var(--life-color-text-subtle)' }} />
       </button>
 
