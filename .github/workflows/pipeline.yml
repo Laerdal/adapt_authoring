@@ -219,7 +219,7 @@ jobs:
       needs.resolve.outputs.env == 'dev' && github.event_name != 'pull_request' &&
       vars.AWS_DEPLOY_ENABLED == 'true' && (github.event_name != 'workflow_dispatch' || inputs.deploy)
     runs-on: ubuntu-22.04
-    timeout-minutes: 40
+    timeout-minutes: 75
     environment: dev
     env:
       BUCKET: ${{ vars.RELEASE_BUCKET }}
@@ -258,11 +258,11 @@ jobs:
             "BUCKET=\($b) ENV_NAME=dev bash /tmp/deploy-release.sh \($id)\($flag)"]}')
           CMD_ID=$(aws ssm send-command --document-name AWS-RunShellScript \
             --targets Key=tag:app,Values=adapt Key=tag:env,Values=dev \
-            --parameters "$PARAMS" --timeout-seconds 1800 --comment "adapt $RELEASE_ID" \
+            --parameters "$PARAMS" --timeout-seconds 3600 --comment "adapt $RELEASE_ID" \
             --query Command.CommandId --output text)
           echo "SSM command: $CMD_ID"
 
-          for i in $(seq 1 120); do
+          for i in $(seq 1 240); do
             st=$(aws ssm list-command-invocations --command-id "$CMD_ID" --query 'CommandInvocations[].Status' --output text)
             if [ -z "$st" ] && [ "$i" -gt 8 ]; then echo "No instance matched tags app=adapt,env=dev (or none is Online in SSM)"; exit 1; fi
             case "$st" in ""|*Pending*|*InProgress*|*Delayed*) sleep 15 ;; *) break ;; esac

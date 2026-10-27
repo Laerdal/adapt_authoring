@@ -29,6 +29,34 @@ STAGE=$(mktemp -d /var/tmp/adapt-deploy.XXXXXX)
 trap 'rm -rf "$STAGE"' EXIT
 
 log() { echo "[deploy $ID] $*"; }
+START_TS=$(date +%s)
+
+# Posts a card to THIS server's own Teams channel: plugins["adapt-devtools-webhooks"].teamsConnector in its conf/config.json
+# (each server has its own). Never fails the deploy and never prints the URL.
+notify_teams() { # <title>
+  command -v node >/dev/null || return 0
+  TITLE="$1" HOST_NAME=$(hostname) ENV="$ENV_NAME" ID="$ID" SECS=$(( $(date +%s) - START_TS )) \
+  MANIFEST="$STAGE/manifest.json" CONF="$APP_DIR/conf/config.json" node -e '
+    const fs = require("fs"), e = process.env;
+    let url = "";
+    try { const c = JSON.parse(fs.readFileSync(e.CONF, "utf8")); url = ((c.plugins || {})["adapt-devtools-webhooks"] || {}).teamsConnector || ""; } catch (_) {}
+    if (!url) process.exit(0);
+    let repos = {};
+    try { repos = JSON.parse(fs.readFileSync(e.MANIFEST, "utf8")).repos || {}; } catch (_) {}
+    const facts = [{ title: "Server", value: e.HOST_NAME }, { title: "Environment", value: e.ENV },
+      { title: "Release", value: e.ID }, { title: "Duration", value: Math.max(1, Math.round(e.SECS / 60)) + " min" }]
+      .concat(Object.entries(repos).map(([r, s]) => ({ title: r, value: String(s).slice(0, 7) })));
+    const body = JSON.stringify({ type: "message", attachments: [{ contentType: "application/vnd.microsoft.card.adaptive",
+      content: { $schema: "http://adaptivecards.io/schemas/adaptive-card.json", type: "AdaptiveCard", version: "1.4",
+        body: [{ type: "TextBlock", text: e.TITLE, size: "Large", weight: "Bolder", wrap: true }, { type: "FactSet", facts }] } }] });
+    const u = new URL(url);
+    const req = require(u.protocol === "http:" ? "http" : "https").request(u, { method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) } }, r => { r.resume(); r.on("end", () => process.exit(0)); });
+    req.on("error", () => process.exit(0));
+    req.setTimeout(15000, () => { req.destroy(); process.exit(0); });
+    req.end(body);
+  ' || true
+}
 command -v rsync >/dev/null || { echo "ERROR: rsync not installed (dnf install -y rsync)" >&2; exit 1; }
 mkdir -p "$STATE"
 PREVIOUS=$(cat "$STATE/current" 2>/dev/null || true)
@@ -77,7 +105,11 @@ if [ "$DRY" = 1 ]; then
   log "DRY RUN: $(echo "$CHANGES" | grep -c '^>' || true) files differ, $(echo "$CHANGES" | grep -c '^\*deleting' || true) would be deleted (nothing was changed)"
   echo "what changed (rsync flags: c=content, s=size, t=time; new files show +++++):"
   echo "$CHANGES" | grep '^>' | cut -c1-11 | sort | uniq -c | sort -rn | head -6 || true
-  echo "$CHANGES" | grep '^\*deleting' || true # removals first: review these
+  DELS=$(echo "$CHANGES" | grep '^\*deleting' || true) # removals first: review these
+  echo "deletions by folder (top 10):"
+  echo "$DELS" | awk 'NF{print $2}' | cut -d/ -f1-3 | sort | uniq -c | sort -rn | head -10 || true
+  echo "first 20 deletions:"
+  echo "$DELS" | head -20 || true
   echo "existing files that would be overwritten (content/size differs):"
   echo "$CHANGES" | grep '^>f' | grep -v '^>f+++' | head -40 || true
   echo "directories that do not exist on the instance yet (top two levels):"
@@ -90,6 +122,7 @@ fi
 
 fail() {
   log "FAILED at: $1"
+  notify_teams "❌ Deploy $ID to $ENV_NAME FAILED at: $1${PREVIOUS:+ (rolling back to $PREVIOUS)}"
   if [ "$ROLLBACK" = 1 ] && [ -n "$PREVIOUS" ] && [ "$PREVIOUS" != "$ID" ]; then
     log "rolling back to $PREVIOUS"
     "$0" "$PREVIOUS" --no-rollback || log "ROLLBACK ALSO FAILED - manual intervention needed"
@@ -139,12 +172,16 @@ log "restarting $PM2_NAME"
 pm2 restart "$PM2_NAME" --update-env >/dev/null || fail "pm2 restart"
 wait_healthy || fail "health check after restart"
 
+# The new code is live and healthy: record it now, so a slow or failed plugin import still leaves a rollback target.
+echo "${PREVIOUS:-}" > "$STATE/previous"; echo "$ID" > "$STATE/current"
+
 # Framework plugins live in the DB + temp/, not in the artifact: re-import them from the pinned clone.
 # No ?branch= so the webhook skips its own git step and imports exactly what is checked out. Synchronous.
 log "importing framework plugins"
-curl -fsS -m 900 "http://127.0.0.1:$PORT/api/webhooks/force/frameworkplugins" >/dev/null \
-  || { log "framework plugin import FAILED (code is deployed; not rolling back — a rollback would not undo the DB import)"; exit 1; }
+curl -fsS -m 2400 "http://127.0.0.1:$PORT/api/webhooks/force/frameworkplugins" >/dev/null \
+  || { log "framework plugin import FAILED (code is deployed; not rolling back — a rollback would not undo the DB import)"
+       notify_teams "⚠️ Deploy $ID to $ENV_NAME: code is live, framework plugin import FAILED"; exit 1; }
 wait_healthy || fail "health check after import"
 
-echo "${PREVIOUS:-}" > "$STATE/previous"; echo "$ID" > "$STATE/current"
+notify_teams "✅ Deployed $ID to $ENV_NAME"
 log "OK. Reminder: DB scripts in adapt-build/database-helpers are still manual."
