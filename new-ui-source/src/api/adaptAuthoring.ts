@@ -1148,8 +1148,13 @@ export async function getNavigationSettings(courseId: string): Promise<Navigatio
   };
   const logoFilename = filenameFromLink(d.headerLogo.src);
   if (logoFilename) {
-    const mappings = await getCourseAssetMappings(courseId);
-    d.headerLogo.assetId = mappings[logoFilename];
+    try {
+      const mappings = await getCourseAssetMappings(courseId);
+      d.headerLogo.assetId = mappings[logoFilename];
+    } catch {
+      // Preview metadata is optional. Keep the loaded settings and portable
+      // logo reference even when this lookup fails; never fall back to defaults.
+    }
   }
 
   // Navigation footer extension (enable in config, settings in course)
