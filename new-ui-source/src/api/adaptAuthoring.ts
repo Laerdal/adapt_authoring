@@ -1197,16 +1197,17 @@ export async function saveNavigationSettings(courseId: string, s: NavigationSett
   let logoSrc = s.headerLogo.src.trim();
   let logoAssetId = s.headerLogo.assetId;
   // Repair logos saved by the old picker, including its optional extension suffix.
-  // External URLs deliberately pass through unchanged.
+  // External URLs deliberately pass through unchanged. Disabling must not
+  // depend on the previously selected asset still existing.
   const legacyLogo = logoSrc.match(/^\/?api\/asset\/serve\/([a-f\d]{24})(?:\.[a-z\d]+)?(?:[?#].*)?$/i);
-  if (legacyLogo) {
+  if (s.headerLogo.enabled && legacyLogo) {
     const asset = await apiClient.get<Asset>(`/api/asset/${legacyLogo[1]}`);
     if (!asset.filename) throw new Error("Header logo asset has no filename");
     logoSrc = `course/assets/${asset.filename}`;
     logoAssetId = legacyLogo[1];
   }
   const logoFilename = filenameFromLink(logoSrc);
-  if (logoFilename && logoAssetId) {
+  if (s.headerLogo.enabled && logoFilename && logoAssetId) {
     // writeCourseAssets copies only assets registered in the courseasset join.
     // Link before updating the course so a failed registration cannot save a
     // logo which looks correct in the editor but is missing from the package.
