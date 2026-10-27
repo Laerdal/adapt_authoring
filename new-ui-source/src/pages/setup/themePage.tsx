@@ -1973,7 +1973,6 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           <input type="color" name={`${label}-picker`} aria-label={`${label} picker`} value={/^#[0-9a-f]{6}$/i.test(value) ? value : '#ffffff'} onChange={e => onChange(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" />
         </label>
         <input type="text" name={`${label}-hex`} aria-label={`${label} hex value`} value={value.toUpperCase()} placeholder="Inherit" onChange={e => { const v = e.target.value; if (v === '' || /^#[0-9A-Fa-f]{0,6}$/.test(v)) onChange(v); }} className="text-xs min-w-0 flex-1 border border-[#d1d5db] rounded px-2 py-1 text-[#111827] focus:border-[var(--life-primary-500)] outline-none" />
-        <button type="button" title={`Reset ${label} to inherited/default colour`} onClick={() => onChange('')} className="text-xs text-[#374151] underline">Reset</button>
       </div>
     </div>
   );
