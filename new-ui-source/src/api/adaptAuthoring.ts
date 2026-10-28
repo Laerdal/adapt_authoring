@@ -1044,6 +1044,8 @@ export interface NavigationSettings {
     enabled: boolean;
     src: string;
     tooltip: string;
+    // Editor-only metadata; the course stores src, never the DAM preview URL.
+    assetId?: string;
   };
   navigation: {
     isDefaultNavigationDisabled: boolean;
@@ -1185,6 +1187,16 @@ export async function getNavigationSettings(courseId: string): Promise<Navigatio
     src: str(firstLogo.src),
     tooltip: str(firstLogo.tooltip),
   };
+  const logoFilename = filenameFromLink(d.headerLogo.src);
+  if (logoFilename) {
+    try {
+      const mappings = await getCourseAssetMappings(courseId);
+      d.headerLogo.assetId = mappings[logoFilename];
+    } catch {
+      // Preview metadata is optional. Keep the loaded settings and portable
+      // logo reference even when this lookup fails; never fall back to defaults.
+    }
+  }
 
   // Navigation footer extension (enable in config, settings in course)
   const nfCfg = obj(cfgExt._navigationFooter);
@@ -1222,6 +1234,26 @@ async function resolveExtensionTypeIds(names: string[]): Promise<string[]> {
 export async function saveNavigationSettings(courseId: string, s: NavigationSettings): Promise<void> {
   let course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
   let config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
+
+  let logoSrc = s.headerLogo.src.trim();
+  let logoAssetId = s.headerLogo.assetId;
+  // Repair logos saved by the old picker, including its optional extension suffix.
+  // External URLs deliberately pass through unchanged. Disabling must not
+  // depend on the previously selected asset still existing.
+  const legacyLogo = logoSrc.match(/^\/?api\/asset\/serve\/([a-f\d]{24})(?:\.[a-z\d]+)?(?:[?#].*)?$/i);
+  if (s.headerLogo.enabled && legacyLogo) {
+    const asset = await apiClient.get<Asset>(`/api/asset/${legacyLogo[1]}`);
+    if (!asset.filename) throw new Error("Header logo asset has no filename");
+    logoSrc = `course/assets/${asset.filename}`;
+    logoAssetId = legacyLogo[1];
+  }
+  const logoFilename = filenameFromLink(logoSrc);
+  if (s.headerLogo.enabled && logoFilename && logoAssetId) {
+    // writeCourseAssets copies only assets registered in the courseasset join.
+    // Link before updating the course so a failed registration cannot save a
+    // logo which looks correct in the editor but is missing from the package.
+    await linkContentAsset(courseId, "course", courseId, courseId, logoFilename, logoAssetId);
+  }
 
   // 1. Reconcile plugin installation with the UI toggles:
   //      ON  + not installed → enable  (create + initialize the plugin settings)
@@ -1280,10 +1312,9 @@ export async function saveNavigationSettings(courseId: string, s: NavigationSett
   // 3. Course document: core fields + course-location extension settings.
   const courseExt: AnyRecord = { ...obj(course._extensions) };
   if (hasTopbarLogos) {
-    const src = s.headerLogo.src.trim();
     courseExt._topbarLogos = {
       ...obj(courseExt._topbarLogos),
-      _items: src ? [{ src, tooltip: s.headerLogo.tooltip }] : [],
+      _items: logoSrc ? [{ src: logoSrc, tooltip: s.headerLogo.tooltip }] : [],
     };
   }
   if (hasNavFooter) {

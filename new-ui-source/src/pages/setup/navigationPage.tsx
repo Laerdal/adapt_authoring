@@ -642,7 +642,7 @@ export function NavigationPage({
 
                     {s.headerLogo.src ? (
                       <div className="flex items-center gap-3 p-3 border border-[#e5e7eb] rounded-lg bg-white">
-                        <img src={s.headerLogo.src} alt="logo" className="h-9 max-w-[96px] object-contain rounded" />
+                        <img src={s.headerLogo.assetId ? `/api/asset/serve/${s.headerLogo.assetId}` : s.headerLogo.src} alt="logo" className="h-9 max-w-[96px] object-contain rounded" />
                         <span className="text-[11px] text-[#6b7280] truncate flex-1 min-w-0">{s.headerLogo.src}</span>
                         <div className="shrink-0 flex items-center gap-2">
                           <button
@@ -654,7 +654,7 @@ export function NavigationPage({
                           </button>
                           <button
                             type="button"
-                            onClick={() => setHeaderLogo({ src: "" })}
+                            onClick={() => setHeaderLogo({ src: "", assetId: undefined })}
                             className="text-xs px-2.5 py-1.5 border border-[var(--life-critical-500)] rounded-[8px] text-[var(--life-critical-500)] hover:bg-[var(--life-critical-050)] transition-colors"
                           >
                             Remove
@@ -691,7 +691,7 @@ export function NavigationPage({
                         label={getSchemaLabel(getSchemaNode(headerLogoSchema, "_items", "src"), "External asset URL")}
                         hint={getSchemaHint(getSchemaNode(headerLogoSchema, "_items", "src"))}
                         value={s.headerLogo.src}
-                        onChange={(v) => setHeaderLogo({ src: v })}
+                        onChange={(v) => setHeaderLogo({ src: v, assetId: undefined })}
                         placeholder="https://example.com/logo.png"
                       />
                     )}
@@ -847,8 +847,8 @@ export function NavigationPage({
         <AssetPickerModal
           assetType="image"
           onClose={() => setAssetPickerOpen(false)}
-          onSelect={({ url }) => {
-            setHeaderLogo({ src: url });
+          onSelect={({ assetLink, id }) => {
+            setHeaderLogo({ src: assetLink, assetId: id });
             setExternalOpen(false);
             setAssetPickerOpen(false);
           }}
