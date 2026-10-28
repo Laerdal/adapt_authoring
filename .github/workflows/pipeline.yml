@@ -289,19 +289,19 @@ jobs:
           for s in $st; do [ "$s" = Success ] || { echo "Deploy failed: $st"; exit 1; }; done
 
   # Runs after a successful deploy and NEVER fails the pipeline: every path exits 0 and reports through `result`
-  # (shown in the Teams card). Cosmetic snapshot diffs therefore cannot block anything; QA triages them from the report.
+  # (shown in the Teams card). It dispatches only the @smoke suite (smoke.yml); the full regression stays in QA's own workflows.
   # Needs secret STUDIO_E2E_TOKEN (dispatch + read on the E2E repo); without it the job reports "skipped".
   e2e:
     needs: [resolve, deploy]
     if: needs.deploy.result == 'success' && !inputs.dry_run
     runs-on: ubuntu-22.04
-    timeout-minutes: 90
+    timeout-minutes: 40
     outputs:
       result: ${{ steps.run.outputs.result }}
       url: ${{ steps.run.outputs.url }}
     env:
       E2E_REPO: Laerdal-Medical/adapt-studio-e2e-test
-      E2E_WORKFLOW: playwright.yml
+      E2E_WORKFLOW: smoke.yml
       E2E_REF: main
       GH_TOKEN: ${{ secrets.STUDIO_E2E_TOKEN }}
     steps:
@@ -323,13 +323,13 @@ jobs:
           [ -n "$id" ] || out "could not find the E2E run"
           url="https://github.com/$E2E_REPO/actions/runs/$id"
 
-          for _ in $(seq 1 240); do # up to 80 min
+          for _ in $(seq 1 90); do # up to 30 min (smoke times out at 20 min, plus queueing on the shared DEV instance)
             read -r status conclusion < <(gh run view "$id" --repo "$E2E_REPO" --json status,conclusion \
               --jq '"\(.status) \(.conclusion)"') || true
             [ "${status:-}" = completed ] && break
             sleep 20
           done
-          [ "${status:-}" = completed ] || out "still running after 80 min" "$url"
+          [ "${status:-}" = completed ] || out "still running after 30 min" "$url"
           if [ "$conclusion" = success ]; then out passed "$url"; else out "failed ($conclusion)" "$url"; fi
 
   notify:
@@ -383,8 +383,8 @@ jobs:
                   {title: "framework-plugins", value: $r.framework_plugins_sha[0:7]},
                   {title: "cdn-deploy-cli", value: $r.cdn_cli_sha[0:7]},
                   {title: "Tests (backend/UI)", value: $tests},
-                  {title: "E2E (non-blocking)", value: $e2e},
+                  {title: "Smoke tests (non-blocking)", value: $e2e},
                   {title: "Triggered by", value: $trig}])}],
               actions: ([{type: "Action.OpenUrl", title: "Open run", url: $run}]
-                + (if $e2eurl != "" then [{type: "Action.OpenUrl", title: "E2E report", url: $e2eurl}] else [] end))}}]}' \
+                + (if $e2eurl != "" then [{type: "Action.OpenUrl", title: "Smoke report", url: $e2eurl}] else [] end))}}]}' \
             | curl -fsS -X POST -H 'Content-Type: application/json' -d @- "$URL"
