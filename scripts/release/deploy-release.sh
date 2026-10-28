@@ -175,6 +175,22 @@ wait_healthy || fail "health check after restart"
 # The new code is live and healthy: record it now, so a slow or failed plugin import still leaves a rollback target.
 echo "${PREVIOUS:-}" > "$STATE/previous"; echo "$ID" > "$STATE/current"
 
+# This folder also holds a .git from the old flow. The deploy writes files without moving git's pointer, so a stray
+# `git pull` saw the newer deployed files as "local changes" and refused. Point git at the commit this release was built
+# from (--mixed: only git's pointer and index move, no file is touched). Keeps `git log` = what is deployed. Never fatal.
+align_git() {
+  [ -d "$APP_DIR/.git" ] || return 0
+  local sha err
+  sha=$(node -p "require('$STAGE/manifest.json').repos.adapt_authoring" 2>/dev/null) || return 0
+  if err=$( { timeout 120 git -C "$APP_DIR" fetch origin --quiet && git -C "$APP_DIR" reset --mixed --quiet "$sha"; } 2>&1 ); then
+    log "git on the server now points at ${sha:0:7} (no files touched)"
+  else
+    log "WARN: could not align git to ${sha:0:7}: $err"
+    notify_teams "⚠️ Deploy $ID to $ENV_NAME is live, but git on the server could not be aligned (a git pull there may complain): ${err:0:160}"
+  fi
+}
+align_git
+
 # Framework plugins live in the DB + temp/, not in the artifact: re-import them from the pinned clone.
 # No ?branch= so the webhook skips its own git step and imports exactly what is checked out. Synchronous.
 log "importing framework plugins"

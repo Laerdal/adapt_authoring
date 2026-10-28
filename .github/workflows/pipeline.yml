@@ -221,6 +221,8 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 75
     environment: dev
+    outputs:
+      detail: ${{ steps.ssm.outputs.detail }} # the server's own failure line, shown on the Teams card
     env:
       BUCKET: ${{ vars.RELEASE_BUCKET }}
       RELEASE_ID: ${{ needs.resolve.outputs.release_id }}
@@ -247,10 +249,14 @@ jobs:
           aws s3 cp deploy-release.sh "$P/" --only-show-errors
 
       - name: Deploy to instances tagged app=adapt,env=dev (SSM)
+        id: ssm
         env:
           DRY_FLAG: ${{ inputs.dry_run && ' --dry-run' || '' }}
         run: |
           set -euo pipefail
+          # Whatever happens, hand a one-line reason to the Teams card (overwritten below once the server has answered).
+          DETAIL="the deploy failed before the server answered (see the run log)"
+          trap 'echo "detail=$DETAIL" >> "$GITHUB_OUTPUT"' EXIT
           # deploy-release.sh loads root's nvm itself (SSM shells skip it); only HOME needs setting here
           PARAMS=$(jq -nc --arg b "$BUCKET" --arg id "$RELEASE_ID" --arg flag "$DRY_FLAG" '{commands: [
             "export HOME=/root",
@@ -264,7 +270,10 @@ jobs:
 
           for i in $(seq 1 240); do
             st=$(aws ssm list-command-invocations --command-id "$CMD_ID" --query 'CommandInvocations[].Status' --output text)
-            if [ -z "$st" ] && [ "$i" -gt 8 ]; then echo "No instance matched tags app=adapt,env=dev (or none is Online in SSM)"; exit 1; fi
+            if [ -z "$st" ] && [ "$i" -gt 8 ]; then
+              DETAIL="no instance matched tags app=adapt,env=dev, or none is Online in SSM"
+              echo "$DETAIL"; exit 1
+            fi
             case "$st" in ""|*Pending*|*InProgress*|*Delayed*) sleep 15 ;; *) break ;; esac
           done
 
@@ -272,8 +281,11 @@ jobs:
           for iid in $(aws ssm list-command-invocations --command-id "$CMD_ID" --query 'CommandInvocations[].InstanceId' --output text); do
             echo "===== $iid ====="
             aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$iid" \
-              --query '[Status,StandardOutputContent,StandardErrorContent]' --output text || true
+              --query '[Status,StandardOutputContent,StandardErrorContent]' --output text | tee -a "$RUNNER_TEMP/ssm.out" || true
           done
+          # the server's own reason: its last FAILED/WARN line, else its last status line
+          DETAIL=$(tr -d '\r' < "$RUNNER_TEMP/ssm.out" 2>/dev/null | grep -E 'FAILED|WARN' | tail -1 | cut -c1-220 || true)
+          [ -n "$DETAIL" ] || DETAIL=$(tr -d '\r' < "$RUNNER_TEMP/ssm.out" 2>/dev/null | grep -E '^\[deploy ' | tail -1 | cut -c1-220 || true)
           for s in $st; do [ "$s" = Success ] || { echo "Deploy failed: $st"; exit 1; }; done
 
   # Runs after a successful deploy and NEVER fails the pipeline: every path exits 0 and reports through `result`
@@ -332,6 +344,10 @@ jobs:
           BUILD: ${{ needs.build.result }}
           TESTS: ${{ needs.test-backend.result }}/${{ needs.test-new-ui.result }}
           DEPLOY: ${{ needs.deploy.result }}
+          RESOLVE: ${{ needs.resolve.result }}
+          T_BACKEND: ${{ needs.test-backend.result }}
+          T_UI: ${{ needs.test-new-ui.result }}
+          DETAIL: ${{ needs.deploy.outputs.detail }}
           DRY: ${{ inputs.dry_run }}
           E2E: ${{ needs.e2e.outputs.result || 'not run' }}
           E2E_URL: ${{ needs.e2e.outputs.url }}
@@ -340,17 +356,27 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           [ -n "${URL:-}" ] || { echo "TEAMS_WEBHOOK_URL not set, skipping"; exit 0; }
-          if [ "$BUILD" != success ] || [ "$TESTS" != success/success ] || [ "$DEPLOY" = failure ]; then T="❌ FAILED"
+          # which job(s) failed, by name, for the heading and the "What failed" fact
+          WHAT=""
+          [ "$RESOLVE" = failure ] && WHAT="$WHAT resolve"
+          [ "$BUILD" = failure ] && WHAT="$WHAT build"
+          [ "$T_BACKEND" = failure ] && WHAT="$WHAT test-backend"
+          [ "$T_UI" = failure ] && WHAT="$WHAT test-new-ui"
+          [ "$DEPLOY" = failure ] && WHAT="$WHAT deploy"
+          WHAT=$(echo $WHAT | sed 's/ /, /g')
+          if [ -n "$WHAT" ] || [ "$BUILD" != success ] || [ "$TESTS" != success/success ] || [ "$DEPLOY" = failure ]; then T="❌ FAILED${WHAT:+ ($WHAT)}"
           elif [ "$DEPLOY" = success ] && [ "${DRY:-}" = true ]; then T="🧪 Dry-run OK (instance unchanged)"
           elif [ "$DEPLOY" = success ]; then T="✅ Deployed"
           else T="📦 Built (deploy not run)"; fi
           jq -nc --arg t "$T" --arg run "$RUN_URL" --arg trig "$TRIGGER" --arg tests "$TESTS" --arg e2e "$E2E" --arg e2eurl "$E2E_URL" \
-            --argjson r "$R" '{
+            --arg what "$WHAT" --arg detail "${DETAIL:-}" \
+            --argjson r "$R" '((if $what != "" then [{title: "What failed", value: $what}] else [] end)
+              + (if $what != "" and $detail != "" then [{title: "Reason from the server", value: $detail}] else [] end)) as $extra | {
             type: "message", attachments: [{contentType: "application/vnd.microsoft.card.adaptive", content: {
               "$schema": "http://adaptivecards.io/schemas/adaptive-card.json", type: "AdaptiveCard", version: "1.4",
               body: [
                 {type: "TextBlock", weight: "Bolder", size: "Medium", text: "adapt-pipeline: \($t)"},
-                {type: "FactSet", facts: [
+                {type: "FactSet", facts: ($extra + [
                   {title: "Branch / env", value: "\($r.branch) → \($r.env)"},
                   {title: "Release", value: $r.release_id},
                   {title: "authoring-plugins", value: $r.authoring_plugins_sha[0:7]},
@@ -358,7 +384,7 @@ jobs:
                   {title: "cdn-deploy-cli", value: $r.cdn_cli_sha[0:7]},
                   {title: "Tests (backend/UI)", value: $tests},
                   {title: "E2E (non-blocking)", value: $e2e},
-                  {title: "Triggered by", value: $trig}]}],
+                  {title: "Triggered by", value: $trig}])}],
               actions: ([{type: "Action.OpenUrl", title: "Open run", url: $run}]
                 + (if $e2eurl != "" then [{type: "Action.OpenUrl", title: "E2E report", url: $e2eurl}] else [] end))}}]}' \
             | curl -fsS -X POST -H 'Content-Type: application/json' -d @- "$URL"
