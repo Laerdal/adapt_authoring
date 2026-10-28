@@ -9,6 +9,7 @@ import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 import { ON_SCREEN_CLASS_OPTIONS } from "../../helpers/onScreenSettings";
 import { updateCustomThemeSetting } from "./customThemeSettings";
+import { calcDesktopSizes } from "./customThemeTypography";
 
 // Extracted from SetupPage to keep select-theme feature isolated with no behavior changes.
 
@@ -66,51 +67,6 @@ export const THEME_PREVIEW_INFO = {
   accessibilityText:
     "Colour contrast is automatically checked across navigation elements, menus, notify pop‑ups, and drawers to ensure accessibility compliance. During course preview, text colours may be modified to maintain proper contrast ratios, which can result in slight variations from the initial preview.",
 };
-
-function calcDesktopSizes(baseRem: number) {
-  const MIN_INSTRUCTION_REM = 0.875;
-  const MIN_FONT_STEP_REM = 0.0625;
-  const MIN_PARAGRAPH_REM = MIN_INSTRUCTION_REM + MIN_FONT_STEP_REM;
-
-  const h1Raw = baseRem;
-  const h2Raw = baseRem - 0.5;
-  const h3Raw = baseRem - 1;
-  const h4Raw = baseRem - 1.25;
-  const h5Raw = baseRem - 1.5;
-  const h6Raw = baseRem - 1.75;
-
-  const h6 = Math.max(h6Raw, MIN_PARAGRAPH_REM);
-  const h5 = Math.max(h5Raw, h6 + MIN_FONT_STEP_REM);
-  const h4 = Math.max(h4Raw, h5 + MIN_FONT_STEP_REM);
-  const h3 = Math.max(h3Raw, h4 + MIN_FONT_STEP_REM);
-  const h2 = Math.max(h2Raw, h3 + MIN_FONT_STEP_REM);
-  const h1 = Math.max(h1Raw, h2 + MIN_FONT_STEP_REM);
-  const p = h6;
-
-  const formatSize = (rem: number) => {
-    const px = Math.round(rem * 16);
-    const formatted = rem.toFixed(4).replace(/\.?0+$/, "");
-    return { rem: formatted, px };
-  };
-
-  const h1Size = formatSize(h1);
-  const h2Size = formatSize(h2);
-  const h3Size = formatSize(h3);
-  const h4Size = formatSize(h4);
-  const h5Size = formatSize(h5);
-  const h6Size = formatSize(h6);
-  const pSize = formatSize(p);
-
-  return [
-    { label: "H1 (Topic Title)", size: h1Size.rem, px: h1Size.px },
-    { label: "H2", size: h2Size.rem, px: h2Size.px },
-    { label: "H3", size: h3Size.rem, px: h3Size.px },
-    { label: "H4", size: h4Size.rem, px: h4Size.px },
-    { label: "H5", size: h5Size.rem, px: h5Size.px },
-    { label: "H6", size: h6Size.rem, px: h6Size.px },
-    { label: "Paragraph", size: pSize.rem, px: pSize.px },
-  ];
-}
 
 function DesktopCalculatedValues({ baseRem }: { baseRem: number }) {
   const sizes = calcDesktopSizes(baseRem);
@@ -2008,6 +1964,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     const instructionColor = getCustomSetting('_global', 'instruction-color') || '#1f1f1f';
     const linkColor = getCustomSetting('_global', 'link') || '#2e7fa1';
     const titleSizeRaw = getCustomSetting('_global', 'page-heading-font-size') || '3rem';
+    const [topicSize, articleSize, blockSize, componentSize, , , paragraphSize] = calcDesktopSizes(parseFloat(titleSizeRaw));
     const pageBgColor = getCustomSetting('_pageStructure', 'page-bg-color') || '#f8f8f8';
     const articleBgColor = getCustomSetting('_pageStructure', 'article-bg-color') || 'transparent';
     const blockBgColor = getCustomSetting('_pageStructure', 'block-bg-color') || 'transparent';
@@ -2051,7 +2008,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     const infoPanelHeading = previewDarkMode ? '#ffffff' : '#7A3000';
     const navIconColor = '#ffffff';
     const navTextColor = '#ffffff';
-    const titleSize = titleSizeRaw;
+    const titleSize = `${topicSize.size}rem`;
     const articleTop = spacingScale[articleTopPadding] ?? spacingScale.standard;
     const articleBottom = spacingScale[articleBottomPadding] ?? spacingScale.standard;
     const blockTop = spacingScale[blockTopPadding] ?? spacingScale.standard;
@@ -2136,10 +2093,10 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                   <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: titleSize || '3rem', fontWeight: 700, color: previewDarkMode ? '#ffffff' : pageHeaderTitleColor, lineHeight: 1.2, marginBottom: '2rem' }}>
                     New Topic Title
                   </div>
-                  <div style={{ fontFamily: `${paragraphFont}, sans-serif`, color: previewDarkMode ? textColor : pageHeaderSubtitleColor, fontSize: '0.88rem', lineHeight: 1.45 }}>
+                  <div style={{ fontFamily: `${paragraphFont}, sans-serif`, color: previewDarkMode ? textColor : pageHeaderSubtitleColor, fontSize: `${paragraphSize.size}rem`, lineHeight: 1.45 }}>
                     Topic subtitle
                   </div>
-                  <div style={{ fontFamily: `${paragraphFont}, sans-serif`, color: previewDarkMode ? textColor : pageHeaderBodyColor, fontSize: '0.88rem', marginTop: '1rem' }}>
+                  <div style={{ fontFamily: `${paragraphFont}, sans-serif`, color: previewDarkMode ? textColor : pageHeaderBodyColor, fontSize: `${paragraphSize.size}rem`, marginTop: '1rem' }}>
                     Topic introduction
                   </div>
                   <div style={{ fontFamily: `${paragraphFont}, sans-serif`, color: previewDarkMode ? instructionPreviewColor : pageHeaderInstructionColor, fontSize: '0.82rem', marginTop: '1rem' }}>
@@ -2148,23 +2105,23 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                 </div>
 
                 <div style={{ border: `1px solid ${previewDarkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: '10px', background: articlePreviewBg, padding: `${articleTop}px 12px ${articleBottom}px`, marginTop: '10px' }}>
-                  <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '1rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '1rem' }}>
+                  <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: `${articleSize.size}rem`, fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '1rem' }}>
                     New Article Title
                   </div>
 
                   <div style={{ border: `1px solid ${previewDarkMode ? '#4b5563' : '#9fc9dd'}`, borderRadius: '10px', background: blockPreviewBg, padding: `${blockTop}px 12px ${blockBottom}px`, marginTop: '10px' }}>
-                    <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '0.92rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '1rem' }}>
+                    <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: `${blockSize.size}rem`, fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '1rem' }}>
                       New Block Title
                     </div>
 
                     <div style={{ border: `1px solid ${previewDarkMode ? '#6b7280' : '#d1d5db'}`, borderRadius: '10px', background: componentPreviewBg, padding: '12px', marginTop: '10px', boxShadow: previewDarkMode ? 'none' : '0 1px 2px rgba(0, 0, 0, 0.05)' }}>
-                      <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '0.9rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '1rem' }}>
+                      <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: `${componentSize.size}rem`, fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '1rem' }}>
                         New Component Title
                       </div>
-                      <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', color: textColor, marginBottom: '1rem' }}>
+                      <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: `${paragraphSize.size}rem`, color: textColor, marginBottom: '1rem' }}>
                         Body text
                       </div>
-                      <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.84rem', color: linkColor, textDecoration: 'underline', cursor: 'pointer', marginBottom: '1rem' }}>
+                      <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: `${paragraphSize.size}rem`, color: linkColor, textDecoration: 'underline', cursor: 'pointer', marginBottom: '1rem' }}>
                         This is a sample link
                       </div>
                       <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', color: instructionPreviewColor, fontStyle: 'italic', marginBottom: '1rem' }}>
