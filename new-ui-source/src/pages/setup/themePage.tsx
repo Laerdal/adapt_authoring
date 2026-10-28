@@ -1920,7 +1920,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
   }, [hydrateThemeVariablesIntoEditors, presets, selectedPresetId]);
 
   // Color Picker Component
-  const ColorPickerField = ({ label, hint, value, onChange }: { label: string; hint?: string; value: string; onChange: (v: string) => void }) => (
+  const ColorPickerField = ({ label, hint, value, defaultValue = '', onChange }: { label: string; hint?: string; value: string; defaultValue?: string; onChange: (v: string) => void }) => (
     <div>
       <InfoFieldLabel label={label} hint={hint} className="mb-2" />
       <div className="flex gap-2 items-center">
@@ -1929,6 +1929,9 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           <input type="color" name={`${label}-picker`} aria-label={`${label} picker`} value={/^#[0-9a-f]{6}$/i.test(value) ? value : '#ffffff'} onChange={e => onChange(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" />
         </label>
         <input type="text" name={`${label}-hex`} aria-label={`${label} hex value`} value={value.toUpperCase()} placeholder="Inherit" onChange={e => { const v = e.target.value; if (v === '' || /^#[0-9A-Fa-f]{0,6}$/.test(v)) onChange(v); }} className="text-xs min-w-0 flex-1 border border-[#d1d5db] rounded px-2 py-1 text-[#111827] focus:border-[var(--life-primary-500)] outline-none" />
+        <button type="button" title={`Reset ${label} to inherited/default colour`} aria-label={`Reset ${label} to inherited/default colour`} onClick={() => onChange('')} style={{ display: value.trim().toLowerCase() === defaultValue.trim().toLowerCase() ? 'none' : undefined }} className="inline-flex items-center justify-center p-1 text-xs text-[#374151] hover:text-[var(--life-primary-500)]">
+          <i className="fa fa-undo" aria-hidden="true" />
+        </button>
       </div>
     </div>
   );
@@ -3065,6 +3068,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                                   label={fieldLabel}
                                   hint={hint}
                                   value={value}
+                                  defaultValue={getCustomSettingDefault(key)}
                                   onChange={(nextValue) => setCustomSettingWithDependencies(key, nextValue)}
                                 />
                               );
