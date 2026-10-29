@@ -735,8 +735,7 @@ export const assessmentBlock = createReactBlockSpec(
               ariaLabel="Question body"
               resetKey={block.id}
             />
-          </div>
-          
+          </div>          
 
           <Body kind={kind} data={model} update={update} />
 
