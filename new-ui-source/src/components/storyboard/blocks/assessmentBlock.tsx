@@ -30,7 +30,7 @@ import {
   type McqOption,
 } from '@/types/storyboard';
 
-export const ASSESSMENT_LABELS: Record<AssessmentKind, string> = {
+const LABELS: Record<AssessmentKind, string> = {
   mcq: 'MCQ',
   gmcq: 'Graphic MCQ',
   matching: 'Matching',
@@ -39,6 +39,8 @@ export const ASSESSMENT_LABELS: Record<AssessmentKind, string> = {
   slider: 'Slider',
   checklist: 'Checklist',
 };
+
+export const ASSESSMENT_LABELS = LABELS;
 
 const FOOTER: Record<AssessmentKind, string> = {
   mcq: 'Select one option and then select Submit.',
@@ -103,30 +105,18 @@ function HeaderBtn({ onClick, active, children, title }: { onClick: () => void; 
 
 // ── Feedback group (whole-question) ──────────────────────────────────────────
 
-function FeedbackGroup({ fb, set, issues }: { fb: AssessmentFeedback; set: (f: AssessmentFeedback) => void; issues?: string[] }) {
-  // Only `correct`/`incorrect` are ever required (validateAssessment) — the
-  // other three are attempt-specific refinements, so they get no red marker.
-  const missingCorrect = !!issues?.some((i) => i.includes('feedback for a correct answer'));
-  const missingIncorrect = !!issues?.some((i) => i.includes('feedback for an incorrect answer'));
-  const field = (key: keyof AssessmentFeedback, label: string, required?: boolean) => (
+function FeedbackGroup({ fb, set }: { fb: AssessmentFeedback; set: (f: AssessmentFeedback) => void }) {
+  const field = (key: keyof AssessmentFeedback, label: string) => (
     <label className="mt-1 block">
-      <span className={labelCls}>
-        {label}
-        {required && <span className="ml-0.5 font-bold text-red-600">*</span>}
-      </span>
-      <input
-        value={fb[key]}
-        onKeyDown={stop}
-        onChange={(e) => set({ ...fb, [key]: e.target.value })}
-        className={required ? `${inputCls} border-red-500 focus:border-red-500` : inputCls}
-      />
+      <span className={labelCls}>{label}</span>
+      <input value={fb[key]} onKeyDown={stop} onChange={(e) => set({ ...fb, [key]: e.target.value })} className={inputCls} />
     </label>
   );
   return (
     <div className="mt-2 rounded border border-border p-2">
       <div className={labelCls}>Feedback</div>
-      {field('correct', 'Correct', missingCorrect)}
-      {field('incorrect', 'Incorrect', missingIncorrect)}
+      {field('correct', 'Correct')}
+      {field('incorrect', 'Incorrect')}
       {field('incorrectNotFinal', 'Incorrect — not final')}
       {field('partlyCorrectFinal', 'Partly correct — final')}
       {field('partlyCorrectNotFinal', 'Partly correct — not final')}
@@ -524,7 +514,7 @@ export const assessmentBlock = createReactBlockSpec(
       // AI wiring: Replace overwrites the question, Insert appends to it.
       const openAi = () => {
         storyboardActions.openAi({
-          initialText: plainText(model.question || title || ASSESSMENT_LABELS[kind]),
+          initialText: plainText(model.question || title || LABELS[kind]),
           onReplace: (text) => update({ ...model, question: text }),
           onInsert: (text) => update({ ...model, question: model.question ? `${model.question}\n\n${text}` : text }),
         });
@@ -569,7 +559,7 @@ export const assessmentBlock = createReactBlockSpec(
           >
             <div className="mb-2 flex items-center gap-2">
               <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                {ASSESSMENT_LABELS[kind]}
+                {LABELS[kind]}
               </span>
               <span className="truncate text-base font-semibold text-foreground">
                 {headerText}
@@ -707,9 +697,9 @@ export const assessmentBlock = createReactBlockSpec(
           {/* Header */}
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              {ASSESSMENT_LABELS[kind]}
+              {LABELS[kind]}
             </span>
-            <input value={title} placeholder={`${ASSESSMENT_LABELS[kind]} title`} onKeyDown={stop} onChange={(e) => setTitle(e.target.value)} className="min-w-0 flex-1 border-0 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground" />
+            <input value={title} placeholder={`${LABELS[kind]} title`} onKeyDown={stop} onChange={(e) => setTitle(e.target.value)} className="min-w-0 flex-1 border-0 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground" />
             <HeaderBtn onClick={() => update({ ...model, showTitle: !model.showTitle })} active={model.showTitle} title="Show the title to learners">
               <Check className="h-3 w-3" /> Show title
             </HeaderBtn>
@@ -718,12 +708,9 @@ export const assessmentBlock = createReactBlockSpec(
             </HeaderBtn>
             <HeaderBtn
               onClick={() => {
-                // Comments only ever live at Page/Article level (never
-                // Block/Component) — resolve to the enclosing heading rather
-                // than this question's own block id.
                 const anchor = resolveCommentAnchor(editor.document, block.id);
                 if (!anchor) return;
-                storyboardActions.openComment({ blockId: anchor.id, label: `${anchor.text || 'Untitled'} · ${ASSESSMENT_LABELS[kind].toUpperCase()}` });
+                storyboardActions.openComment({ blockId: anchor.id, label: `${anchor.text || 'Untitled'} · ${LABELS[kind].toUpperCase()}` });
               }}
               title="Comment on this question"
             >
@@ -748,8 +735,7 @@ export const assessmentBlock = createReactBlockSpec(
               ariaLabel="Question body"
               resetKey={block.id}
             />
-          </div>
-
+          </div>          
 
           <Body kind={kind} data={model} update={update} />
 
@@ -767,11 +753,23 @@ export const assessmentBlock = createReactBlockSpec(
             </div>
           </div>
 
-          <FeedbackGroup fb={fb} set={(f) => update({ ...model, feedback: f })} issues={issues} />
+          <label className="mt-2 block">
+            <span className={labelCls}>Attempts allowed</span>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              value={model.attempts ?? 1}
+              onKeyDown={stop}
+              onChange={(event) => update({ ...model, attempts: Number(event.target.value) })}
+              className={inputCls}
+            />
+          </label>
+
+          <FeedbackGroup fb={fb} set={(f) => update({ ...model, feedback: f })} />
 
           {/* Footer + readiness */}
           <div className="mt-2">
-            <p className="mt-3">{renderInstructionHtml(model, kind)}</p>
             {issues.length > 0 && (
               <div className="mt-2 space-y-1 rounded-md border border-[#fee2e2] bg-[#fef2f2] p-2">
                 {issues.map((issue, i) => (

@@ -16,6 +16,7 @@ import { CourseOverviewPage } from "./setup/courseOverviewPage";
 import { SaveChangesButton } from "./setup/SaveChangesButton";
 import { SaveStatusToast } from "./setup/SaveStatusToast";
 import SelectThemePage from "./setup/themePage";
+import { calcDesktopSizes } from "./setup/customThemeTypography";
 import { MenuPage } from "./setup/menuPage";
 import { NavigationPage } from "./setup/navigationPage";
 import { AccessibilityPage } from "./setup/accessibilityPage";
@@ -421,6 +422,7 @@ function CourseStructurePanel({
   courseTitle,
   onOpenEditor,
   onOpenStoryboard,
+  onOpenCourseEditor,
   onNavigationRequest,
   pendingNavigation,
   onPendingNavigationHandled,
@@ -429,6 +431,7 @@ function CourseStructurePanel({
   courseTitle: string;
   onOpenEditor: (topicId: string) => void;
   onOpenStoryboard: () => void;
+  onOpenCourseEditor: () => void;
   onNavigationRequest?: (nav: string) => void;
   pendingNavigation?: string | null;
   onPendingNavigationHandled?: () => void;
@@ -622,21 +625,31 @@ function CourseStructurePanel({
               <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
             </svg>
             <div>
-              <p className="text-sm font-semibold text-[#111827]">Your structure is ready</p>
+              <p className="text-sm font-semibold text-[#111827]">Course structure created</p>
               <p className="text-sm text-[#5b7c93] mt-1">
-                Open Storyboard to review and refine the content flow, or select a topic to continue building in the
-                Page Editor with content, layouts, interactions, and learner experience settings.
+                <strong>Storyboard</strong> — Plan ideas, content, and learning flow.
+                <span className="mt-1 block"><strong>Course Editor</strong> — Build pages, layouts, components, and interactions.</span>
+                <span className="mt-1 block">You can continue updating course settings such as themes, menus, navigation, and accessibility options from this page whenever needed.</span>
               </p>
-              <button
-                type="button"
-                onClick={onOpenStoryboard}
-                className="mt-3 inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] rounded-lg hover:bg-[#255d8f] transition-colors"
-              >
-                Open Storyboard
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
-                </svg>
-              </button>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={onOpenStoryboard}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] rounded-lg hover:bg-[#255d8f] transition-colors"
+                >
+                  Open Storyboard
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={onOpenCourseEditor}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-[#1f2937] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors"
+                >
+                  Open Course Editor
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -913,40 +926,10 @@ function GlobalThemeSection({ cfg, setCfg }: { cfg: CustomThemeValues; setCfg: (
     const base = cfg.pageTitleSize === "h6" ? null : parseFloat(cfg.pageTitleSize);
     if (!base) return null;
 
-    const MIN_INSTRUCTION_REM = 0.875;
-    const MIN_FONT_STEP_REM = 0.0625;
-    const MIN_PARAGRAPH_REM = MIN_INSTRUCTION_REM + MIN_FONT_STEP_REM;
-
-    const h1Raw = base;
-    const h2Raw = base - 0.5;
-    const h3Raw = base - 1;
-    const h4Raw = base - 1.25;
-    const h5Raw = base - 1.5;
-    const h6Raw = base - 1.75;
-
-    const h6 = Math.max(h6Raw, MIN_PARAGRAPH_REM);
-    const h5 = Math.max(h5Raw, h6 + MIN_FONT_STEP_REM);
-    const h4 = Math.max(h4Raw, h5 + MIN_FONT_STEP_REM);
-    const h3 = Math.max(h3Raw, h4 + MIN_FONT_STEP_REM);
-    const h2 = Math.max(h2Raw, h3 + MIN_FONT_STEP_REM);
-    const h1 = Math.max(h1Raw, h2 + MIN_FONT_STEP_REM);
-    const p = h6;
-
-    const formatSize = (rem: number) => {
-      const px = Math.round(rem * 16);
-      const formatted = rem.toFixed(4).replace(/\.?0+$/, "");
-      return `${formatted}rem (${px}px)`;
-    };
-
-    return [
-      { label: "H1 (Page Title)", value: formatSize(h1) },
-      { label: "H2", value: formatSize(h2) },
-      { label: "H3", value: formatSize(h3) },
-      { label: "H4", value: formatSize(h4) },
-      { label: "H5", value: formatSize(h5) },
-      { label: "H6", value: formatSize(h6) },
-      { label: "Paragraph", value: formatSize(p) },
-    ];
+    return calcDesktopSizes(base).map(({ label, size, px }) => ({
+      label,
+      value: `${size}rem (${px}px)`,
+    }));
   };
 
   const sizes = calcSizes();
@@ -2729,6 +2712,7 @@ function CourseCreationCenterContent() {
   const [savedThemeName, setSavedThemeName] = useState("");
   const [savedMenuName, setSavedMenuName] = useState("");
   const [savedThemeVariables, setSavedThemeVariables] = useState<Record<string, unknown>>({});
+  const [savedThemeSettings, setSavedThemeSettings] = useState<Record<string, unknown>>({});
   const [savedPresetId, setSavedPresetId] = useState("");
 
   // canExportCourse depends on `user`, which AuthContext fetches asynchronously
@@ -2775,6 +2759,7 @@ function CourseCreationCenterContent() {
       setSavedThemeName("");
       setSavedMenuName("");
       setSavedThemeVariables({});
+      setSavedThemeSettings({});
       setSavedPresetId("");
       return;
     }
@@ -2784,11 +2769,13 @@ function CourseCreationCenterContent() {
       try {
         const data = await getCourseBootstrapData(courseId);
         if (cancelled) return;
+        const nextDescription = data.body || initialDescription;
         setTitle(data.displayTitle || data.title || initialTitle);
-        setDescription(data.description || initialDescription);
+        setDescription(nextDescription);
         setSavedThemeName(data.themeName || "");
         setSavedMenuName(data.menuName || "");
         setSavedThemeVariables(data.themeVariables || {});
+        setSavedThemeSettings(data.themeSettings || {});
         setSavedPresetId(data.themePresetId || "");
       } catch {
         if (cancelled) return;
@@ -2797,6 +2784,7 @@ function CourseCreationCenterContent() {
         setSavedThemeName("");
         setSavedMenuName("");
         setSavedThemeVariables({});
+        setSavedThemeSettings({});
         setSavedPresetId("");
       }
     })();
@@ -2932,13 +2920,14 @@ function CourseCreationCenterContent() {
             courseTitle={title}
             onOpenEditor={(pageId) => requestGuardedAction(() => openEditor(pageId))}
             onOpenStoryboard={() => handleNavigation("storyboarding")}
+            onOpenCourseEditor={() => requestGuardedAction(() => openEditor())}
             onNavigationRequest={performNavigation}
             pendingNavigation={pendingNavigation}
             onPendingNavigationHandled={() => setPendingNavigation(null)}
           />
         );
       case "theme":
-        return <SelectThemePage initialThemeName={savedThemeName} initialThemeVariables={savedThemeVariables} initialPresetId={savedPresetId} courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} onThemeSaved={({ themeName, themeVariables, themePresetId }) => { setSavedThemeName(themeName); setSavedThemeVariables(themeVariables); setSavedPresetId(themePresetId); }} />;
+        return <SelectThemePage initialThemeName={savedThemeName} initialThemeVariables={savedThemeVariables} initialThemeSettings={savedThemeSettings} initialPresetId={savedPresetId} courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} onThemeSaved={({ themeName, themeVariables, themeSettings, themePresetId }) => { setSavedThemeName(themeName); setSavedThemeVariables(themeVariables); setSavedThemeSettings(themeSettings); setSavedPresetId(themePresetId); }} />;
       case "menu":
         return <MenuPage courseId={courseId} initialMenuName={savedMenuName} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
       case "navigation":

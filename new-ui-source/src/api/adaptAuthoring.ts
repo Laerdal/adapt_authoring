@@ -4,6 +4,7 @@
 // keep engine-specific endpoint knowledge here, not in the pages.
 
 import { apiClient } from "./client";
+import { stripHtmlToText } from "@/utils/format";
 import type { ImportResult } from "../types/storyboardImport";
 import {
   buildGraphicField,
@@ -15,6 +16,7 @@ import {
   imageFromMediaPoster,
   LAERDAL_MEDIA_COMPONENT,
   mediaFromComponent,
+  mediaAssetRefs,
   mergeProperties,
   normalizeLaerdalMedia,
   resolveAssetUrl,
@@ -29,7 +31,7 @@ import {
   storyboardLabel,
 } from "@/components/storyboard/placeholderTitles";
 import { reverseKind, isAssessmentComponentKind } from "./componentMapping";
-import { parseAssessmentData, buildAssessmentFields, emptyFeedback, type AssessmentKind, type AssessmentData } from "@/types/storyboard";
+import { parseAssessmentData, buildAssessmentFields, type AssessmentKind, type AssessmentData } from "@/types/storyboard";
 export {
   TRACKING_ANALYTICS_EXTENSION_NAME_BY_KEY,
   defaultTrackingAnalyticsSettings,
@@ -271,6 +273,7 @@ export interface DashboardCourse {
   id: number;
   backendId: string;
   title: string;
+  body: string;
   description: string;
   savedDate: string;
   savedDateTs: number;
@@ -285,6 +288,7 @@ interface EngineCourse {
   _id: string;
   title?: string;
   displayTitle?: string;
+  body?: string;
   description?: string;
   heroImage?: string | null;
   updatedAt?: string;
@@ -324,6 +328,13 @@ function courseAuthorName(createdBy: EngineCourse["createdBy"]): string | null {
   return matchedName?.trim() || null;
 }
 
+export function getCourseSummaryDescription(doc: Pick<EngineCourse, "body" | "description">): string {
+  const bodyText = typeof doc.body === "string" ? stripHtmlToText(doc.body) : "";
+  if (bodyText) return bodyText;
+  const metadataText = typeof doc.description === "string" ? stripHtmlToText(doc.description) : "";
+  return metadataText;
+}
+
 function toDashboardCourse(doc: EngineCourse, index: number): DashboardCourse {
   const ts = doc.updatedAt ? new Date(doc.updatedAt).getTime() : 0;
   const heroAssetId = doc.heroImage && OBJECT_ID.test(doc.heroImage) ? doc.heroImage : null;
@@ -331,7 +342,8 @@ function toDashboardCourse(doc: EngineCourse, index: number): DashboardCourse {
     id: index + 1,
     backendId: doc._id,
     title: doc.displayTitle?.trim() || doc.title?.trim() || "Untitled Course",
-    description: doc.description || "",
+    body: typeof doc.body === "string" ? doc.body : "",
+    description: getCourseSummaryDescription(doc),
     savedDate: ts
       ? new Date(ts).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
       : "",
@@ -397,7 +409,9 @@ export async function fetchDashboardCourses(
     }
   }
   const term = query.search?.trim();
-  if (term) params.set("search[title]", escapeRegExp(term)); // title search
+  if (term) {
+    params.set("search[displayTitle]", escapeRegExp(term)); // displayTitle search
+  }
   for (const tagId of query.tags ?? []) {
     params.append("search[tags][$all][]", tagId);
   }
@@ -508,6 +522,23 @@ export async function updateCourse(
   return coursePromise;
 }
 
+/** Grant selected users course access without removing existing collaborators. */
+export async function addCourseCollaborators(courseId: string, userIds: string[]): Promise<void> {
+  const requested = [...new Set(userIds.filter((id) => typeof id === "string" && id.length > 0))];
+  if (!requested.length) return;
+
+  const course = await apiClient.get<Pick<EngineCourseDetails, "_isShared" | "_shareWithUsers">>(
+    `/api/content/course/${courseId}`
+  );
+  if (course._isShared) return;
+
+  const current = Array.isArray(course._shareWithUsers) ? course._shareWithUsers : [];
+  const combined = [...new Set([...current, ...requested])];
+  if (combined.length === current.length && combined.every((id) => current.includes(id))) return;
+
+  await updateCourse(courseId, { shareWithUserIds: combined });
+}
+
 export function duplicateCourse(backendId: string): Promise<unknown> {
   return apiClient.get(`/api/duplicatecourse/${backendId}`);
 }
@@ -568,6 +599,7 @@ interface EngineCourseDetails {
   _isShared?: boolean;
   _shareWithUsers?: string[];
   themeVariables?: Record<string, unknown>;
+  themeSettings?: Record<string, Record<string, unknown>>;
   _themePreset?: string;
   menuSettings?: CourseMenuSettings;
 }
@@ -602,6 +634,7 @@ export interface CourseBootstrapData {
   themeName: string;
   menuName: string;
   themeVariables: Record<string, unknown>;
+  themeSettings: Record<string, unknown>;
   themePresetId: string;
   language: string;
 }
@@ -766,9 +799,28 @@ export async function getThemePresetParentTheme(themeLabel: string): Promise<str
 
 export async function saveThemeVariables(
   courseId: string,
-  themeVariables: Record<string, unknown>
+  themeVariables: Record<string, unknown>,
+  onScreen?: Record<string, unknown>
 ): Promise<void> {
-  await apiClient.put(`/api/content/course/${courseId}`, { themeVariables });
+  const variables = { ...themeVariables };
+  delete variables._onScreen;
+  const patch: Record<string, unknown> = { themeVariables: variables };
+  if (onScreen) {
+    const [course, config, schemas] = await Promise.all([
+      apiClient.get<EngineCourseDetails>(`/api/content/course/${courseId}`),
+      apiClient.get<EngineConfigDetails>(`/api/content/config/${courseId}`),
+      getThemeSettingsSchemaByLevel(),
+    ]);
+    const key = findAppliedPluginSchemaKey(schemas.course, config._theme ?? "");
+    if (!key || !schemas.course[key].properties?._onScreen) {
+      throw new Error("The selected theme does not support global On Screen Classes.");
+    }
+    patch.themeSettings = {
+      ...course.themeSettings,
+      [key]: { ...course.themeSettings?.[key], _onScreen: onScreen },
+    };
+  }
+  await apiClient.put(`/api/content/course/${courseId}`, patch);
 }
 
 export async function getThemePresets(parentTheme?: string): Promise<ThemePreset[]> {
@@ -873,9 +925,10 @@ export function getCourseBodyValue(course: Pick<EngineCourseDetails, "body"> | n
 }
 
 export async function getCourseBootstrapData(courseId: string): Promise<CourseBootstrapData> {
-  const [course, config] = await Promise.all([
+  const [course, config, schemas] = await Promise.all([
       apiClient.get<EngineCourseDetails>(`/api/content/course/${courseId}`),
       apiClient.get<EngineConfigDetails>(`/api/content/config/${courseId}`),
+      getThemeSettingsSchemaByLevel(),
   ]);
 
   const rawHero = course.heroImage ?? null;
@@ -887,6 +940,7 @@ export async function getCourseBootstrapData(courseId: string): Promise<CourseBo
     : [];
   const body = getCourseBodyValue(course);
   const description = (course.description ?? "").trim();
+  const themeSettingsKey = findAppliedPluginSchemaKey(schemas.course, config._theme ?? "");
 
   return {
     courseId,
@@ -905,6 +959,7 @@ export async function getCourseBootstrapData(courseId: string): Promise<CourseBo
     themeName: config._theme || "",
     menuName: config._menu || "",
     themeVariables: (course.themeVariables as Record<string, unknown>) || {},
+    themeSettings: themeSettingsKey ? course.themeSettings?.[themeSettingsKey] ?? {} : {},
     themePresetId: config._themePreset || "",
     language: config._defaultLanguage || "",
   };
@@ -989,6 +1044,8 @@ export interface NavigationSettings {
     enabled: boolean;
     src: string;
     tooltip: string;
+    // Editor-only metadata; the course stores src, never the DAM preview URL.
+    assetId?: string;
   };
   navigation: {
     isDefaultNavigationDisabled: boolean;
@@ -1044,6 +1101,11 @@ export function defaultNavigationSettings(): NavigationSettings {
       buttons: defaultFooterButtons(),
     },
   };
+}
+
+export function createDefaultStartPageSelection(pages: CoursePageOption[]): NavStartId[] {
+  if (!pages.length) return [];
+  return [{ _id: pages[0].id, _skipIfComplete: false, _className: "" }];
 }
 
 // Pages (page-type contentobjects) for the Start-page picker.
@@ -1125,6 +1187,16 @@ export async function getNavigationSettings(courseId: string): Promise<Navigatio
     src: str(firstLogo.src),
     tooltip: str(firstLogo.tooltip),
   };
+  const logoFilename = filenameFromLink(d.headerLogo.src);
+  if (logoFilename) {
+    try {
+      const mappings = await getCourseAssetMappings(courseId);
+      d.headerLogo.assetId = mappings[logoFilename];
+    } catch {
+      // Preview metadata is optional. Keep the loaded settings and portable
+      // logo reference even when this lookup fails; never fall back to defaults.
+    }
+  }
 
   // Navigation footer extension (enable in config, settings in course)
   const nfCfg = obj(cfgExt._navigationFooter);
@@ -1162,6 +1234,26 @@ async function resolveExtensionTypeIds(names: string[]): Promise<string[]> {
 export async function saveNavigationSettings(courseId: string, s: NavigationSettings): Promise<void> {
   let course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
   let config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
+
+  let logoSrc = s.headerLogo.src.trim();
+  let logoAssetId = s.headerLogo.assetId;
+  // Repair logos saved by the old picker, including its optional extension suffix.
+  // External URLs deliberately pass through unchanged. Disabling must not
+  // depend on the previously selected asset still existing.
+  const legacyLogo = logoSrc.match(/^\/?api\/asset\/serve\/([a-f\d]{24})(?:\.[a-z\d]+)?(?:[?#].*)?$/i);
+  if (s.headerLogo.enabled && legacyLogo) {
+    const asset = await apiClient.get<Asset>(`/api/asset/${legacyLogo[1]}`);
+    if (!asset.filename) throw new Error("Header logo asset has no filename");
+    logoSrc = `course/assets/${asset.filename}`;
+    logoAssetId = legacyLogo[1];
+  }
+  const logoFilename = filenameFromLink(logoSrc);
+  if (s.headerLogo.enabled && logoFilename && logoAssetId) {
+    // writeCourseAssets copies only assets registered in the courseasset join.
+    // Link before updating the course so a failed registration cannot save a
+    // logo which looks correct in the editor but is missing from the package.
+    await linkContentAsset(courseId, "course", courseId, courseId, logoFilename, logoAssetId);
+  }
 
   // 1. Reconcile plugin installation with the UI toggles:
   //      ON  + not installed → enable  (create + initialize the plugin settings)
@@ -1220,10 +1312,9 @@ export async function saveNavigationSettings(courseId: string, s: NavigationSett
   // 3. Course document: core fields + course-location extension settings.
   const courseExt: AnyRecord = { ...obj(course._extensions) };
   if (hasTopbarLogos) {
-    const src = s.headerLogo.src.trim();
     courseExt._topbarLogos = {
       ...obj(courseExt._topbarLogos),
-      _items: src ? [{ src, tooltip: s.headerLogo.tooltip }] : [],
+      _items: logoSrc ? [{ src: logoSrc, tooltip: s.headerLogo.tooltip }] : [],
     };
   }
   if (hasNavFooter) {
@@ -3250,34 +3341,18 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
     });
   };
   const emitTopic = (page: EngineContentNode) => {
-    // Structure headings always appear, exactly like Editor Mode's Structure
-    // panel — including a still-unrenamed default node's placeholder title
-    // ("New Topic Title" etc). Editor Mode never hides these (getCourseStructure
-    // above uses the raw title unconditionally), and hiding them here made the
-    // Storyboard document (and its Contents/TOC) look empty for any freshly
-    // created Topic/Section/Content Group, even though the structure exists.
-    // Word/PDF export has its OWN independent placeholder filter
-    // (documentConvert.js::DEFAULT_PLACEHOLDER_TITLES) so suppressing them
-    // here too was redundant for that concern.
-    const rawLabel = (n: EngineContentNode): string => (n.displayTitle || n.title || "").trim() || "Untitled";
-    const topicTitle = rawLabel(page);
+    const topicTitle = label(page);
     out.push({ id: page._id, type: "heading", props: { level: 1 }, content: topicTitle });
     for (const article of childrenOf(articles, page._id)) {
-      const articleTitle = rawLabel(article);
+      const articleTitle = label(article);
       out.push({ id: article._id, type: "heading", props: { level: 2 }, content: articleTitle });
-      // The generation engine caps each Adapt block at 2 components — extra
-      // components are placed in continuation blocks that carry the SAME H3
-      // title. When we round-trip the course, those continuation blocks would
-      // appear as duplicate H3 headings in the Storyboard (and duplicate again
-      // on the next Save/Generate). Merge adjacent same-title H3 blocks so the
-      // Storyboard shows one H3 with all its components in their original order.
-      let prevTitle: string | null = null;
+      // Each Adapt block is a real Content Group with its own identity. Keep
+      // every heading, even when sibling groups share a title: generation
+      // uses these ids to update the existing structure instead of creating
+      // replacement groups for items whose ids were collapsed here.
       for (const blk of childrenOf(blocks, article._id)) {
-        const title = rawLabel(blk);
-        if (title !== prevTitle) {
-          out.push({ id: blk._id, type: "heading", props: { level: 3 }, content: title });
-          prevTitle = title;
-        }
+        const title = label(blk);
+        out.push({ id: blk._id, type: "heading", props: { level: 3 }, content: title });
         for (const comp of childrenOf(components, blk._id)) emitComponent(comp);
       }
     }
@@ -3344,8 +3419,7 @@ export async function saveStoryboardToCourse(
   let updatedBodies = 0;
   let unmapped = 0;
   const tasks: Promise<unknown>[] = [];
-  let needsTutorExtension = false;
-  let needsAnswerSpecificFeedbackExtension = false;
+  const hasQuestions = (doc as Array<{ type?: string }>).some((block) => block.type === "sbAssessment");
 
   for (const component of components) {
     if (component._component !== LAERDAL_MEDIA_COMPONENT) continue;
@@ -3475,8 +3549,9 @@ export async function saveStoryboardToCourse(
         seedProperties();
         const originalMedia = (info.properties?._media as Record<string, unknown> | undefined) || {};
         mergeProperties(patch, buildMediaField(kind, parsed.media, originalMedia));
-        assetLink = parsed.media?.asset?.link;
-        assetId = parsed.media?.asset?.assetId;
+        for (const asset of mediaAssetRefs(parsed.media)) {
+          tasks.push(linkContentAsset(courseId, "component", id, info.parentId || "", filenameFromLink(asset.link), asset.assetId!));
+        }
         patch.body = parsed.description || "";
         mergeProperties(patch, { instruction: parsed.instruction || "" });
       } else if (kind === "groupedContent" && isGrouped) {
@@ -3664,18 +3739,6 @@ export async function saveStoryboardToCourse(
         const alreadyHtmlQuestion = rawQuestion.startsWith("<");
         patch.body = !rawQuestion ? "" : alreadyHtmlQuestion ? rawQuestion : `<p>${escapeHtml(rawQuestion)}</p>`;
         const assessmentFields = buildAssessmentFields(kind as AssessmentKind, data);
-        const hasTutorFeedback = Object.values(data.feedback ?? emptyFeedback()).some(
-          (value) => typeof value === "string" && value.trim().length > 0
-        );
-        const hasAnswerSpecificFeedback = Array.isArray(data.options) && data.options.some(
-          (option) => typeof option?.feedback === "string" && option.feedback.trim().length > 0
-        );
-        if (hasTutorFeedback) {
-          needsTutorExtension = true;
-        }
-        if (hasAnswerSpecificFeedback) {
-          needsAnswerSpecificFeedbackExtension = true;
-        }
         if (Object.keys(assessmentFields).length || data.instruction !== undefined) {
           // Seed from live properties first — same reasoning as the
           // sbComponent branch above (ADAPT-3760 properties-wipe fix).
@@ -3694,12 +3757,7 @@ export async function saveStoryboardToCourse(
     }
   }
 
-  tasks.push(
-    syncQuestionFeedbackExtensions(courseId, {
-      tutor: needsTutorExtension,
-      answerSpecificFeedback: needsAnswerSpecificFeedbackExtension,
-    })
-  );
+  if (hasQuestions) tasks.push(ensureQuestionFeedbackExtensions(courseId));
 
   await Promise.all(tasks);
   return { updatedTitles, updatedBodies, unmapped };
@@ -3708,23 +3766,11 @@ export async function saveStoryboardToCourse(
 const TUTOR_EXTENSION_NAME = "adapt-contrib-tutor";
 const ANSWER_SPECIFIC_FEEDBACK_EXTENSION_NAME = "adapt-answer-specific-feedback";
 
-async function syncQuestionFeedbackExtensions(
-  courseId: string,
-  requirements: { tutor: boolean; answerSpecificFeedback: boolean }
-): Promise<void> {
+export async function ensureQuestionFeedbackExtensions(courseId: string): Promise<void> {
   await seedMissingCourseDefaults(courseId);
   const config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
-  const desiredStates = [
-    { name: TUTOR_EXTENSION_NAME, shouldEnable: requirements.tutor },
-    { name: ANSWER_SPECIFIC_FEEDBACK_EXTENSION_NAME, shouldEnable: requirements.answerSpecificFeedback },
-  ];
-
-  const toEnable = desiredStates
-    .filter((extension) => extension.shouldEnable && !isExtensionInstalledByName(config, extension.name))
-    .map((extension) => extension.name);
-  const toDisable = desiredStates
-    .filter((extension) => !extension.shouldEnable && isExtensionInstalledByName(config, extension.name))
-    .map((extension) => extension.name);
+  const toEnable = [TUTOR_EXTENSION_NAME, ANSWER_SPECIFIC_FEEDBACK_EXTENSION_NAME]
+    .filter((name) => !isExtensionInstalledByName(config, name));
 
   if (toEnable.length) {
     const ids = await resolveExtensionTypeIdsByNames(toEnable);
@@ -3733,12 +3779,6 @@ async function syncQuestionFeedbackExtensions(
     }
   }
 
-  if (toDisable.length) {
-    const ids = await resolveExtensionTypeIdsByNames(toDisable);
-    if (ids.length) {
-      await apiClient.post(`/api/extension/disable/${courseId}`, { extensions: ids });
-    }
-  }
 }
 
 // ── Component types (Add Component drawer) ──────────────────────────────────
@@ -5171,10 +5211,14 @@ export interface DashboardTemplate {
   description: string;
   timestamp: Date;
   author: string;
+  isShared: boolean;
+  shareWithUsers: string[];
 }
 
 interface EngineTemplate {
   _id: string;
+  _isShared?: boolean;
+  _shareWithUsers?: string[];
   title?: string;
   displayName?: string;
   name?: string;
@@ -5204,6 +5248,8 @@ export async function getTemplates(
     description: t.description || "",
     timestamp: new Date(t.updatedAt || t.createdAt || 0),
     author: t.author || "",
+    isShared: !!t._isShared,
+    shareWithUsers: t._shareWithUsers || [],
   }));
 }
 
@@ -5211,7 +5257,7 @@ export async function getTemplates(
 // { title, description } to the templating content endpoint.
 export function updateTemplate(
   backendId: string,
-  patch: { title?: string; description?: string }
+  patch: { title?: string; description?: string; _isShared?: boolean; _shareWithUsers?: string[] }
 ): Promise<unknown> {
   return apiClient.put(`/api/content/templating/${backendId}`, patch);
 }
@@ -5404,10 +5450,18 @@ export async function getAssets(options: AssetQueryOptions = {}): Promise<AssetP
     params.append("search[filename]", text);
   }
   if (format && format !== "All") {
-    if (format === "other") {
+    if (format === "other" && aiTutorCourseId) {
+      // Match the classic AI Tutor picker only: the scaffold field is Asset:other and
+      // the old UI sends search.assetType={$in:['other']} together with aiTutorCourseId.
+      // Keep that behavior scoped to AI Tutor so normal "other files" flows continue to
+      // use the broader mime-based document bucket they already relied on.
+      params.append("search[assetType][$in][]", "other");
+    }
+    else if (format === "other") {
       params.append("search[mimeType][$not][$regex]", "image|audio|video");
       params.append("search[mimeType][$not][$options]", "i");
-    } else {
+    }
+    else {
       params.append("search[mimeType][$regex]", format);
       params.append("search[mimeType][$options]", "i");
     }

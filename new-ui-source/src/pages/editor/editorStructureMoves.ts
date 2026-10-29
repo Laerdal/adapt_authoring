@@ -1,6 +1,34 @@
-import type { CourseStructure, SModule, STopic } from '../../types/structure';
+import type { CourseStructure, SModule, STopic, StructureLevel } from '../../types/structure';
 import { mergedChildren } from '../../types/structure';
+import { flattenStructure } from '../../hooks/useCourseStructure';
 import type { ContentPageData } from './pageEditorWorkspace';
+
+export interface EditorDeletionError {
+  message: string;
+  followUp?: string | {
+    beforeReplaceIcon: string;
+    afterReplaceIcon: string;
+  };
+}
+
+export function getEditorDeletionError(structure: CourseStructure, courseId: string, level: StructureLevel, id: string): EditorDeletionError | null {
+  const positions = flattenStructure(structure, courseId);
+  const target = positions.find(position => position.id === id && position.level === level);
+  if (!target) return { message: 'This item is no longer available.', followUp: 'Reload the course before trying again.' };
+  const siblings = positions.filter(position => position.parentId === target.parentId && (level !== 'topic' || position.level === 'topic'));
+  if (siblings.length > 1) return null;
+  if (level === 'component') return {
+    message: 'Each content group must contain at least one component.',
+    followUp: {
+      beforeReplaceIcon: 'Add another component to this content group before deleting this one, or use Replace (',
+      afterReplaceIcon: ') component option for the selected component in middle canvas.',
+    },
+  };
+  if (level === 'contentGroup') return { message: 'Each section must contain at least one content group.', followUp: 'Add another content group before deleting this one.' };
+  if (level === 'section') return { message: 'Each topic must contain at least one section.', followUp: 'Add another section before deleting this one.' };
+  if (level === 'topic') return { message: 'Each course or module must contain at least one topic.', followUp: 'Add another topic before deleting this one.' };
+  return { message: 'Each course or module must contain at least one child.', followUp: 'Add another module or topic before deleting this one.' };
+}
 
 export function structureTopics(structure: CourseStructure): STopic[] {
   const topics: STopic[] = [];

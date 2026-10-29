@@ -39,6 +39,7 @@ interface CourseOutlinePanelProps {
   panelWidth: number;
   panelActionsAlignToTitles: boolean;
   onMove?: (level: StructureLevel, id: string, parentId: string, beforeId: string | null) => void;
+  onCheckDelete?: (level: StructureLevel, id: string) => boolean;
   onClose: () => void;
   menuPageCreated: boolean;
   menuSelected: boolean;
@@ -370,6 +371,7 @@ export default function CourseOutlinePanel({
   panelWidth,
   panelActionsAlignToTitles,
   onMove,
+  onCheckDelete,
   onClose,
   courseStructure,
   contentPages,
@@ -527,6 +529,15 @@ export default function CourseOutlinePanel({
     setActiveAddMenu(null);
   }
 
+  function requestDelete(target: DeleteTarget) {
+    const id = target.level === "module" ? target.moduleId
+      : target.level === "topic" ? target.pageId
+        : target.level === "section" ? target.articleId
+          : target.level === "group" ? target.blockId : target.componentId;
+    if (!id || onCheckDelete?.(target.level === "group" ? "contentGroup" : target.level, id) === false) return;
+    setDeleteTarget(target);
+  }
+
   function confirmDelete() {
     if (!deleteTarget) return;
 
@@ -606,7 +617,7 @@ export default function CourseOutlinePanel({
           showDelete={true}
           onDelete={() => {
             setActiveAddMenu(null);
-            setDeleteTarget({
+            requestDelete({
               level: "topic",
               name: page.title || "Untitled",
               pageId: page.id,
@@ -643,7 +654,7 @@ export default function CourseOutlinePanel({
                 showDelete={true}
                 onDelete={() => {
                   setActiveAddMenu(null);
-                  setDeleteTarget({
+                  requestDelete({
                     level: "section",
                     name: article.title || "Untitled",
                     pageId: page.id,
@@ -697,7 +708,7 @@ export default function CourseOutlinePanel({
                       showDelete={true}
                       onDelete={() => {
                         setActiveAddMenu(null);
-                        setDeleteTarget({
+                        requestDelete({
                           level: "group",
                           name: block.title || "Untitled",
                           pageId: page.id,
@@ -725,10 +736,17 @@ export default function CourseOutlinePanel({
                           onComponentSelect(page.id, article.id, block.id, component.id);
                         }}
                         icon={<StructureIcon level="component" size={14} className={STRUCTURE_ICON_COLOR_CLASS.component} />}
+                        showAdd={canAddComponent}
+                        onAdd={() => runAddAction({ level: "component", pageId: page.id, articleId: article.id, blockId: block.id })}
+                        onAddTemplate={canAddComponent && onUseTemplate ? () => {
+                          onUseTemplate({ level: "component", pageId: page.id, articleId: article.id, blockId: block.id });
+                          setActiveAddMenu(null);
+                        } : undefined}
+                        addLabel="component"
                         showDelete={true}
                         onDelete={() => {
                           setActiveAddMenu(null);
-                          setDeleteTarget({
+                          requestDelete({
                             level: "component",
                             name: component.settings.title || component.type || "Untitled",
                             pageId: page.id,
@@ -740,7 +758,7 @@ export default function CourseOutlinePanel({
                       />
                     ))}
 
-                    {isExpanded(expandedGroups, block.id) && canAddComponent && (
+                    {isExpanded(expandedGroups, block.id) && block.components.length === 0 && (
                       <InlineAddRow
                         label="Add"
                         paddingLeft={componentPadding}
@@ -822,7 +840,7 @@ export default function CourseOutlinePanel({
           showDelete={true}
           onDelete={() => {
             setActiveAddMenu(null);
-            setDeleteTarget({
+            requestDelete({
               level: "module",
               name: mod.title || "Untitled Module",
               moduleId: mod.id,

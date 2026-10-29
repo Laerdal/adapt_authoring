@@ -339,6 +339,23 @@ export default function StoryboardTopBar({
         >
           Generate Course <ArrowRight className="h-3.5 w-3.5" />
         </button>
+
+        <button
+          type="button"
+          onClick={onShareForReview}
+          className="sb-toolbar-btn"
+        >
+          <Users className="h-3.5 w-3.5" /> Share for Review
+        </button>
+
+        <button
+          type="button"
+          onClick={onGenerate}
+          className="sb-toolbar-btn sb-toolbar-btn-primary"
+          title="Generate the Adapt course from this storyboard"
+        >
+          Generate Course <ArrowRight className="h-3.5 w-3.5" />
+        </button>
       </div>
 
       <GuideDialog

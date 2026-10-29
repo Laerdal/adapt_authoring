@@ -461,9 +461,11 @@ export default function UserManagementPage() {
                             onClick={() => handleActionMenu(user.id, user.isDeleted ? "restore-user" : "disable-user")}
                             className="w-full text-left px-3 py-2 text-sm text-[#374151] hover:bg-[#f9fafb] flex items-center gap-2.5"
                           >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M3 12a9 9 0 0115.42-6.42M21 12a9 9 0 01-15.42 6.42" /><path d="M9 12l2 2 4-4" />
-                            </svg>
+                            <img
+                              src={user.isDeleted ? "/assets/icons/UserRow.svg" : "/assets/icons/DisableUserIcon.svg"}
+                              alt=""
+                              className="w-4 h-4 shrink-0"
+                            />
                             {getUserActionLabel(!!user.isDeleted)}
                           </button>
                           <button

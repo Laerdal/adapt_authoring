@@ -1,0 +1,390 @@
+name: adapt-pipeline
+
+# One pipeline for adapt_authoring + adapt-authoring-plugins + adapt-framework-plugins + adapt-cdn-deploy-cli.
+#  - push develop / master / release/**   -> build, package, (deploy)
+#  - pull_request to develop / master     -> build + package only (validation)
+#  - workflow_dispatch                    -> what the plugin repos call when THEY change (see docs/centralized-cicd.md);
+#                                            run with `ref: develop|master` so the workflow file of that branch is used.
+# Branch -> environment: develop=dev, release/*=tryout, master=prod. Always builds the latest heads of every repo.
+
+on:
+  push:
+    branches: [develop, master, 'release/**']
+  pull_request:
+    branches: [develop, master]
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: 'Deploy after build (still needs repo variable AWS_DEPLOY_ENABLED=true)'
+        type: boolean
+        default: true
+      dry_run:
+        description: 'Dry run: upload to S3 and run deploy-release.sh --dry-run on the instance (nothing on the instance changes, no E2E)'
+        type: boolean
+        default: false
+      trigger:
+        description: 'Who triggered this (shown in the Teams card), e.g. adapt-framework-plugins@abc1234'
+        type: string
+        default: manual
+
+permissions:
+  id-token: write # OIDC to AWS (used only by the deploy job)
+  contents: read
+
+# Overlapping pushes queue per branch (GitHub keeps only the newest pending run). Every run builds the latest
+# heads, so a skipped intermediate run loses nothing. PR runs may be cancelled by a newer push to the same PR.
+concurrency:
+  group: adapt-pipeline-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  PLUGINS_OWNER: Laerdal-Medical
+  HAS_APP: ${{ secrets.GHA_READ_APP_ID != '' }}
+
+jobs:
+  resolve:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    outputs:
+      branch: ${{ steps.r.outputs.branch }}
+      env: ${{ steps.r.outputs.env }}
+      release_id: ${{ steps.r.outputs.release_id }}
+      authoring_plugins_sha: ${{ steps.r.outputs.authoring_plugins_sha }}
+      framework_plugins_sha: ${{ steps.r.outputs.framework_plugins_sha }}
+      cdn_cli_sha: ${{ steps.r.outputs.cdn_cli_sha }}
+    steps:
+      - name: App token (optional)
+        id: app
+        if: env.HAS_APP == 'true'
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.GHA_READ_APP_ID }}
+          private-key: ${{ secrets.GHA_READ_PRIVATE_KEY }}
+          owner: ${{ env.PLUGINS_OWNER }}
+
+      - name: Resolve branch, environment and repo heads
+        id: r
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token || secrets.ADAPT_REPOS_READ_TOKEN }}
+          BRANCH: ${{ github.event_name == 'pull_request' && github.base_ref || github.ref_name }}
+        run: |
+          set -euo pipefail
+          case "$BRANCH" in
+            develop)   ENV=dev ;;
+            master)    ENV=prod ;;
+            release/*) ENV=tryout ;;
+            *)         ENV=none ;;
+          esac
+
+          # first ref that exists wins: release branches fall back to master in repos that were not branched
+          head_sha() { # <repo> <ref...>
+            local repo=$1 err=""; shift
+            for ref in "$@"; do
+              if sha=$(gh api "repos/$PLUGINS_OWNER/$repo/commits/$ref" --jq .sha 2>"$RUNNER_TEMP/gh.err"); then echo "$sha"; return; fi
+              err=$(cat "$RUNNER_TEMP/gh.err")
+            done
+            echo "ERROR: none of [$*] resolved in $PLUGINS_OWNER/$repo. GitHub said: $err" >&2; exit 1
+          }
+          case "$BRANCH" in
+            develop|master) CANDIDATES=("$BRANCH") ;;
+            release/*)      CANDIDATES=("$BRANCH" master) ;;
+            *)              CANDIDATES=("$BRANCH" develop) ;; # feature branches / manual test builds: plugin repos' develop (env=none, never deploys)
+          esac
+
+          AP=$(head_sha adapt-authoring-plugins "${CANDIDATES[@]}")
+          FP=$(head_sha adapt-framework-plugins "${CANDIDATES[@]}")
+          CDN=$(head_sha adapt-cdn-deploy-cli main) # cdn-cli has only `main`, shared by every environment
+
+          {
+            echo "branch=$BRANCH"
+            echo "env=$ENV"
+            echo "release_id=r${{ github.run_number }}-${GITHUB_SHA::7}"
+            echo "authoring_plugins_sha=$AP"
+            echo "framework_plugins_sha=$FP"
+            echo "cdn_cli_sha=$CDN"
+          } | tee -a "$GITHUB_OUTPUT"
+
+  # Blocking: a failure here stops the deploy. Pure-logic suites only (no MongoDB needed).
+  # ponytail: only the suites known to pass in CI today; add more as they are proven green.
+  test-backend:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+      - run: npm ci --ignore-scripts # postinstall (installPlugins.js) needs a conf/config.json; tests do not
+      - run: ./node_modules/.bin/mocha ./test/storyboard.commentStatus.js
+
+  test-new-ui:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20 # Tailwind v4 needs >= 20
+      # npm < 10.9 has an optional-dependency bug (npm/cli#4828) that skips the platform-specific native binary,
+      # and new-ui-source/package-lock.json is gitignored on purpose (platform-specific), so install clean.
+      - run: npm install -g npm@10.9.4
+      - working-directory: new-ui-source
+        run: |
+          rm -rf node_modules package-lock.json
+          npm install
+      - working-directory: new-ui-source
+        run: npm test
+
+  build:
+    needs: resolve
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: App token (optional)
+        id: app
+        if: env.HAS_APP == 'true'
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.GHA_READ_APP_ID }}
+          private-key: ${{ secrets.GHA_READ_PRIVATE_KEY }}
+          owner: ${{ env.PLUGINS_OWNER }}
+
+      - name: Checkout adapt-authoring-plugins (pinned SHA from resolve)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.PLUGINS_OWNER }}/adapt-authoring-plugins
+          ref: ${{ needs.resolve.outputs.authoring_plugins_sha }}
+          path: _repos/adapt-authoring-plugins
+          token: ${{ steps.app.outputs.token || secrets.ADAPT_REPOS_READ_TOKEN }}
+
+      # The New UI (Vite + Tailwind v4) needs Node 20; everything else is Node 16/18 (package.json engines).
+      # grunt's sync-new-ui task picks the Node 20 bin dir up from NEW_UI_NODE_BIN.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install -g npm@10.9.4 # see test-new-ui: avoids the missing native-binding bug in npm < 10.9
+      - name: Clean install of New UI dependencies (grunt's sync-new-ui then finds them complete)
+        working-directory: new-ui-source
+        run: |
+          rm -rf node_modules package-lock.json
+          npm install
+      - run: echo "NEW_UI_NODE_BIN=$(dirname "$(command -v node)")" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+
+      - run: npm install -g grunt-cli@1.4.3
+
+      - name: Write CI conf/config.json (plugin paths -> checked-out plugins repo)
+        run: node scripts/release/prepare-ci-config.js "$GITHUB_WORKSPACE/_repos/adapt-authoring-plugins"
+
+      # postinstall runs installPlugins.js, which copies the authoring plugins in and installs their deps
+      - run: npm ci
+
+      - run: grunt build:prod
+        env:
+          ADAPT_SKIP_COMPONENT_DEFAULTS_VALIDATION: 'true' # needs the framework under temp/<tenant>/, instance-only
+
+      - run: npm prune --omit=dev
+
+      - name: Package release
+        env:
+          RELEASE_ID: ${{ needs.resolve.outputs.release_id }}
+          BRANCH: ${{ needs.resolve.outputs.branch }}
+          AUTHORING_SHA: ${{ github.sha }}
+          AUTHORING_PLUGINS_SHA: ${{ needs.resolve.outputs.authoring_plugins_sha }}
+          FRAMEWORK_PLUGINS_SHA: ${{ needs.resolve.outputs.framework_plugins_sha }}
+          CDN_CLI_SHA: ${{ needs.resolve.outputs.cdn_cli_sha }}
+        run: bash scripts/release/package-release.sh
+
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: adapt-release-${{ needs.resolve.outputs.release_id }}
+          path: release-out/*
+          retention-days: 7
+          compression-level: 0 # already .tgz
+
+  # AWS hop. Stays skipped until the OIDC role exists and repo variable AWS_DEPLOY_ENABLED=true.
+  # Until then: download the artifact, upload to S3 by hand, run deploy-release.sh on the instance (docs/centralized-cicd.md).
+  # ponytail: dev only. tryout (release/*) and prod (master) get added once their instance layouts are confirmed.
+  deploy:
+    needs: [resolve, build, test-backend, test-new-ui]
+    if: >-
+      needs.resolve.outputs.env == 'dev' && github.event_name != 'pull_request' &&
+      vars.AWS_DEPLOY_ENABLED == 'true' && (github.event_name != 'workflow_dispatch' || inputs.deploy)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 75
+    environment: dev
+    outputs:
+      detail: ${{ steps.ssm.outputs.detail }} # the server's own failure line, shown on the Teams card
+    env:
+      BUCKET: ${{ vars.RELEASE_BUCKET }}
+      RELEASE_ID: ${{ needs.resolve.outputs.release_id }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: adapt-release-${{ needs.resolve.outputs.release_id }}
+          path: release-out
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Upload release to S3
+        run: |
+          set -euo pipefail
+          P="s3://$BUCKET/dev"
+          cd release-out
+          deps=$(ls deps-*.tgz)
+          aws s3 ls "$P/$deps" >/dev/null 2>&1 || aws s3 cp "$deps" "$P/$deps" --only-show-errors # unchanged lockfile = already there
+          aws s3 cp "app-$RELEASE_ID.tgz" "$P/" --only-show-errors
+          aws s3 cp "manifest-$RELEASE_ID.json" "$P/" --only-show-errors
+          aws s3 cp deploy-release.sh "$P/" --only-show-errors
+
+      - name: Deploy to instances tagged app=adapt,env=dev (SSM)
+        id: ssm
+        env:
+          DRY_FLAG: ${{ inputs.dry_run && ' --dry-run' || '' }}
+        run: |
+          set -euo pipefail
+          # Whatever happens, hand a one-line reason to the Teams card (overwritten below once the server has answered).
+          DETAIL="the deploy failed before the server answered (see the run log)"
+          trap 'echo "detail=$DETAIL" >> "$GITHUB_OUTPUT"' EXIT
+          # deploy-release.sh loads root's nvm itself (SSM shells skip it); only HOME needs setting here
+          PARAMS=$(jq -nc --arg b "$BUCKET" --arg id "$RELEASE_ID" --arg flag "$DRY_FLAG" '{commands: [
+            "export HOME=/root",
+            "aws s3 cp s3://\($b)/dev/deploy-release.sh /tmp/deploy-release.sh --only-show-errors",
+            "BUCKET=\($b) ENV_NAME=dev bash /tmp/deploy-release.sh \($id)\($flag)"]}')
+          CMD_ID=$(aws ssm send-command --document-name AWS-RunShellScript \
+            --targets Key=tag:app,Values=adapt Key=tag:env,Values=dev \
+            --parameters "$PARAMS" --timeout-seconds 3600 --comment "adapt $RELEASE_ID" \
+            --query Command.CommandId --output text)
+          echo "SSM command: $CMD_ID"
+
+          for i in $(seq 1 240); do
+            st=$(aws ssm list-command-invocations --command-id "$CMD_ID" --query 'CommandInvocations[].Status' --output text)
+            if [ -z "$st" ] && [ "$i" -gt 8 ]; then
+              DETAIL="no instance matched tags app=adapt,env=dev, or none is Online in SSM"
+              echo "$DETAIL"; exit 1
+            fi
+            case "$st" in ""|*Pending*|*InProgress*|*Delayed*) sleep 15 ;; *) break ;; esac
+          done
+
+          # full script output per instance (list-command-invocations truncates to 2500 chars; this keeps up to 24000)
+          for iid in $(aws ssm list-command-invocations --command-id "$CMD_ID" --query 'CommandInvocations[].InstanceId' --output text); do
+            echo "===== $iid ====="
+            aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$iid" \
+              --query '[Status,StandardOutputContent,StandardErrorContent]' --output text | tee -a "$RUNNER_TEMP/ssm.out" || true
+          done
+          # the server's own reason: its last FAILED/WARN line, else its last status line
+          DETAIL=$(tr -d '\r' < "$RUNNER_TEMP/ssm.out" 2>/dev/null | grep -E 'FAILED|WARN' | tail -1 | cut -c1-220 || true)
+          [ -n "$DETAIL" ] || DETAIL=$(tr -d '\r' < "$RUNNER_TEMP/ssm.out" 2>/dev/null | grep -E '^\[deploy ' | tail -1 | cut -c1-220 || true)
+          for s in $st; do [ "$s" = Success ] || { echo "Deploy failed: $st"; exit 1; }; done
+
+  # Runs after a successful deploy and NEVER fails the pipeline: every path exits 0 and reports through `result`
+  # (shown in the Teams card). It dispatches only the @smoke suite (smoke.yml); the full regression stays in QA's own workflows.
+  # Needs secret STUDIO_E2E_TOKEN (dispatch + read on the E2E repo); without it the job reports "skipped".
+  e2e:
+    needs: [resolve, deploy]
+    if: needs.deploy.result == 'success' && !inputs.dry_run
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    outputs:
+      result: ${{ steps.run.outputs.result }}
+      url: ${{ steps.run.outputs.url }}
+    env:
+      E2E_REPO: Laerdal-Medical/adapt-studio-e2e-test
+      E2E_WORKFLOW: smoke.yml
+      E2E_REF: main
+      GH_TOKEN: ${{ secrets.STUDIO_E2E_TOKEN }}
+    steps:
+      - id: run
+        run: |
+          out() { echo "result=$1" >> "$GITHUB_OUTPUT"; echo "url=${2:-}" >> "$GITHUB_OUTPUT"; exit 0; }
+          [ -n "${GH_TOKEN:-}" ] || out "skipped (STUDIO_E2E_TOKEN not set)"
+
+          since=$(date -u -d '1 minute ago' +%Y-%m-%dT%H:%M:%SZ)
+          gh workflow run "$E2E_WORKFLOW" --repo "$E2E_REPO" --ref "$E2E_REF" || out "could not start E2E"
+
+          id=""
+          for _ in $(seq 1 30); do
+            id=$(gh run list --repo "$E2E_REPO" --workflow "$E2E_WORKFLOW" --event workflow_dispatch \
+                   --created ">=$since" --limit 1 --json databaseId --jq '.[0].databaseId // empty') || true
+            [ -n "$id" ] && break
+            sleep 10
+          done
+          [ -n "$id" ] || out "could not find the E2E run"
+          url="https://github.com/$E2E_REPO/actions/runs/$id"
+
+          for _ in $(seq 1 90); do # up to 30 min (smoke times out at 20 min, plus queueing on the shared DEV instance)
+            read -r status conclusion < <(gh run view "$id" --repo "$E2E_REPO" --json status,conclusion \
+              --jq '"\(.status) \(.conclusion)"') || true
+            [ "${status:-}" = completed ] && break
+            sleep 20
+          done
+          [ "${status:-}" = completed ] || out "still running after 30 min" "$url"
+          if [ "$conclusion" = success ]; then out passed "$url"; else out "failed ($conclusion)" "$url"; fi
+
+  notify:
+    needs: [resolve, build, test-backend, test-new-ui, deploy, e2e]
+    if: always() && github.event_name != 'pull_request'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: Teams card
+        env:
+          URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+          BUILD: ${{ needs.build.result }}
+          TESTS: ${{ needs.test-backend.result }}/${{ needs.test-new-ui.result }}
+          DEPLOY: ${{ needs.deploy.result }}
+          RESOLVE: ${{ needs.resolve.result }}
+          T_BACKEND: ${{ needs.test-backend.result }}
+          T_UI: ${{ needs.test-new-ui.result }}
+          DETAIL: ${{ needs.deploy.outputs.detail }}
+          DRY: ${{ inputs.dry_run }}
+          E2E: ${{ needs.e2e.outputs.result || 'not run' }}
+          E2E_URL: ${{ needs.e2e.outputs.url }}
+          R: ${{ toJson(needs.resolve.outputs) }}
+          TRIGGER: ${{ inputs.trigger || github.actor }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          [ -n "${URL:-}" ] || { echo "TEAMS_WEBHOOK_URL not set, skipping"; exit 0; }
+          # which job(s) failed, by name, for the heading and the "What failed" fact
+          WHAT=""
+          [ "$RESOLVE" = failure ] && WHAT="$WHAT resolve"
+          [ "$BUILD" = failure ] && WHAT="$WHAT build"
+          [ "$T_BACKEND" = failure ] && WHAT="$WHAT test-backend"
+          [ "$T_UI" = failure ] && WHAT="$WHAT test-new-ui"
+          [ "$DEPLOY" = failure ] && WHAT="$WHAT deploy"
+          WHAT=$(echo $WHAT | sed 's/ /, /g')
+          if [ -n "$WHAT" ] || [ "$BUILD" != success ] || [ "$TESTS" != success/success ] || [ "$DEPLOY" = failure ]; then T="❌ FAILED${WHAT:+ ($WHAT)}"
+          elif [ "$DEPLOY" = success ] && [ "${DRY:-}" = true ]; then T="🧪 Dry-run OK (instance unchanged)"
+          elif [ "$DEPLOY" = success ]; then T="✅ Deployed"
+          else T="📦 Built (deploy not run)"; fi
+          jq -nc --arg t "$T" --arg run "$RUN_URL" --arg trig "$TRIGGER" --arg tests "$TESTS" --arg e2e "$E2E" --arg e2eurl "$E2E_URL" \
+            --arg what "$WHAT" --arg detail "${DETAIL:-}" \
+            --argjson r "$R" '((if $what != "" then [{title: "What failed", value: $what}] else [] end)
+              + (if $what != "" and $detail != "" then [{title: "Reason from the server", value: $detail}] else [] end)) as $extra | {
+            type: "message", attachments: [{contentType: "application/vnd.microsoft.card.adaptive", content: {
+              "$schema": "http://adaptivecards.io/schemas/adaptive-card.json", type: "AdaptiveCard", version: "1.4",
+              body: [
+                {type: "TextBlock", weight: "Bolder", size: "Medium", text: "adapt-pipeline: \($t)"},
+                {type: "FactSet", facts: ($extra + [
+                  {title: "Branch / env", value: "\($r.branch) → \($r.env)"},
+                  {title: "Release", value: $r.release_id},
+                  {title: "authoring-plugins", value: $r.authoring_plugins_sha[0:7]},
+                  {title: "framework-plugins", value: $r.framework_plugins_sha[0:7]},
+                  {title: "cdn-deploy-cli", value: $r.cdn_cli_sha[0:7]},
+                  {title: "Tests (backend/UI)", value: $tests},
+                  {title: "Smoke tests (non-blocking)", value: $e2e},
+                  {title: "Triggered by", value: $trig}])}],
+              actions: ([{type: "Action.OpenUrl", title: "Open run", url: $run}]
+                + (if $e2eurl != "" then [{type: "Action.OpenUrl", title: "Smoke report", url: $e2eurl}] else [] end))}}]}' \
+            | curl -fsS -X POST -H 'Content-Type: application/json' -d @- "$URL"

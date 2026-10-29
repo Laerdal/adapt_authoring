@@ -135,6 +135,7 @@ define(function(require) {
       //   H4 = base - 1.25rem, H5 = base - 1.5rem, H6 = base - 1.75rem
       //   Each level is floored to be at least @min-font-step (1px) above the next.
       //   H6 is floored at @min-paragraph-size (15px). Paragraph shares the H6 tier.
+      //   Compact 2.5/2.25rem profiles use 0.25rem steps through H5 and 18px H6/body.
       calculateAndDisplayHeadingSizes: function($select) {
         var selectedValue = $select.val();
         
@@ -150,12 +151,13 @@ define(function(require) {
         var MIN_PARAGRAPH_REM = MIN_INSTRUCTION_REM + MIN_FONT_STEP_REM; // 0.9375rem = 15px
         
         // Raw offsets from the base @page-heading-font-size
+        var compact = baseRem === 2.5 || baseRem === 2.25;
         var h1Raw = baseRem;
-        var h2Raw = baseRem - 0.5;
-        var h3Raw = baseRem - 1;
-        var h4Raw = baseRem - 1.25;
-        var h5Raw = baseRem - 1.5;
-        var h6Raw = baseRem - 1.75;
+        var h2Raw = baseRem - (compact ? 0.25 : 0.5);
+        var h3Raw = baseRem - (compact ? 0.5 : 1);
+        var h4Raw = baseRem - (compact ? 0.75 : 1.25);
+        var h5Raw = baseRem - (compact ? 1 : 1.5);
+        var h6Raw = compact ? 1.125 : baseRem - 1.75;
         
         // Cascade from H6 upward so each level is at least 1px above the next
         var h6 = Math.max(h6Raw, MIN_PARAGRAPH_REM);

@@ -19,6 +19,7 @@ import {
   createComponent,
   linkContentAsset,
   seedMissingCourseDefaults,
+  ensureQuestionFeedbackExtensions,
 } from "./adaptAuthoring";
 import {
   buildAssessmentFields,
@@ -33,6 +34,7 @@ import {
   buildImageAsMedia,
   buildMediaField,
   filenameFromLink,
+  mediaAssetRefs,
   mergeProperties,
   type ImageData,
   type MediaData,
@@ -135,18 +137,21 @@ export interface GenGroup {
   sourceBlockId?: string;
   existingId?: string;
   title: string;
+  displayTitle?: string;
   components: GenComponent[];
 }
 export interface GenSection {
   sourceBlockId?: string;
   existingId?: string;
   title: string;
+  displayTitle?: string;
   groups: GenGroup[];
 }
 export interface GenTopic {
   sourceBlockId?: string;
   existingId?: string;
   title: string;
+  displayTitle?: string;
   sections: GenSection[];
 }
 
@@ -160,6 +165,29 @@ function inlineToText(content: unknown): string {
 
 function escapeHtml(s: string): string {
   return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function restoreRequiredStructureTitles(
+  topics: GenTopic[],
+  index: { contentObjects: ContentNode[]; articles: ContentNode[]; blocks: ContentNode[] }
+): void {
+  const existing = new Map(
+    [...index.contentObjects, ...index.articles, ...index.blocks].map((node) => [node._id, node])
+  );
+  const restore = (node: GenTopic | GenSection | GenGroup, fallbackTitle: string) => {
+    if (node.title.trim()) return;
+    const current = node.existingId ? existing.get(node.existingId) : undefined;
+    node.title = (current?.title || current?.displayTitle || fallbackTitle).trim() || fallbackTitle;
+    node.displayTitle = current?.displayTitle;
+  };
+
+  for (const topic of topics) {
+    restore(topic, "New Page Title");
+    for (const section of topic.sections) {
+      restore(section, "New Article Title");
+      for (const group of section.groups) restore(group, "New Block Title");
+    }
+  }
 }
 
 // Plain-text fallback for a title field — `data.question` is a
@@ -331,7 +359,7 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
     if (type === "heading") {
       flushList();
       const level = (raw.props && raw.props.level) || 1;
-      const title = inlineToText(raw.content).trim() || "Untitled";
+      const title = inlineToText(raw.content).trim() || (existingId ? "" : "Untitled");
       if (level <= 1) {
         topic = { sourceBlockId: id, existingId, title, sections: [] };
         topics.push(topic);
@@ -649,6 +677,11 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
 export const MAX_COMPONENTS_PER_BLOCK = 1;
 
 export function enforceMaxComponentsPerBlock(topics: GenTopic[], existingBlocks: ContentNode[] = []): void {
+  const explicitlyEmittedGroupIds = new Set(
+    topics.flatMap((topic) => topic.sections.flatMap((section) =>
+      section.groups.map((group) => group.existingId).filter((id): id is string => !!id)
+    ))
+  );
   for (const t of topics) {
     for (const s of t.sections) {
       const out: GenGroup[] = [];
@@ -666,7 +699,11 @@ export function enforceMaxComponentsPerBlock(topics: GenTopic[], existingBlocks:
         // so repeated runs reuse them in the same order every time.
         const candidates = s.existingId
           ? existingBlocks
-              .filter((b) => b._parentId === s.existingId && b._id !== g.existingId && (b.title ?? b.displayTitle) === g.title)
+              .filter((b) =>
+                b._parentId === s.existingId &&
+                !explicitlyEmittedGroupIds.has(b._id) &&
+                (b.title ?? b.displayTitle) === g.title
+              )
               .sort((a, b) => (a._sortOrder ?? 0) - (b._sortOrder ?? 0))
           : [];
         let candidateIndex = 0;
@@ -875,12 +912,16 @@ export async function generateStoryboardCourse(
   const [index, availableTypes] = await Promise.all([fetchCourseIndex(courseId), getAvailableComponents()]);
   const { resolve } = makeResolver(index as never, generatedContentMap);
   const tree = parseDocToTree(doc, resolve);
+  restoreRequiredStructureTitles(tree, index);
   enforceMaxComponentsPerBlock(tree, index.blocks);
   pruneEmptyContainers(tree);
   // Existing components' CURRENT properties, so an update seeds from what's
   // actually on the live document instead of building `properties` from
   // scratch (which would wipe every field the storyboard doesn't model).
   const existingComponentProps = new Map(index.components.map((c) => [c._id, c.properties || {}]));
+  if (doc.some((block) => (block as { type?: string }).type === "sbAssessment")) {
+    await ensureQuestionFeedbackExtensions(courseId);
+  }
 
   const typeByKey = new Map(availableTypes.map((t) => [t.component, t]));
   const installed = new Set(availableTypes.map((t) => t.component));
@@ -922,7 +963,7 @@ export async function generateStoryboardCourse(
           alt: "",
         });
       } else {
-        c.mediaPatch = buildMediaField(c.pendingKind, c.pendingMedia);
+        c.mediaPatch = buildMediaField(c.pendingKind, c.pendingMedia, c.existingId ? existingComponentProps.get(c.existingId)?._media as Record<string, unknown> | undefined : undefined);
       }
       return;
     }
@@ -955,7 +996,7 @@ export async function generateStoryboardCourse(
   for (const t of tree) {
     let topicId = t.existingId;
     if (topicId) {
-      await put("contentobject", topicId, { title: t.title, displayTitle: t.title, _parentId: courseId, _sortOrder: tSort });
+      await put("contentobject", topicId, { title: t.title, displayTitle: t.displayTitle ?? t.title, _parentId: courseId, _sortOrder: tSort });
       updated += 1;
     } else {
       topicId = await createTopic(courseId, courseId, t.title, tSort);
@@ -969,7 +1010,7 @@ export async function generateStoryboardCourse(
     for (const s of t.sections) {
       let secId = s.existingId;
       if (secId) {
-        await put("article", secId, { title: s.title, displayTitle: s.title, _parentId: topicId, _sortOrder: sSort });
+        await put("article", secId, { title: s.title, displayTitle: s.displayTitle ?? s.title, _parentId: topicId, _sortOrder: sSort });
         updated += 1;
       } else {
         secId = await createArticle(courseId, topicId, s.title, sSort);
@@ -990,7 +1031,7 @@ export async function generateStoryboardCourse(
         // which is fine — stale but harmless until the next full Generate).
         let grpId = g.existingId;
         if (grpId) {
-          await put("block", grpId, { title: g.title, displayTitle: g.title, _parentId: secId, _sortOrder: gSort });
+          await put("block", grpId, { title: g.title, displayTitle: g.displayTitle ?? g.title, _parentId: secId, _sortOrder: gSort });
           updated += 1;
         } else {
           grpId = await createBlock(courseId, secId, g.title, gSort);
@@ -1091,6 +1132,9 @@ export async function generateStoryboardCourse(
             created += 1;
           }
           resolved.add(compId);
+          for (const asset of mediaAssetRefs(c.pendingMedia)) {
+            await linkContentAsset(courseId, "component", compId, grpId, filenameFromLink(asset.link), asset.assetId!);
+          }
           if (c.sourceBlockId) blockToContent[c.sourceBlockId] = compId;
           // Link the chosen DAM asset to this component so publish resolves it.
           if (c.assetId && c.assetLink) {

@@ -7,6 +7,9 @@ import { SaveChangesButton } from "./SaveChangesButton";
 import { SaveStatusToast } from "./SaveStatusToast";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
+import { ON_SCREEN_CLASS_OPTIONS } from "../../helpers/onScreenSettings";
+import { updateCustomThemeSetting } from "./customThemeSettings";
+import { calcDesktopSizes } from "./customThemeTypography";
 
 // Extracted from SetupPage to keep select-theme feature isolated with no behavior changes.
 
@@ -64,51 +67,6 @@ export const THEME_PREVIEW_INFO = {
   accessibilityText:
     "Colour contrast is automatically checked across navigation elements, menus, notify pop‑ups, and drawers to ensure accessibility compliance. During course preview, text colours may be modified to maintain proper contrast ratios, which can result in slight variations from the initial preview.",
 };
-
-function calcDesktopSizes(baseRem: number) {
-  const MIN_INSTRUCTION_REM = 0.875;
-  const MIN_FONT_STEP_REM = 0.0625;
-  const MIN_PARAGRAPH_REM = MIN_INSTRUCTION_REM + MIN_FONT_STEP_REM;
-
-  const h1Raw = baseRem;
-  const h2Raw = baseRem - 0.5;
-  const h3Raw = baseRem - 1;
-  const h4Raw = baseRem - 1.25;
-  const h5Raw = baseRem - 1.5;
-  const h6Raw = baseRem - 1.75;
-
-  const h6 = Math.max(h6Raw, MIN_PARAGRAPH_REM);
-  const h5 = Math.max(h5Raw, h6 + MIN_FONT_STEP_REM);
-  const h4 = Math.max(h4Raw, h5 + MIN_FONT_STEP_REM);
-  const h3 = Math.max(h3Raw, h4 + MIN_FONT_STEP_REM);
-  const h2 = Math.max(h2Raw, h3 + MIN_FONT_STEP_REM);
-  const h1 = Math.max(h1Raw, h2 + MIN_FONT_STEP_REM);
-  const p = h6;
-
-  const formatSize = (rem: number) => {
-    const px = Math.round(rem * 16);
-    const formatted = rem.toFixed(4).replace(/\.?0+$/, "");
-    return { rem: formatted, px };
-  };
-
-  const h1Size = formatSize(h1);
-  const h2Size = formatSize(h2);
-  const h3Size = formatSize(h3);
-  const h4Size = formatSize(h4);
-  const h5Size = formatSize(h5);
-  const h6Size = formatSize(h6);
-  const pSize = formatSize(p);
-
-  return [
-    { label: "H1 (Topic Title)", size: h1Size.rem, px: h1Size.px },
-    { label: "H2", size: h2Size.rem, px: h2Size.px },
-    { label: "H3", size: h3Size.rem, px: h3Size.px },
-    { label: "H4", size: h4Size.rem, px: h4Size.px },
-    { label: "H5", size: h5Size.rem, px: h5Size.px },
-    { label: "H6", size: h6Size.rem, px: h6Size.px },
-    { label: "Paragraph", size: pSize.rem, px: pSize.px },
-  ];
-}
 
 function DesktopCalculatedValues({ baseRem }: { baseRem: number }) {
   const sizes = calcDesktopSizes(baseRem);
@@ -828,13 +786,6 @@ const CUSTOM_FIELD_DEFAULTS: Record<string, string> = {
   '_notify::notify-title-color': '',
 };
 
-// Mirrors linkedProperties in custom-theme properties.schema.
-// Format uses UI keys: "sectionId::fieldKey".
-const CUSTOM_LINKED_PROPERTY_MAP: Record<string, string[]> = {
-  '_global::_primaryBrandColor': ['_progress::progress', '_global::link', '_nav::nav', '_pageStructure::page-header-background-color'],
-  '_progress::progress': ['_nav::nav-progress', '_menu::menu-item-progress'],
-};
-
 const VANILLA_ACCORDION_DEFS: { id: string; label: string; fields: { key: string; label: string }[] }[] = [
   {
     id: '_global', label: 'Global',
@@ -1070,7 +1021,7 @@ type LifeBlocksConfig = {
   _paddingBottom: string;
 };
 
-type OnScreenLevelKey = 'page' | 'section' | 'contentGroup' | 'content';
+type OnScreenLevelKey = 'page' | 'article' | 'block' | 'component';
 type OnScreenLevelConfig = {
   _classes: string;
   _percentInviewVertical: number;
@@ -1079,8 +1030,6 @@ type OnScreenLevelsConfig = Record<OnScreenLevelKey, OnScreenLevelConfig>;
 
 type OnScreenConfig = {
   _isEnabled: boolean;
-  _classes: string;
-  _percentInviewVertical: number;
   _levels: OnScreenLevelsConfig;
 };
 
@@ -1101,32 +1050,21 @@ const DEFAULT_LIFE_BLOCKS_CONFIG: LifeBlocksConfig = {
 
 const DEFAULT_ON_SCREEN_CONFIG: OnScreenConfig = {
   _isEnabled: false,
-  _classes: "",
-  _percentInviewVertical: 50,
   _levels: {
     page: { _classes: '', _percentInviewVertical: 50 },
-    section: { _classes: '', _percentInviewVertical: 50 },
-    contentGroup: { _classes: '', _percentInviewVertical: 50 },
-    content: { _classes: '', _percentInviewVertical: 50 },
+    article: { _classes: '', _percentInviewVertical: 50 },
+    block: { _classes: '', _percentInviewVertical: 50 },
+    component: { _classes: '', _percentInviewVertical: 50 },
   },
 };
 
 const ON_SCREEN_ROW_DEFS: Array<{ key: OnScreenLevelKey; label: string }> = [
-  { key: 'page', label: 'Topic' },
-  { key: 'section', label: 'Section' },
-  { key: 'contentGroup', label: 'Content Group' },
-  { key: 'content', label: 'Component' },
+  { key: 'page', label: 'Topic (Page)' },
+  { key: 'article', label: 'Section (Article)' },
+  { key: 'block', label: 'Content Group (Block)' },
+  { key: 'component', label: 'Component' },
 ];
 
-const ON_SCREEN_CLASS_OPTIONS = [
-  '',
-  'fade-in',
-  'fade-in-left',
-  'fade-in-right',
-  'fade-in-top',
-  'fade-in-bottom',
-  'fade-out',
-];
 
 function LifeListField({
   title,
@@ -1224,15 +1162,16 @@ function LifeListField({
   );
 }
 
-export default function SelectThemePage({ initialThemeName, initialThemeVariables, initialPresetId, courseId, onNavigationRequest, pendingNavigation, onPendingNavigationHandled, onThemeSaved }: {
+export default function SelectThemePage({ initialThemeName, initialThemeVariables, initialThemeSettings, initialPresetId, courseId, onNavigationRequest, pendingNavigation, onPendingNavigationHandled, onThemeSaved }: {
   initialThemeName?: string;
   initialThemeVariables?: Record<string, unknown>;
+  initialThemeSettings?: Record<string, unknown>;
   initialPresetId?: string;
   courseId?: string;
   onNavigationRequest?: (nav: string) => void;
   pendingNavigation?: string | null;
   onPendingNavigationHandled?: () => void;
-  onThemeSaved?: (payload: { themeName: string; themeVariables: Record<string, unknown>; themePresetId: string }) => void;
+  onThemeSaved?: (payload: { themeName: string; themeVariables: Record<string, unknown>; themeSettings: Record<string, unknown>; themePresetId: string }) => void;
 }) {
   const initialSelectedThemeId = mapThemeNameToId(initialThemeName);
   const [selected, setSelected] = useState<string | null>(initialSelectedThemeId);
@@ -1381,11 +1320,12 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           _hidePartiallyFeedback: checkHidePartial,
         };
       }
-      await saveThemeVariables(courseId, vars);
+      await saveThemeVariables(courseId, vars, selected === 'life' || selected === 'custom' ? onScreenConfig : undefined);
       setDbThemeVariables(vars);
       onThemeSaved?.({
         themeName: themeLabel,
         themeVariables: vars,
+        themeSettings: { ...initialThemeSettings, _onScreen: onScreenConfig },
         themePresetId: selectedPresetId,
       });
       setLastSavedStateSnapshot(buildUnsavedStateSnapshot());
@@ -1411,6 +1351,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     setSelected(mapThemeNameToId(initialThemeName));
     setSelectedPresetId(initialPresetId ?? '');
     hydrateThemeVariablesIntoEditors(dbThemeVariables);
+    hydrateOnScreenSettings(initialThemeSettings);
     // Re-anchor the snapshot so hasChanges becomes false
     setLastSavedStateSnapshot('');
   }
@@ -1581,35 +1522,19 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
         ...prev,
         _levels: nextLevels,
       };
-      if (rowKey === 'content') {
-        next._classes = nextRow._classes;
-        next._percentInviewVertical = nextRow._percentInviewVertical;
-      }
       return next;
     });
   }, []);
+
+  const getCustomSettingDefault = useCallback((key: string): string => {
+    const [sectionId, fieldKey] = key.split('::');
+    const schemaDefault = getSchemaField(selectedThemeSchema, sectionId, fieldKey)?.default;
+    return typeof schemaDefault === 'string' ? schemaDefault : CUSTOM_FIELD_DEFAULTS[key] ?? '';
+  }, [selectedThemeSchema]);
 
   const setCustomSettingWithDependencies = useCallback((key: string, value: string) => {
-    setCustomSettings((prev) => {
-      const next = { ...prev, [key]: value };
-      const visited = new Set<string>();
-      const queue: string[] = [key];
-
-      while (queue.length) {
-        const sourceKey = queue.shift();
-        if (!sourceKey || visited.has(sourceKey)) continue;
-        visited.add(sourceKey);
-
-        const linkedKeys = CUSTOM_LINKED_PROPERTY_MAP[sourceKey] ?? [];
-        linkedKeys.forEach((linkedKey) => {
-          next[linkedKey] = next[sourceKey];
-          queue.push(linkedKey);
-        });
-      }
-
-      return next;
-    });
-  }, []);
+    setCustomSettings((prev) => updateCustomThemeSetting(prev, key, value, getCustomSettingDefault(key)));
+  }, [getCustomSettingDefault]);
 
   const buildUnsavedStateSnapshot = useCallback(() => {
     const normalizeRecord = (record: Record<string, string>) => Object.keys(record)
@@ -1724,22 +1649,9 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       _paddingTop: lifeBlocksConfig._paddingTop,
       _paddingBottom: lifeBlocksConfig._paddingBottom,
     };
-    merged._onScreen = {
-      ...(merged._onScreen && typeof merged._onScreen === 'object' && !Array.isArray(merged._onScreen)
-        ? merged._onScreen as Record<string, unknown>
-        : {}),
-      _isEnabled: onScreenConfig._isEnabled,
-      _classes: onScreenConfig._classes,
-      _percentInviewVertical: onScreenConfig._percentInviewVertical,
-      _levels: {
-        page: { ...onScreenConfig._levels.page },
-        section: { ...onScreenConfig._levels.section },
-        contentGroup: { ...onScreenConfig._levels.contentGroup },
-        content: { ...onScreenConfig._levels.content },
-      },
-    };
+    delete merged._onScreen;
     return merged;
-  }, [lifeBlocksConfig, lifeCourseConfig, onScreenConfig]);
+  }, [lifeBlocksConfig, lifeCourseConfig]);
 
   const buildMergedVanillaThemeVariables = useCallback((baseVars: Record<string, unknown>) => {
     const merged: Record<string, unknown> = { ...(baseVars ?? {}) };
@@ -1772,7 +1684,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
 
       section.fields.forEach((field) => {
         const uiKey = `${section.id}::${field.key}`;
-        existingSection[field.key] = customSettings[uiKey] ?? '';
+        existingSection[field.key] = customSettings[uiKey] || getCustomSettingDefault(uiKey);
       });
 
       merged[section.id] = existingSection;
@@ -1810,23 +1722,10 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       _paddingBottom: lifeBlocksConfig._paddingBottom,
     };
 
-    merged._onScreen = {
-      ...(merged._onScreen && typeof merged._onScreen === 'object' && !Array.isArray(merged._onScreen)
-        ? merged._onScreen as Record<string, unknown>
-        : {}),
-      _isEnabled: onScreenConfig._isEnabled,
-      _classes: onScreenConfig._classes,
-      _percentInviewVertical: onScreenConfig._percentInviewVertical,
-      _levels: {
-        page: { ...onScreenConfig._levels.page },
-        section: { ...onScreenConfig._levels.section },
-        contentGroup: { ...onScreenConfig._levels.contentGroup },
-        content: { ...onScreenConfig._levels.content },
-      },
-    };
+    delete merged._onScreen;
 
     return merged;
-  }, [checkHideFeedback, checkHidePartial, checkNotFinal, checkUnanswered, customSettings, lifeBlocksConfig, lifeCourseConfig, onScreenConfig]);
+  }, [checkHideFeedback, checkHidePartial, checkNotFinal, checkUnanswered, customSettings, getCustomSettingDefault, lifeBlocksConfig, lifeCourseConfig, onScreenConfig]);
 
   useEffect(() => {
     setSelected(mapThemeNameToId(initialThemeName));
@@ -1942,39 +1841,6 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       _paddingBottom: blocks && typeof blocks._paddingBottom === 'string' ? blocks._paddingBottom : '',
     });
 
-    const onScreen = v._onScreen as Record<string, unknown> | undefined;
-    const legacyClasses = onScreen && typeof onScreen._classes === 'string' ? onScreen._classes : '';
-    const legacyPercent =
-      onScreen && typeof onScreen._percentInviewVertical === 'number'
-        ? onScreen._percentInviewVertical
-        : DEFAULT_ON_SCREEN_CONFIG._percentInviewVertical;
-    const levelsSource = onScreen && typeof onScreen._levels === 'object' && !Array.isArray(onScreen._levels)
-      ? onScreen._levels as Record<string, unknown>
-      : undefined;
-    const parseOnScreenLevel = (levelKey: OnScreenLevelKey): OnScreenLevelConfig => {
-      const source = levelsSource && typeof levelsSource[levelKey] === 'object' && !Array.isArray(levelsSource[levelKey])
-        ? levelsSource[levelKey] as Record<string, unknown>
-        : undefined;
-      return {
-        _classes: source && typeof source._classes === 'string' ? source._classes : legacyClasses,
-        _percentInviewVertical:
-          source && typeof source._percentInviewVertical === 'number'
-            ? source._percentInviewVertical
-            : legacyPercent,
-      };
-    };
-    setOnScreenConfig({
-      _isEnabled: !!(onScreen && typeof onScreen._isEnabled === 'boolean' && onScreen._isEnabled),
-      _classes: legacyClasses,
-      _percentInviewVertical: legacyPercent,
-      _levels: {
-        page: parseOnScreenLevel('page'),
-        section: parseOnScreenLevel('section'),
-        contentGroup: parseOnScreenLevel('contentGroup'),
-        content: parseOnScreenLevel('content'),
-      },
-    });
-
     // Component configuration checkboxes: custom uses _componentConfig, LIFE uses _components.
     const comp = (v._componentConfig as Record<string, unknown> | undefined) ?? (v._components as Record<string, unknown> | undefined);
     setCheckNotFinal(!!(comp && typeof comp._canShowFinalMarking === 'boolean' && comp._canShowFinalMarking));
@@ -1983,6 +1849,39 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     setCheckHidePartial(!!(comp && typeof comp._hidePartiallyFeedback === 'boolean' && comp._hidePartiallyFeedback));
     setLifeCourseConfigErrors(DEFAULT_LIFE_COURSE_CONFIG_ERRORS);
   }, []);
+
+  const hydrateOnScreenSettings = useCallback((settings?: Record<string, unknown>) => {
+    const onScreen = settings?._onScreen as Record<string, unknown> | undefined;
+    const levelsSource = onScreen && typeof onScreen._levels === 'object' && !Array.isArray(onScreen._levels)
+      ? onScreen._levels as Record<string, unknown>
+      : undefined;
+    const parseOnScreenLevel = (levelKey: OnScreenLevelKey): OnScreenLevelConfig => {
+      const source = levelsSource && typeof levelsSource[levelKey] === 'object' && !Array.isArray(levelsSource[levelKey])
+        ? levelsSource[levelKey] as Record<string, unknown>
+        : undefined;
+      return {
+        _classes: source && typeof source._classes === 'string' ? source._classes : '',
+        _percentInviewVertical:
+          source && typeof source._percentInviewVertical === 'number'
+            ? source._percentInviewVertical
+            : 50,
+      };
+    };
+    setOnScreenConfig({
+      _isEnabled: !!(onScreen && typeof onScreen._isEnabled === 'boolean' && onScreen._isEnabled),
+      _levels: {
+        page: parseOnScreenLevel('page'),
+        article: parseOnScreenLevel('article'),
+        block: parseOnScreenLevel('block'),
+        component: parseOnScreenLevel('component'),
+      },
+    });
+
+  }, []);
+
+  useEffect(() => {
+    hydrateOnScreenSettings(selected === initialSelectedThemeId ? initialThemeSettings : undefined);
+  }, [hydrateOnScreenSettings, initialThemeSettings, initialSelectedThemeId, selected]);
 
   // Load saved themeVariables into customSettings / vanillaColors / checkboxes.
   useEffect(() => {
@@ -2021,15 +1920,20 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
   }, [hydrateThemeVariablesIntoEditors, presets, selectedPresetId]);
 
   // Color Picker Component
-  const ColorPickerField = ({ label, hint, value, onChange }: { label: string; hint?: string; value: string; onChange: (v: string) => void }) => (
+  const ColorPickerField = ({ label, hint, value, defaultValue = '', onChange }: { label: string; hint?: string; value: string; defaultValue?: string; onChange: (v: string) => void }) => (
     <div>
-      <InfoFieldLabel label={label} hint={hint} className="mb-2" />
+      <div className="mb-2 flex items-center gap-1">
+        <InfoFieldLabel label={label} hint={hint} />
+        <button type="button" title={`Reset`} aria-label={`Reset ${label} to inherited/default colour`} onClick={() => onChange('')} style={{ display: value.trim().toLowerCase() === defaultValue.trim().toLowerCase() ? 'none' : undefined }} className="inline-flex shrink-0 items-center justify-center p-1 text-xs text-[#374151] hover:text-[var(--life-primary-500)]">
+          <i className="fa fa-undo" aria-hidden="true" />
+        </button>
+      </div>
       <div className="flex gap-2 items-center">
         <label className="w-8 h-8 rounded border border-[#d1d5db] cursor-pointer flex-shrink-0 block overflow-hidden relative">
-          <span className="block w-full h-full" style={{ backgroundColor: value }} />
-          <input type="color" value={value} onChange={e => onChange(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" />
+          <span className="block w-full h-full" style={{ backgroundColor: value || 'transparent' }} />
+          <input type="color" name={`${label}-picker`} aria-label={`${label} picker`} value={/^#[0-9a-f]{6}$/i.test(value) ? value : '#ffffff'} onChange={e => onChange(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" />
         </label>
-        <input type="text" value={value.toUpperCase()} onChange={e => { const v = e.target.value; if (/^#[0-9A-Fa-f]{0,6}$/.test(v)) onChange(v); }} className="text-xs flex-1 border border-[#d1d5db] rounded px-2 py-1 text-[#111827] focus:border-[var(--life-primary-500)] outline-none" />
+        <input type="text" name={`${label}-hex`} aria-label={`${label} hex value`} value={value.toUpperCase()} placeholder="Inherit" onChange={e => { const v = e.target.value; if (v === '' || /^#[0-9A-Fa-f]{0,6}$/.test(v)) onChange(v); }} className="text-xs min-w-0 flex-1 border border-[#d1d5db] rounded px-2 py-1 text-[#111827] focus:border-[var(--life-primary-500)] outline-none" />
       </div>
     </div>
   );
@@ -2038,7 +1942,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
   const FontDropdownField = ({ label, hint, value, onChange }: { label: string; hint?: string; value: string; onChange: (v: string) => void }) => (
     <div>
       <InfoFieldLabel label={label} hint={hint} className="mb-2" />
-      <select value={value} onChange={e => onChange(e.target.value)} className="text-xs w-full border border-[#d1d5db] rounded px-2 py-1 text-[#111827] bg-white cursor-pointer focus:border-[var(--life-primary-500)] outline-none">
+      <select name={label} aria-label={label} value={value} onChange={e => onChange(e.target.value)} className="text-xs w-full border border-[#d1d5db] rounded px-2 py-1 text-[#111827] bg-white cursor-pointer focus:border-[var(--life-primary-500)] outline-none">
         {FONT_OPTIONS.map(f => <option key={f} value={f}>{f}</option>)}
       </select>
     </div>
@@ -2046,7 +1950,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
 
   const getCustomSetting = (sectionId: string, fieldKey: string): string => {
     const key = `${sectionId}::${fieldKey}`;
-    return customSettings[key] ?? CUSTOM_FIELD_DEFAULTS[key] ?? '';
+    return customSettings[key] || getCustomSettingDefault(key);
   };
 
   // Live Preview Component
@@ -2065,25 +1969,26 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     const instructionColor = getCustomSetting('_global', 'instruction-color') || '#1f1f1f';
     const linkColor = getCustomSetting('_global', 'link') || '#2e7fa1';
     const titleSizeRaw = getCustomSetting('_global', 'page-heading-font-size') || '3rem';
+    const [topicSize, articleSize, blockSize, componentSize, , , paragraphSize] = calcDesktopSizes(parseFloat(titleSizeRaw));
     const pageBgColor = getCustomSetting('_pageStructure', 'page-bg-color') || '#f8f8f8';
-    const articleBgColor = getCustomSetting('_pageStructure', 'article-bg-color') || '#ffffff';
-    const blockBgColor = getCustomSetting('_pageStructure', 'block-bg-color') || '#ffffff';
-    const componentBgColor = getCustomSetting('_pageStructure', 'component-bg-color') || '#ffffff';
-    const pageHeaderBg = getCustomSetting('_pageStructure', 'page-header-background-color') || primaryColor;
-    const pageHeaderTitleColor = getCustomSetting('_pageStructure', 'page-header-title-color') || '#ffffff';
-    const pageHeaderSubtitleColor = getCustomSetting('_pageStructure', 'page-header-subtitle-color') || 'rgba(255,255,255,0.8)';
-    const pageHeaderBodyColor = getCustomSetting('_pageStructure', 'page-header-body-color') || 'rgba(255,255,255,0.85)';
+    const articleBgColor = getCustomSetting('_pageStructure', 'article-bg-color') || 'transparent';
+    const blockBgColor = getCustomSetting('_pageStructure', 'block-bg-color') || 'transparent';
+    const componentBgColor = getCustomSetting('_pageStructure', 'component-bg-color') || 'transparent';
+    const pageHeaderBg = getCustomSetting('_pageStructure', 'page-header-background-color') || 'transparent';
+    const pageHeaderTitleColor = getCustomSetting('_pageStructure', 'page-header-title-color') || headingColorTheme;
+    const pageHeaderSubtitleColor = getCustomSetting('_pageStructure', 'page-header-subtitle-color') || headingColorTheme;
+    const pageHeaderBodyColor = getCustomSetting('_pageStructure', 'page-header-body-color') || fontColor;
     const pageHeaderInstructionColor = getCustomSetting('_pageStructure', 'page-header-instruction-color') || instructionColor;
-    const articleTopPadding = getCustomSetting('_pageStructure', 'article-top-padding') || 'standard';
-    const articleBottomPadding = getCustomSetting('_pageStructure', 'article-bottom-padding') || 'standard';
-    const blockTopPadding = getCustomSetting('_pageStructure', 'block-top-padding') || 'standard';
-    const blockBottomPadding = getCustomSetting('_pageStructure', 'block-bottom-padding') || 'standard';
+    const articleTopPadding = getCustomSetting('_pageStructure', 'article-top-padding');
+    const articleBottomPadding = getCustomSetting('_pageStructure', 'article-bottom-padding');
+    const blockTopPadding = getCustomSetting('_pageStructure', 'block-top-padding');
+    const blockBottomPadding = getCustomSetting('_pageStructure', 'block-bottom-padding');
 
     const progressFill = getCustomSetting('_progress', 'progress') || primaryColor;
     const progressBackground = getCustomSetting('_progress', 'progress-inverted') || '#e5e5e5';
     const progressBorder = getCustomSetting('_progress', 'progress-border') || 'transparent';
 
-    const navBg = getCustomSetting('_nav', 'nav') || pageHeaderBg;
+    const navBg = getCustomSetting('_nav', 'nav') || primaryColor;
 
     const spacingScale: Record<string, number> = {
       remove: 0,
@@ -2098,6 +2003,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     const headingColor = previewDarkMode ? '#ffffff' : headingColorTheme;
     const instructionPreviewColor = previewDarkMode ? '#f3f4f6' : instructionColor;
     const articlePreviewBg = previewDarkMode ? '#232323' : articleBgColor;
+    const pageHeaderPreviewBg = previewDarkMode ? '#232323' : pageHeaderBg;
     const blockPreviewBg = previewDarkMode ? '#2b2b2b' : blockBgColor;
     const componentPreviewBg = previewDarkMode ? '#333333' : componentBgColor;
     const itemPreviewBg = previewDarkMode ? '#3a3a3a' : componentBgColor;
@@ -2105,9 +2011,9 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     const infoPanelBorder = previewDarkMode ? '#4b5563' : '#FEE685';
     const infoPanelText = previewDarkMode ? '#f9fafb' : '#973C00';
     const infoPanelHeading = previewDarkMode ? '#ffffff' : '#7A3000';
-    const navIconColor = (pageHeaderTitleColor && pageHeaderTitleColor !== 'transparent') ? pageHeaderTitleColor : '#ffffff';
-    const navTextColor = (pageHeaderBodyColor && pageHeaderBodyColor !== 'transparent') ? pageHeaderBodyColor : navIconColor;
-    const titleSize = titleSizeRaw;
+    const navIconColor = '#ffffff';
+    const navTextColor = '#ffffff';
+    const titleSize = `${topicSize.size}rem`;
     const articleTop = spacingScale[articleTopPadding] ?? spacingScale.standard;
     const articleBottom = spacingScale[articleBottomPadding] ?? spacingScale.standard;
     const blockTop = spacingScale[blockTopPadding] ?? spacingScale.standard;
@@ -2188,40 +2094,46 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
             <div style={{ height: '4px', borderTop: `1px solid ${progressBorder}`, borderBottom: `1px solid ${progressBorder}`, background: `linear-gradient(to right, ${progressFill} 60%, ${progressBackground} 60%)` }} />
             <div style={{ backgroundColor: previewBg, padding: '18px' }}>
               <div style={{ maxWidth: '560px', margin: '0 auto' }}>
-                <div style={{ padding: '6px 0 14px' }}>
-                  <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: titleSize || '3rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '4px' }}>
+                <div style={{ padding: '6px 0 14px', backgroundColor: pageHeaderPreviewBg }}>
+                  <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: titleSize || '3rem', fontWeight: 700, color: previewDarkMode ? '#ffffff' : pageHeaderTitleColor, lineHeight: 1.2, marginBottom: '2rem' }}>
                     New Topic Title
                   </div>
-                  <div style={{ fontFamily: `${paragraphFont}, sans-serif`, color: textColor, fontSize: '0.88rem', lineHeight: 1.45 }}>
+                  <div style={{ fontFamily: `${paragraphFont}, sans-serif`, color: previewDarkMode ? textColor : pageHeaderSubtitleColor, fontSize: `${paragraphSize.size}rem`, lineHeight: 1.45 }}>
                     Topic subtitle
+                  </div>
+                  <div style={{ fontFamily: `${paragraphFont}, sans-serif`, color: previewDarkMode ? textColor : pageHeaderBodyColor, fontSize: `${paragraphSize.size}rem`, marginTop: '1rem' }}>
+                    Topic introduction
+                  </div>
+                  <div style={{ fontFamily: `${paragraphFont}, sans-serif`, color: previewDarkMode ? instructionPreviewColor : pageHeaderInstructionColor, fontSize: '0.82rem', marginTop: '1rem' }}>
+                    Complete the activities below.
                   </div>
                 </div>
 
                 <div style={{ border: `1px solid ${previewDarkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: '10px', background: articlePreviewBg, padding: `${articleTop}px 12px ${articleBottom}px`, marginTop: '10px' }}>
-                  <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '1rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '10px' }}>
+                  <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: `${articleSize.size}rem`, fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '1rem' }}>
                     New Article Title
                   </div>
 
                   <div style={{ border: `1px solid ${previewDarkMode ? '#4b5563' : '#9fc9dd'}`, borderRadius: '10px', background: blockPreviewBg, padding: `${blockTop}px 12px ${blockBottom}px`, marginTop: '10px' }}>
-                    <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '0.92rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '10px' }}>
+                    <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: `${blockSize.size}rem`, fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '1rem' }}>
                       New Block Title
                     </div>
 
                     <div style={{ border: `1px solid ${previewDarkMode ? '#6b7280' : '#d1d5db'}`, borderRadius: '10px', background: componentPreviewBg, padding: '12px', marginTop: '10px', boxShadow: previewDarkMode ? 'none' : '0 1px 2px rgba(0, 0, 0, 0.05)' }}>
-                      <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '0.9rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '8px' }}>
+                      <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: `${componentSize.size}rem`, fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '1rem' }}>
                         New Component Title
                       </div>
-                      <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', color: textColor, marginBottom: '6px' }}>
+                      <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: `${paragraphSize.size}rem`, color: textColor, marginBottom: '1rem' }}>
                         Body text
                       </div>
-                      <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.84rem', color: linkColor, textDecoration: 'underline', cursor: 'pointer', marginBottom: '10px' }}>
+                      <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: `${paragraphSize.size}rem`, color: linkColor, textDecoration: 'underline', cursor: 'pointer', marginBottom: '1rem' }}>
                         This is a sample link
                       </div>
-                      <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', color: instructionPreviewColor, fontStyle: 'italic', marginBottom: '10px' }}>
+                      <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', color: instructionPreviewColor, fontStyle: 'italic', marginBottom: '1rem' }}>
                         Choose one option then select Submit.
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {[{ label: 'Correct', selected: true }, { label: 'Incorrect', selected: false }].map((opt) => (
+                        {[{ label: 'Selected', color: secondaryColor }, { label: 'Correct', color: secondaryColor }, { label: 'Incorrect', color: secondaryColor }].map((opt) => (
                           <div
                             key={opt.label}
                             style={{
@@ -2231,11 +2143,11 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                               border: `1px solid ${previewDarkMode ? '#9ca3af' : '#e5e7eb'}`,
                               borderRadius: '999px',
                               padding: '8px 12px',
-                              background: opt.selected ? `${secondaryColor}1F` : itemPreviewBg,
+                              background: itemPreviewBg,
                             }}
                           >
-                            <div style={{ width: '18px', height: '18px', borderRadius: '50%', flexShrink: 0, border: `2px solid ${opt.selected ? secondaryColor : (previewDarkMode ? '#d1d5db' : '#cbd5e1')}`, display: 'flex', alignItems: 'center', justifyContent: 'center', background: componentPreviewBg }}>
-                              {opt.selected && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: secondaryColor }} />}
+                            <div style={{ width: '18px', height: '18px', borderRadius: '50%', flexShrink: 0, border: `2px solid ${opt.color}`, display: 'flex', alignItems: 'center', justifyContent: 'center', background: componentPreviewBg }}>
+                              <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: opt.color }} />
                             </div>
                             <span style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.8rem', fontWeight: 600, color: textColor }}>{opt.label}</span>
                           </div>
@@ -2909,7 +2821,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           </ThemeAccordion>
         )}
 
-        {/* On Screen Classes - always visible */}
+        {selected !== "vanilla" && (
         <ThemeAccordion
           label="On Screen Classes"
           isOpen={activeAccordion === "On Screen Classes"}
@@ -2919,6 +2831,8 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
             <p className="text-xs text-[#6b7280] leading-relaxed">
               These settings allow you to attach classes when content is within the browser viewport.
               Supported classes include fade-in, fade-in-left, fade-in-right, fade-in-top, and fade-in-bottom.
+              {" "}A configured local class uses that item's settings; an empty local class uses the course defaults.
+              {" "}Use 1-100 for an explicit viewport percentage; the current framework treats 0 as 33%.
             </p>
 
             <div className="flex items-center gap-3">
@@ -2976,7 +2890,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                               const parsed = Number(e.target.value);
                               const safeValue = Number.isFinite(parsed)
                                 ? Math.max(0, Math.min(100, parsed))
-                                : DEFAULT_ON_SCREEN_CONFIG._percentInviewVertical;
+                                : DEFAULT_ON_SCREEN_CONFIG._levels[row.key]._percentInviewVertical;
                               updateOnScreenRow(row.key, { _percentInviewVertical: safeValue });
                             }}
                             className="text-xs w-full border border-[#d1d5db] rounded-md px-2.5 py-1.5 text-[#111827] bg-white focus:border-[var(--life-primary-500)] outline-none"
@@ -2990,6 +2904,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
             )}
           </div>
         </ThemeAccordion>
+        )}
       </div>
 
       {/* Vanilla Theme Settings - only shown when Vanilla is selected */}
@@ -3122,10 +3037,9 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                           <div className="grid grid-cols-2 gap-x-4 gap-y-4">
                             {acc.fields.map((field) => {
                               const key = `${acc.id}::${field.key}`;
-                              const value = customSettings[key] ?? CUSTOM_FIELD_DEFAULTS[key] ?? '';
+                              const value = customSettings[key] || getCustomSettingDefault(key);
                               const hint = getSchemaNestedFieldText(sectionSchema, field.key, 'help');
                               const fieldLabel = getSchemaText(getSchemaField(selectedThemeSchema, acc.id, field.key), 'title') ?? field.label;
-
                               if (field.inputType === 'select') {
                                 return (
                                   <div
@@ -3134,6 +3048,9 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                                   >
                                     <InfoFieldLabel label={fieldLabel} hint={hint} className="mb-2" />
                                     <select
+                                      id={`custom-theme-${acc.id}-${field.key}`}
+                                      name={key}
+                                      aria-label={fieldLabel}
                                       value={value}
                                       onChange={(e) => setCustomSettingWithDependencies(key, e.target.value)}
                                       className="text-xs w-full border border-[#d1d5db] rounded px-2 py-1 text-[#111827] bg-white cursor-pointer focus:border-[var(--life-primary-500)] outline-none"
@@ -3152,7 +3069,8 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                                   key={field.key}
                                   label={fieldLabel}
                                   hint={hint}
-                                  value={value || '#ffffff'}
+                                  value={value}
+                                  defaultValue={getCustomSettingDefault(key)}
                                   onChange={(nextValue) => setCustomSettingWithDependencies(key, nextValue)}
                                 />
                               );
@@ -3444,4 +3362,3 @@ function ThemeAccordion({
     </div>
   );
 }
-

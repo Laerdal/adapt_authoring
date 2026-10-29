@@ -412,11 +412,10 @@ function BlockNoteStoryboardEditorImpl(
     [editor]
   );
 
-  // Comments anchor to the Page (H1)/Article (H2) enclosing the cursor, never
-  // to a Block/Component — see resolveCommentAnchor.
+  const commentTargetRef = useRef<string | undefined>(undefined);
   const getCommentAnchor = useCallback((): ActiveBlockInfo | null => {
     try {
-      const cursorBlockId = editor.getTextCursorPosition().block.id;
+      const cursorBlockId = commentTargetRef.current ?? editor.getTextCursorPosition().block.id;
       return resolveCommentAnchor(editor.document, cursorBlockId);
     } catch {
       return null;
@@ -513,7 +512,8 @@ function BlockNoteStoryboardEditorImpl(
     return editor.onSelectionChange(() => {
       try {
         const block = editor.getTextCursorPosition().block;
-        onActiveBlock({ id: block.id, text: inlineText(block.content), type: block.type });
+        commentTargetRef.current = block.id;
+        onActiveBlock(resolveCommentAnchor(editor.document, block.id));
       } catch {
         onActiveBlock(null);
       }
@@ -622,7 +622,17 @@ function BlockNoteStoryboardEditorImpl(
   }, []);
 
   return (
-    <BlockNoteView editor={editor} editable={editable} theme="light" slashMenu={false} formattingToolbar={false}>
+    <BlockNoteView editor={editor} editable={editable} theme="light" slashMenu={false} formattingToolbar={false}
+      onClick={(event) => {
+        const target = event.target as HTMLElement;
+        const blockId = target.closest('[data-id]')?.getAttribute('data-id');
+        if (!blockId) return;
+        const anchor = resolveCommentAnchor(editor.document, blockId);
+        if (!anchor) return;
+        commentTargetRef.current = blockId;
+        onActiveBlock?.(anchor);
+      }}
+    >
       <FormattingToolbarController
         formattingToolbar={() => <FormattingToolbar>{getToolbarItems()}</FormattingToolbar>}
       />
