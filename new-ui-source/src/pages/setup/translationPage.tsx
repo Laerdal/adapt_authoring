@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import LifeSelect from "@/components/common/LifeSelect";
 import { useNavigate } from "react-router-dom";
 import {
   cancelMediaLocateTranslation,
@@ -141,6 +142,8 @@ const TRANSLATION_LOCALES = [
   { locales: "uk", description: "Ukrainian [uk]" },
   { locales: "uk-UA", description: "Ukrainian (Ukraine) [uk-UA]" },
 ];
+
+const TRANSLATION_LOCALE_OPTIONS = TRANSLATION_LOCALES.map((l) => ({ value: l.locales, label: l.description }));
 
 function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -1146,17 +1149,7 @@ export function TranslationPage({ courseId, courseTitle }: { courseId?: string; 
                     <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-center">
                       <label className="block text-left">
                         <span className="mb-2 block text-[14px] font-medium text-[var(--life-color-text-default)]">Select Language *</span>
-                        <select
-                          value={previewLanguage}
-                          onChange={(event) => setPreviewLanguage(event.target.value)}
-                          className="life-field"
-                        >
-                          {TRANSLATION_LOCALES.map((locale) => (
-                            <option key={locale.locales} value={locale.locales}>
-                              {locale.description}
-                            </option>
-                          ))}
-                        </select>
+                        <LifeSelect value={previewLanguage} onChange={setPreviewLanguage} options={TRANSLATION_LOCALE_OPTIONS} />
                       </label>
                       <ActionButton
                         onClick={() => void loadPreviewStrings()}
@@ -1346,14 +1339,10 @@ export function TranslationPage({ courseId, courseTitle }: { courseId?: string; 
                               </SectionField>
                               <div className="grid gap-4 sm:grid-cols-2">
                                 <SectionField label="Target language">
-                                  <select value={smartlingLanguage} onChange={(event) => setSmartlingLanguage(event.target.value)} className="life-field">
-                                    {TRANSLATION_LOCALES.map((locale) => <option key={locale.locales} value={locale.locales}>{locale.description}</option>)}
-                                  </select>
+                                  <LifeSelect value={smartlingLanguage} onChange={setSmartlingLanguage} options={TRANSLATION_LOCALE_OPTIONS} />
                                 </SectionField>
                                 <SectionField label="Download locale">
-                                  <select value={smartlingLocaleToDownload} onChange={(event) => setSmartlingLocaleToDownload(event.target.value)} className="life-field">
-                                    {TRANSLATION_LOCALES.map((locale) => <option key={locale.locales} value={locale.locales}>{locale.description}</option>)}
-                                  </select>
+                                  <LifeSelect value={smartlingLocaleToDownload} onChange={setSmartlingLocaleToDownload} options={TRANSLATION_LOCALE_OPTIONS} />
                                 </SectionField>
                               </div>
                               <div className="flex flex-wrap gap-3">
@@ -1378,9 +1367,7 @@ export function TranslationPage({ courseId, courseTitle }: { courseId?: string; 
                             <h4 className="text-[20px] font-semibold tracking-normal text-[var(--life-color-text-default)]">MediaLocate Config</h4>
                             <div className="mt-8 space-y-5">
                               <SectionField label="Target language">
-                                <select value={mediaLocateLanguage} onChange={(event) => setMediaLocateLanguage(event.target.value)} className="life-field">
-                                  {TRANSLATION_LOCALES.map((locale) => <option key={locale.locales} value={locale.locales}>{locale.description}</option>)}
-                                </select>
+                                <LifeSelect value={mediaLocateLanguage} onChange={setMediaLocateLanguage} options={TRANSLATION_LOCALE_OPTIONS} />
                               </SectionField>
                               <SectionField label="Project Name">
                                 <input value={mediaLocateProjectName} onChange={(event) => setMediaLocateProjectName(event.target.value)} placeholder="Optional project name" className="life-field" />
@@ -1457,9 +1444,7 @@ export function TranslationPage({ courseId, courseTitle }: { courseId?: string; 
                         <h4 className="text-[20px] font-semibold tracking-normal text-[var(--life-color-text-default)]">Upload Translated File</h4>
                         <div className="mt-5 space-y-4">
                           <SectionField label="Translation Language">
-                            <select value={xliffUploadLanguage} onChange={(event) => setXliffUploadLanguage(event.target.value)} className="life-field">
-                              {TRANSLATION_LOCALES.map((locale) => <option key={locale.locales} value={locale.locales}>{locale.description}</option>)}
-                            </select>
+                            <LifeSelect value={xliffUploadLanguage} onChange={setXliffUploadLanguage} options={TRANSLATION_LOCALE_OPTIONS} />
                           </SectionField>
                           <label
                             className="flex min-h-[160px] cursor-pointer flex-col items-center justify-center gap-3 rounded-[14px] border-2 border-dashed border-[var(--life-color-border-subtle)] bg-[var(--life-color-bg-surface-default)] px-5 py-6 text-center transition hover:border-[var(--life-primary-500)] hover:bg-[var(--life-primary-050)]"
@@ -1545,9 +1530,11 @@ export function TranslationPage({ courseId, courseTitle }: { courseId?: string; 
                       <div className="mt-5 space-y-5">
                         <div className="grid gap-4 sm:grid-cols-2">
                           <SectionField label="Target language">
-                            <select value={leatsLanguage} onChange={(event) => setLeatsLanguage(event.target.value)} className="life-field">
-                              {(leatsConfig?.languages.length ? leatsConfig.languages : TRANSLATION_LOCALES.map((locale) => ({ locales: locale.locales, description: locale.description }))).map((locale) => <option key={locale.locales} value={locale.locales}>{locale.description}</option>)}
-                            </select>
+                            <LifeSelect
+                              value={leatsLanguage}
+                              onChange={setLeatsLanguage}
+                              options={(leatsConfig?.languages.length ? leatsConfig.languages : TRANSLATION_LOCALES).map((l) => ({ value: l.locales, label: l.description }))}
+                            />
                           </SectionField>
                           <label className="space-y-2">
                             <span className="text-xs font-semibold uppercase tracking-normal text-[var(--life-color-text-subtle)]">Prompt mode</span>

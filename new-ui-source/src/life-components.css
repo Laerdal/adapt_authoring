@@ -90,6 +90,10 @@
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235E5E5E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
     background-repeat: no-repeat; background-position: right 10px center; background-size: 16px;
   }
+  /* A native <select> must not be a flex container (its popup renders blank), and its options need explicit colours. */
+  select.life-field { display: block; line-height: normal; }
+  select.life-field option { background: var(--life-base-white); color: var(--life-color-text-default); padding: 8px 12px; }
+  select.life-field option:checked { background: var(--life-primary-100); color: var(--life-primary-700); }
   select.life-field:disabled { background-color: var(--life-neutral-050); }
 
   /* Native radio / checkbox inputs: <input type="radio" className="life-radio"> */
