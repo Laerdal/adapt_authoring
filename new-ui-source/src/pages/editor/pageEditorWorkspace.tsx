@@ -12518,6 +12518,9 @@ export default function CourseEditor({
           open={isSamaritanOpen}
           onOpenChange={setIsSamaritanOpen}
           anchorId="page-editor-top-bar"
+          writeBlockedReason={
+            hasUnsavedChanges ? "You have unsaved changes. Save them first, so edits made by Samaritan do not replace them." : null
+          }
           onExecuted={(componentId) =>
             loadStructureFromDatabase({
               pageId: selectedPageId,

@@ -48,7 +48,10 @@ describe('samaritan executors', function() {
   });
 
   it('createArticle creates under the given parent/course', function() {
-    var app = fakeApp({ article: { create: function(data, cb) { cb(null, { _id: 'article-1' }); } } });
+    var app = fakeApp({
+      article: { create: function(data, cb) { cb(null, { _id: 'article-1' }); } },
+      contentobject: { retrieve: function(search, opts, cb) { cb(null, [{ _id: 'page-1', _type: 'page', _courseId: 'course-1' }]); } }
+    });
     return executors
       .executeAction(app, { actionType: 'CREATE_ARTICLE', target: { parentId: 'page-1', courseId: 'course-1' }, parameters: { title: 'A' } })
       .then(function(result) { result.should.eql({ articleId: 'article-1' }); });

@@ -87,6 +87,8 @@ export default function BuildWithAiWizard({ onClose, onComplete, defaultTheme, d
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const topicIdRef = useRef<string | null>(null);
+  // The title the saved course and root topic currently carry.
+  const savedTitleRef = useRef<string>("");
 
   const [audienceLevel, setAudienceLevel] = useState<AudienceLevel>("beginner");
   const [courseType, setCourseType] = useState<CourseType>("knowledge");
@@ -109,6 +111,7 @@ export default function BuildWithAiWizard({ onClose, onComplete, defaultTheme, d
     );
     topicIdRef.current = await createTopic(created.id, created.id, title.trim() || "Untitled Course", 1);
     courseIdRef.current = created.id;
+    savedTitleRef.current = title.trim() || "Untitled Course";
     return created.id;
   }
 
@@ -137,18 +140,27 @@ export default function BuildWithAiWizard({ onClose, onComplete, defaultTheme, d
 
   const sourcesReading = sources.some((s) => s.status === "reading");
 
-  // A blank title is filled from Samaritan's suggestion: the author sees it,
-  // and the already-created course and its root topic are renamed to match.
+  // Renames the already-created course and its root topic. Used for Samaritan's
+  // suggestion when the title was left blank, and again before the outline is
+  // generated if the author edited the title after the course was created.
+  async function syncTitle(courseId: string, next: string) {
+    const value = next.trim();
+    if (!value || value === savedTitleRef.current) return;
+    try {
+      await updateCourse(courseId, { title: value, displayTitle: value });
+      if (topicIdRef.current) await apiClient.put(`/api/content/contentobject/${topicIdRef.current}`, { title: value, displayTitle: value });
+      savedTitleRef.current = value;
+    } catch {
+      /* cosmetic - the title can still be edited later in Course Settings */
+    }
+  }
+
+  // A blank title is filled from Samaritan's suggestion and shown to the author.
   async function applySuggestedTitle(courseId: string, suggested?: string) {
     const next = suggested?.trim();
     if (!next || title.trim()) return;
     setTitle(next);
-    try {
-      await updateCourse(courseId, { title: next, displayTitle: next });
-      if (topicIdRef.current) await apiClient.put(`/api/content/contentobject/${topicIdRef.current}`, { title: next, displayTitle: next });
-    } catch {
-      /* cosmetic - the title can still be edited later in Course Settings */
-    }
+    await syncTitle(courseId, next);
   }
 
   async function generateObjectives() {
@@ -219,6 +231,7 @@ export default function BuildWithAiWizard({ onClose, onComplete, defaultTheme, d
     setBusy(true);
     setError(null);
     try {
+      await syncTitle(courseIdRef.current, title);
       const response = await proposeRequest({ courseId: courseIdRef.current, message: buildGenerationMessage() });
       if (response.status === "PLAN_PROPOSED") {
         setReviewRequestId(response.requestId);

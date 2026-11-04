@@ -187,6 +187,10 @@ export default function StoryboardWorkspace({
     }
   };
   const sb = useStoryboard(courseId);
+  // Live dirty flag. refreshFromCourse runs from callbacks that captured an older
+  // render, so it must read this, not the stale sb.dirty of its closure.
+  const sbDirtyRef = useRef(false);
+  sbDirtyRef.current = sb.dirty;
   const review = useStoryboardReview(sb.storyboardId, sb.refreshStatus);
   const editorRef = useRef<StoryboardEditorHandle>(null);
   const navigate = useNavigate();
@@ -334,9 +338,12 @@ export default function StoryboardWorkspace({
   // never discards unsaved edits. Runs automatically (see effect below) on
   // revisiting the page — there is no manual "Refresh" control.
   const refreshFromCourse = async () => {
-    if (!courseId || !booted || sb.dirty) return;
+    if (!courseId || !booted || sbDirtyRef.current) return;
     try {
       const fresh = await getCourseStoryboardBlocks(courseId);
+      // The author may have started typing while this request was in flight;
+      // replacing the document now would discard those edits.
+      if (sbDirtyRef.current) return;
       if (fresh.length) {
         editorRef.current?.setDocument(fresh);
         sb.setDocument(fresh);

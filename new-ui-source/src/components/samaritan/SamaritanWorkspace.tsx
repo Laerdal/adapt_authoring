@@ -72,6 +72,9 @@ type Turn =
 
 interface QuickAction {
   id: string;
+  // course: runs against the whole course even when something is selected, so
+  // the course-level write tools stay available. selection: uses the selection.
+  scope: "course" | "selection";
   label: string;
   icon: React.ReactNode;
   prompt: (hasSelection: boolean) => string;
@@ -80,6 +83,7 @@ interface QuickAction {
 const QUICK_ACTIONS: QuickAction[] = [
   {
     id: "review",
+    scope: "selection",
     label: "Review course content",
     icon: (
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
@@ -91,6 +95,7 @@ const QUICK_ACTIONS: QuickAction[] = [
   },
   {
     id: "objectives",
+    scope: "course",
     label: "Improve learning objectives",
     icon: (
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><polyline points="3 6 4 7 6 5" /><polyline points="3 12 4 13 6 11" /><polyline points="3 18 4 19 6 17" /></svg>
@@ -100,6 +105,7 @@ const QUICK_ACTIONS: QuickAction[] = [
   },
   {
     id: "add",
+    scope: "course",
     label: "Add components",
     icon: (
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
@@ -109,6 +115,7 @@ const QUICK_ACTIONS: QuickAction[] = [
   },
   {
     id: "regen",
+    scope: "selection",
     label: "Regenerate sections",
     icon: (
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" /></svg>
@@ -120,6 +127,7 @@ const QUICK_ACTIONS: QuickAction[] = [
   },
   {
     id: "gaps",
+    scope: "course",
     label: "Identify content gaps",
     icon: (
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z" /></svg>
@@ -224,6 +232,7 @@ export default function SamaritanWorkspace({
   const [busy, setBusy] = useState(false);
   const autoSent = useRef(false);
   const history = useRef<ConversationTurn[]>([]);
+  const courseScope = useRef(false);
 
   // Overlay mode sits directly under the host's top bars (so the launcher in
   // those bars stays clickable) rather than covering the top of the screen.
@@ -249,14 +258,17 @@ export default function SamaritanWorkspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoSendMessage]);
 
-  async function send(text: string, goalLabel?: string) {
+  async function send(text: string, goalLabel?: string, scope?: QuickAction["scope"]) {
     if (!text.trim() || busy) return;
     if (goalLabel) setActiveGoalLabel(goalLabel);
+    // A course-wide quick action keeps the whole conversation course-scoped, so a
+    // clarifying answer typed afterwards is not narrowed to the selection either.
+    if (scope === "course") courseScope.current = true;
     setTurns((t) => [...t, { kind: "user", text }]);
     setMessage("");
     setBusy(true);
     try {
-      const response = await proposeRequest({ courseId, message: text, selection, conversationHistory: history.current });
+      const response = await proposeRequest({ courseId, message: text, selection: courseScope.current ? undefined : selection, conversationHistory: history.current });
       history.current = [...history.current, { role: "user", content: text }, { role: "assistant", content: summarizeForHistory(response) }];
       appendResponseTurn(response);
     } catch (err) {
@@ -294,13 +306,17 @@ export default function SamaritanWorkspace({
         ...t,
         { kind: "result", text: approved ? (passed ? `Done - verified (${response.verificationResult.checks.filter((c) => c.passed).length}/${response.verificationResult.checks.length} checks).` : `Executed but verification found issues.`) : "Cancelled." }
       ]);
-      if (approved && passed) {
-        const componentId = (response.executionResult as any).componentId || (response.executionResult as any).newComponentId;
+      if (approved) {
+        // Even an action that failed verification may have written something, and
+        // the host would otherwise keep showing (and later re-save) stale content.
+        // Only focusing the new component depends on a verified success.
+        const componentId = passed ? (response.executionResult as any).componentId || (response.executionResult as any).newComponentId : null;
         if (componentId) onExecuted?.(componentId);
         onStructureChanged?.();
       }
     } catch (err) {
       setTurns((t) => [...t, { kind: "error", text: err instanceof Error ? err.message : "Failed to execute action" }]);
+      if (approved) onStructureChanged?.();
     } finally {
       setBusy(false);
     }
@@ -311,9 +327,11 @@ export default function SamaritanWorkspace({
     try {
       const response = await approvePlan(requestId, approved);
       setTurns((t) => [...t, { kind: "plan-result", response }]);
-      if (response.status === "completed") onStructureChanged?.();
+      // completed, rolled_back or partial_failure: all can leave persisted changes.
+      if (approved) onStructureChanged?.();
     } catch (err) {
       setTurns((t) => [...t, { kind: "error", text: err instanceof Error ? err.message : "Failed to execute plan" }]);
+      if (approved) onStructureChanged?.();
     } finally {
       setBusy(false);
     }
@@ -323,6 +341,7 @@ export default function SamaritanWorkspace({
     setTurns([]);
     setActiveGoalLabel(null);
     history.current = [];
+    courseScope.current = false;
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -387,7 +406,7 @@ export default function SamaritanWorkspace({
                 key={action.id}
                 type="button"
                 disabled={busy}
-                onClick={() => send(action.prompt(!!selection), action.label)}
+                onClick={() => send(action.prompt(action.scope === "selection" && !!selection), action.label, action.scope)}
                 className="flex items-center gap-2.5 px-3 py-2.5 border border-[#e5e7eb] rounded-lg text-sm text-[#374151] hover:bg-[#f9fafb] hover:border-[#9cc3e3] transition-colors disabled:opacity-40"
               >
                 <span className="text-[#6b7280]">{action.icon}</span>

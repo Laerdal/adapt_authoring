@@ -23,6 +23,23 @@ describe("sourceMaterial", () => {
     expect(text).toContain("## Airway");
     expect(text).toContain("Open the airway.");
     expect(text).toContain("Head tilt");
+    expect(text).toContain("A | B");
+  });
+
+  it("reads a table-only document, including wrapped cells and multiple rows", () => {
+    const text = blocksToPlainText([
+      {
+        type: "table",
+        content: {
+          type: "tableContent",
+          rows: [
+            { cells: [[{ type: "text", text: "Step" }], { type: "tableCell", content: [{ type: "text", text: "Action" }] }] },
+            { cells: [[{ type: "text", text: "1" }], [{ type: "text", text: "Check response" }]] }
+          ]
+        }
+      }
+    ]);
+    expect(text).toBe("Step | Action\n1 | Check response");
   });
 
   it("shares the character budget across files and reports truncation", () => {

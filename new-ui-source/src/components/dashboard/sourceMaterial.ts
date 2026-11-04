@@ -25,21 +25,24 @@ export function formatFor(fileName: string): ImportFormat | null {
   return FORMAT_BY_EXT[ext] ?? null;
 }
 
+// Inline content is an array of runs, or - for a table - an object holding rows
+// of cells, each cell being inline content (or a { content } wrapper). Walk all
+// of those shapes recursively so table text reaches the prompt too.
 function inlineText(content: unknown): string {
   if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  return content
-    .map((item) => {
-      if (!item || typeof item !== "object") return "";
-      const node = item as { text?: unknown; content?: unknown; rows?: unknown };
-      if (typeof node.text === "string") return node.text;
-      // Table content: { type: "tableContent", rows: [{ cells: [...] }] }
-      if (Array.isArray(node.rows)) {
-        return node.rows.map((row) => inlineText((row as { cells?: unknown }).cells)).join(" | ");
-      }
-      return inlineText(node.content);
-    })
-    .join("");
+  if (Array.isArray(content)) return content.map(inlineText).join("");
+  if (!content || typeof content !== "object") return "";
+  const node = content as { text?: unknown; content?: unknown; rows?: unknown };
+  if (typeof node.text === "string") return node.text;
+  if (Array.isArray(node.rows)) {
+    return node.rows
+      .map((row) => {
+        const cells = (row as { cells?: unknown }).cells;
+        return Array.isArray(cells) ? cells.map(inlineText).join(" | ") : inlineText(row);
+      })
+      .join("\n");
+  }
+  return inlineText(node.content);
 }
 
 export function blocksToPlainText(blocks: unknown[], depth = 0): string {
