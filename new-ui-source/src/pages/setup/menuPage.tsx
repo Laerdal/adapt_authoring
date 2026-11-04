@@ -491,7 +491,7 @@ function MenuDropdown({
                   setOpen(false);
                 }}
                 role="option"
-                aria-pressed={value === opt}
+                aria-selected={value === opt}
                 className="life-menu-item justify-between"
               >
                 {opt || "Default"}

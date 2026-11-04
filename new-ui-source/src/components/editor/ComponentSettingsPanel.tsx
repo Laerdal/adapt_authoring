@@ -52,7 +52,7 @@ export default function ComponentSettingsPanel({
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-6">
         {/* Component Type Badge */}
-        <div className="px-3 py-2 bg-[var(--life-primary-100)] text-[var(--life-primary-500)] rounded-lg text-xs font-medium">
+        <div className="px-3 py-2 bg-[var(--life-primary-100)] text-[var(--life-primary-700)] rounded-lg text-xs font-medium">
           {component.type}
         </div>
 

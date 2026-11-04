@@ -82,6 +82,8 @@ export default function ProfileMenu() {
       closeMenu(true);
       return;
     } else if (event.key === "Tab") {
+      // Move focus out of the menu before it unmounts so Tab continues from the trigger.
+      triggerRef.current?.focus();
       closeMenu(false);
       return;
     }
@@ -119,18 +121,18 @@ export default function ProfileMenu() {
           </div>
 
           <div className="py-1">
-            <button type="button" role="menuitem" onClick={() => { setProfileOpen(false); openFeedback(); }} className="life-menu-item px-4">
+            <button type="button" role="menuitem" tabIndex={-1} onClick={() => { setProfileOpen(false); openFeedback(); }} className="life-menu-item px-4">
               <EditorMaskIcon file="feedback-icon.svg" className="block w-[15px] h-[15px] shrink-0 bg-current" />
               Feedback
             </button>
-            <button type="button" role="menuitem" onClick={() => { setProfileOpen(false); openSupport(); }} className="life-menu-item px-4">
+            <button type="button" role="menuitem" tabIndex={-1} onClick={() => { setProfileOpen(false); openSupport(); }} className="life-menu-item px-4">
               <EditorMaskIcon file="support-icon.svg" className="block w-[15px] h-[15px] shrink-0 bg-current" />
               Support
             </button>
           </div>
 
           <div className="border-t border-[var(--life-color-border-subtle)] py-1">
-            <button type="button" role="menuitem" onClick={switchToClassic} className="life-menu-item justify-between px-4">
+            <button type="button" role="menuitem" tabIndex={-1} onClick={switchToClassic} className="life-menu-item justify-between px-4">
               <span>Switch to Classic</span>
               <span className="relative inline-flex h-4 w-7 shrink-0 items-center rounded-full bg-[var(--life-neutral-200)]" aria-hidden="true">
                 <span className="inline-block h-3 w-3 translate-x-0.5 rounded-full bg-white shadow" />
@@ -139,7 +141,7 @@ export default function ProfileMenu() {
           </div>
 
           <div className="border-t border-[var(--life-color-border-subtle)] py-1">
-            <button type="button" role="menuitem" onClick={handleLogout} className="life-menu-item life-menu-item--critical px-4">
+            <button type="button" role="menuitem" tabIndex={-1} onClick={handleLogout} className="life-menu-item life-menu-item--critical px-4">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
                 <polyline points="16 17 21 12 16 7" />
