@@ -142,7 +142,8 @@ export default function UserManagementPage() {
   }, [users, search, roleFilter, sortKey, sortDir]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const paginated  = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const safePage   = Math.min(page, totalPages);
+  const paginated  = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   function handleSort(key: SortKey) {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -521,7 +522,7 @@ export default function UserManagementPage() {
           </table>
 
           <Paginator
-            page={page}
+            page={safePage}
             pageSize={pageSize}
             totalItems={filtered.length}
             pageSizeOptions={PAGE_SIZE_OPTIONS}

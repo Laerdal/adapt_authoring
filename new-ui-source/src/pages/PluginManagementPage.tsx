@@ -385,9 +385,9 @@ export default function PluginManagementPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--life-neutral-500)]" size={16} aria-hidden="true" />
             <input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search by name..." aria-label="Search plugins by name" className="life-field pl-9 pr-4" />
           </div>
-          <div role="tablist" aria-label="Plugin type" className="life-tabs">
+          <div role="group" aria-label="Plugin type" className="life-tabs">
             {FILTER_OPTIONS.map((option) => (
-              <button key={option.value} type="button" role="tab" aria-selected={filter === option.value} onClick={() => { setFilter(option.value); setPage(1); }} className="life-tab">
+              <button key={option.value} type="button" aria-pressed={filter === option.value} onClick={() => { setFilter(option.value); setPage(1); }} className="life-tab">
                 {option.label}
               </button>
             ))}

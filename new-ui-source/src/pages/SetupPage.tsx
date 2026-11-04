@@ -503,11 +503,10 @@ function CourseStructurePanel({
           <SaveChangesButton dirty={dirty} saving={saving} disabled={!courseId} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
 
           {/* View mode toggle */}
-          <div role="tablist" aria-label="Course structure view" className="life-tabs shrink-0">
+          <div role="group" aria-label="Course structure view" className="life-tabs shrink-0">
           <button
             type="button"
-            role="tab"
-            aria-selected={viewMode === "tree"}
+            aria-pressed={viewMode === "tree"}
             onClick={() => setViewMode("tree")}
             className="life-tab gap-1.5"
             title="Tree view"
@@ -523,8 +522,7 @@ function CourseStructurePanel({
           </button>
           <button
             type="button"
-            role="tab"
-            aria-selected={viewMode === "map"}
+            aria-pressed={viewMode === "map"}
             onClick={() => setViewMode("map")}
             className="life-tab gap-1.5"
             title="Course map view"

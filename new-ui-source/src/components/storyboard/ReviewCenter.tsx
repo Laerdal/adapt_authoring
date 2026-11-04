@@ -240,15 +240,14 @@ export default function ReviewCenter({
         <SummaryRow label="Status" value={REVIEW_STATUS_LABEL[status as ReviewStatus] ?? status} />
       </div>
 
-      <div role="tablist" aria-label="Comments" className="life-tabs-line">
+      <div role="group" aria-label="Comments" className="life-tabs-line">
         {tabs.map((t) => {
           const active = tab === t.id;
           return (
             <button
               key={t.id}
               type="button"
-              role="tab"
-              aria-selected={active}
+              aria-pressed={active}
               onClick={() => setTab(t.id)}
               className="life-tab-line"
             >

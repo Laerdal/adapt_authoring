@@ -491,7 +491,7 @@ function MenuDropdown({
                   setOpen(false);
                 }}
                 role="option"
-                aria-selected={value === opt}
+                aria-pressed={value === opt}
                 className="life-menu-item justify-between"
               >
                 {opt || "Default"}
@@ -642,13 +642,12 @@ function MenuAccordion({
 
 function AlignButtons({ value, onChange }: { value: Align; onChange: (v: Align) => void }) {
   return (
-    <div role="tablist" aria-label="Alignment" className="life-tabs w-full">
+    <div role="group" aria-label="Alignment" className="life-tabs w-full">
       {(["left", "center", "right"] as Align[]).map((v, i) => (
         <button
           key={v}
           type="button"
-          role="tab"
-          aria-selected={value === v}
+          aria-pressed={value === v}
           aria-label={`Align ${v}`}
           onClick={() => onChange(v)}
           className="life-tab flex-1"

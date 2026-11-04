@@ -20,7 +20,7 @@ function RootRouteError() {
   console.error("Route error caught by ErrorBoundary:", error);
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-[#F8FAFC] px-4">
+    <div className="min-h-screen w-full flex items-center justify-center bg-[var(--life-neutral-020)] px-4">
       <ErrorDialog
         open
         title="Error"
@@ -52,7 +52,7 @@ function DashboardSectionGate({
   // and a pointless extra hop everywhere else. This gate only needs to act
   // once a user is confirmed, for the permission check below.
   if (loading || !user) {
-    return <div className="h-screen w-full bg-[#f8fafc]" />;
+    return <div className="h-screen w-full bg-[var(--life-neutral-020)]" />;
   }
 
   if (!canAccessDashboardSection(user, section)) {
@@ -66,7 +66,7 @@ function CourseSetupRouteGate({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
 
   if (loading || !user) {
-    return <div className="h-screen w-full bg-[#f8fafc]" />;
+    return <div className="h-screen w-full bg-[var(--life-neutral-020)]" />;
   }
 
   if (!canAccessCourseSettings(user)) {
@@ -80,7 +80,7 @@ function CourseWorkspaceRouteGate({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
 
   if (loading || !user) {
-    return <div className="h-screen w-full bg-[#f8fafc]" />;
+    return <div className="h-screen w-full bg-[var(--life-neutral-020)]" />;
   }
 
   if (!canAccessCourseSettings(user)) {

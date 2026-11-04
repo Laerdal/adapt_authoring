@@ -219,8 +219,8 @@
     font-family: var(--font-family-primary); font-size: var(--text-label); font-weight: var(--font-weight-medium);
     color: var(--life-neutral-600); transition: background-color 120ms ease, color 120ms ease;
   }
-  .life-tab:hover:not(:disabled):not([aria-selected="true"]) { background: var(--life-neutral-100); color: var(--life-neutral-850); }
-  .life-tab[aria-selected="true"] { background: var(--life-base-white); color: var(--life-primary-700); box-shadow: var(--elevation-sm); }
+  .life-tab:hover:not(:disabled):not([aria-selected="true"]):not([aria-pressed="true"]) { background: var(--life-neutral-100); color: var(--life-neutral-850); }
+  .life-tab[aria-selected="true"], .life-tab[aria-pressed="true"] { background: var(--life-base-white); color: var(--life-primary-700); box-shadow: var(--elevation-sm); }
   .life-tab:focus-visible { outline: 2px solid var(--life-primary-400); outline-offset: 2px; }
   .life-tab:disabled { color: var(--life-neutral-300); cursor: not-allowed; }
 
@@ -332,8 +332,8 @@
     font-family: var(--font-family-primary); font-size: var(--text-p); font-weight: var(--font-weight-regular); color: var(--life-neutral-600);
     transition: color 120ms ease, border-color 120ms ease;
   }
-  .life-tab-line:hover:not([aria-selected="true"]) { color: var(--life-neutral-850); border-bottom-color: var(--life-neutral-200); }
-  .life-tab-line[aria-selected="true"] { color: var(--life-primary-700); font-weight: var(--font-weight-medium); border-bottom-color: var(--life-primary-500); }
+  .life-tab-line:hover:not([aria-selected="true"]):not([aria-pressed="true"]) { color: var(--life-neutral-850); border-bottom-color: var(--life-neutral-200); }
+  .life-tab-line[aria-selected="true"], .life-tab-line[aria-pressed="true"] { color: var(--life-primary-700); font-weight: var(--font-weight-medium); border-bottom-color: var(--life-primary-500); }
   .life-tab-line:focus-visible { outline: 2px solid var(--life-primary-400); outline-offset: 2px; border-radius: var(--radius-sm); }
 
   /* Scrollbar — apply to any scrollable list/menu */

@@ -1123,13 +1123,12 @@ export function AssetManagementWorkspace({
 
         {/* Format filter */}
         {!fixedPickerFormat ? (
-        <div role="tablist" aria-label="Asset type" className="life-tabs">
+        <div role="group" aria-label="Asset type" className="life-tabs">
           {FORMATS.map((f) => (
             <button
               key={f}
               type="button"
-              role="tab"
-              aria-selected={formatFilter === f}
+              aria-pressed={formatFilter === f}
               onClick={() => setFormatFilter(f)}
               className="life-tab"
             >
@@ -1196,7 +1195,7 @@ export function AssetManagementWorkspace({
                       type="button"
                       onClick={() => toggleTag(tag)}
                       role="option"
-                      aria-selected={isSelected}
+                      aria-pressed={isSelected}
                       className="life-menu-item justify-between"
                     >
                       <span>{tag}</span>
