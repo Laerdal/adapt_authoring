@@ -239,6 +239,8 @@ export default function SamaritanWorkspace({
   const autoSent = useRef(false);
   const history = useRef<ConversationTurn[]>([]);
   const courseScope = useRef(false);
+  const pendingReload = useRef<(() => void | Promise<void>) | null>(null);
+  const [reloadFailed, setReloadFailed] = useState(false);
 
   // Overlay mode sits directly under the host's top bars (so the launcher in
   // those bars stays clickable) rather than covering the top of the screen.
@@ -304,12 +306,29 @@ export default function SamaritanWorkspace({
   }
 
   // A host reload that fails must not break the approval flow or leave the lock on.
-  async function reloadHost(run?: () => void | Promise<void>) {
+  // Returns whether the host now shows what Samaritan wrote. When it does not, the
+  // host stays locked (its stale content must not be edited or saved over the
+  // approved change) and the author is offered a retry.
+  async function reloadHost(run?: () => void | Promise<void>): Promise<boolean> {
+    if (!run) return true;
     try {
-      await run?.();
+      await run();
+      pendingReload.current = null;
+      setReloadFailed(false);
+      return true;
     } catch {
-      /* the next manual refresh shows the current state */
+      pendingReload.current = run;
+      setReloadFailed(true);
+      return false;
     }
+  }
+
+  async function retryReload() {
+    const run = pendingReload.current;
+    if (!run || busy) return;
+    setBusy(true);
+    if (await reloadHost(run)) onApplyingChange?.(false);
+    setBusy(false);
   }
 
   async function decide(actionId: string, approved: boolean) {
@@ -337,7 +356,7 @@ export default function SamaritanWorkspace({
       setTurns((t) => [...t, { kind: "error", text: err instanceof Error ? err.message : "Failed to execute action" }]);
       if (approved) await reloadHost(onStructureChanged);
     } finally {
-      if (approved) onApplyingChange?.(false);
+      if (approved && !pendingReload.current) onApplyingChange?.(false);
       setBusy(false);
     }
   }
@@ -354,7 +373,7 @@ export default function SamaritanWorkspace({
       setTurns((t) => [...t, { kind: "error", text: err instanceof Error ? err.message : "Failed to execute plan" }]);
       if (approved) await reloadHost(onStructureChanged);
     } finally {
-      if (approved) onApplyingChange?.(false);
+      if (approved && !pendingReload.current) onApplyingChange?.(false);
       setBusy(false);
     }
   }
@@ -482,6 +501,16 @@ export default function SamaritanWorkspace({
             </button>
           </div>
 
+          {reloadFailed && (
+            <div className="px-3 py-2 text-xs bg-red-50 text-red-800 border-b border-red-200 shrink-0 flex items-center gap-2">
+              <span className="flex-1">
+                Samaritan&apos;s changes were saved, but this page could not be refreshed. Editing stays locked so the old content is not saved over them.
+              </span>
+              <button type="button" disabled={busy} onClick={retryReload} className="px-2 py-1 rounded bg-red-700 text-white disabled:opacity-40">
+                Retry
+              </button>
+            </div>
+          )}
           {writeBlockedReason && (
             <p className="px-3 py-1.5 text-xs bg-amber-50 text-amber-800 border-b border-amber-200 shrink-0">{writeBlockedReason}</p>
           )}
@@ -514,7 +543,7 @@ export default function SamaritanWorkspace({
                     <p className="text-xs text-gray-600 mb-2">{turn.plan.reason}</p>
                     <p className="text-xs mb-2">Risk: <strong>{turn.risk}</strong></p>
                     <div className="flex gap-2">
-                      <button className="px-2 py-1 bg-green-600 text-white rounded text-xs" disabled={busy || !!writeBlockedReason} onClick={() => decide(turn.actionId, true)}>Approve</button>
+                      <button className="px-2 py-1 bg-green-600 text-white rounded text-xs" disabled={busy || reloadFailed || !!writeBlockedReason} onClick={() => decide(turn.actionId, true)}>Approve</button>
                       <button className="px-2 py-1 bg-gray-200 rounded text-xs" disabled={busy} onClick={() => decide(turn.actionId, false)}>Cancel</button>
                     </div>
                   </div>
@@ -535,7 +564,7 @@ export default function SamaritanWorkspace({
                     </ul>
                     <p className="text-xs mb-2">Risk: <strong>{turn.risk}</strong></p>
                     <div className="flex gap-2">
-                      <button className="px-2 py-1 bg-green-600 text-white rounded text-xs" disabled={busy || !!writeBlockedReason} onClick={() => decidePlan(turn.requestId, true)}>Approve plan</button>
+                      <button className="px-2 py-1 bg-green-600 text-white rounded text-xs" disabled={busy || reloadFailed || !!writeBlockedReason} onClick={() => decidePlan(turn.requestId, true)}>Approve plan</button>
                       <button className="px-2 py-1 bg-gray-200 rounded text-xs" disabled={busy} onClick={() => decidePlan(turn.requestId, false)}>Cancel</button>
                     </div>
                   </div>

@@ -337,7 +337,10 @@ export default function StoryboardWorkspace({
   // (spec §1 — keep the storyboard synchronized with the AT). Guarded so it
   // never discards unsaved edits. Runs automatically (see effect below) on
   // revisiting the page — there is no manual "Refresh" control.
-  const refreshFromCourse = async () => {
+  // strict: a failure is thrown to the caller instead of swallowed. Used after a
+  // Samaritan change, where the page must not become editable again on the old
+  // document (a later Save would write its stale bodies over the approved change).
+  const refreshFromCourse = async (opts?: { strict?: boolean }) => {
     if (!courseId || !booted || sbDirtyRef.current) return;
     try {
       const fresh = await getCourseStoryboardBlocks(courseId);
@@ -351,7 +354,8 @@ export default function StoryboardWorkspace({
         setHeadings(editorRef.current?.getHeadings() ?? []);
         setSummary(editorRef.current?.getSummary() ?? EMPTY_SUMMARY);
       }
-    } catch {
+    } catch (err) {
+      if (opts?.strict) throw err;
       /* silent — the current document stays as-is until the next successful sync */
     }
   };
@@ -821,7 +825,7 @@ export default function StoryboardWorkspace({
               sb.dirty ? 'You have unsaved storyboard changes. Save first, so edits made by Samaritan do not collide with them.' : null
             }
             onApplyingChange={setSamaritanApplying}
-            onStructureChanged={() => refreshFromCourse()}
+            onStructureChanged={() => refreshFromCourse({ strict: true })}
           />
         )}
 

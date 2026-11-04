@@ -78,6 +78,10 @@ describe('samaritan objectives matching', function() {
     found.ambiguous.should.equal(true);
   });
 
+  it('does not let ordinary text that mentions the end of the course count as objectives', function() {
+    should.equal(findObjectivesComponent([text('1', 'Exercise', '<p>Please finish this exercise by the end of the course.</p>')]).component, null);
+  });
+
   it('ignores components that are not Text', function() {
     should.equal(findObjectivesComponent([{ _id: '1', _component: 'mcq', title: 'Objectives', _parentId: 'b' }]).component, null);
   });

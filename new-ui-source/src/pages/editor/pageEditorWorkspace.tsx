@@ -3995,6 +3995,7 @@ export default function CourseEditor({
                 ? "page"
                 : "menu"
       );
+      return true;
     } catch (error) {
       if (!isCurrentRequest()) return;
 
@@ -4014,6 +4015,7 @@ export default function CourseEditor({
       setStructureLoadError(
         error instanceof Error ? error.message : "Failed to load course structure"
       );
+      return false;
     } finally {
       if (isCurrentRequest()) {
         setIsLoadingStructure(false);
@@ -12532,17 +12534,21 @@ export default function CourseEditor({
           writeBlockedReason={
             hasUnsavedChanges ? "You have unsaved changes. Save them first, so edits made by Samaritan do not replace them." : null
           }
-          onExecuted={(componentId) =>
-            loadStructureFromDatabase({
+          // A reload that reports failure must reach the panel: the editor then stays
+          // locked (and offers a retry) instead of unlocking on stale content.
+          onExecuted={async (componentId) => {
+            const ok = await loadStructureFromDatabase({
               pageId: selectedPageId,
               articleId: selectedArticleId,
               blockId: selectedBlockId,
               componentId
-            })
-          }
-          onStructureChanged={() =>
-            loadStructureFromDatabase({ pageId: selectedPageId, articleId: selectedArticleId, blockId: selectedBlockId })
-          }
+            });
+            if (ok === false) throw new Error("Failed to reload the course structure");
+          }}
+          onStructureChanged={async () => {
+            const ok = await loadStructureFromDatabase({ pageId: selectedPageId, articleId: selectedArticleId, blockId: selectedBlockId });
+            if (ok === false) throw new Error("Failed to reload the course structure");
+          }}
         />
       )}
       <PageEditorTopBar
