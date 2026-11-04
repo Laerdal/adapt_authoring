@@ -16,6 +16,7 @@ import { CourseOverviewPage } from "./setup/courseOverviewPage";
 import { SaveChangesButton } from "./setup/SaveChangesButton";
 import { SaveStatusToast } from "./setup/SaveStatusToast";
 import SelectThemePage from "./setup/themePage";
+import { calcDesktopSizes } from "./setup/customThemeTypography";
 import { MenuPage } from "./setup/menuPage";
 import { NavigationPage } from "./setup/navigationPage";
 import { AccessibilityPage } from "./setup/accessibilityPage";
@@ -925,40 +926,10 @@ function GlobalThemeSection({ cfg, setCfg }: { cfg: CustomThemeValues; setCfg: (
     const base = cfg.pageTitleSize === "h6" ? null : parseFloat(cfg.pageTitleSize);
     if (!base) return null;
 
-    const MIN_INSTRUCTION_REM = 0.875;
-    const MIN_FONT_STEP_REM = 0.0625;
-    const MIN_PARAGRAPH_REM = MIN_INSTRUCTION_REM + MIN_FONT_STEP_REM;
-
-    const h1Raw = base;
-    const h2Raw = base - 0.5;
-    const h3Raw = base - 1;
-    const h4Raw = base - 1.25;
-    const h5Raw = base - 1.5;
-    const h6Raw = base - 1.75;
-
-    const h6 = Math.max(h6Raw, MIN_PARAGRAPH_REM);
-    const h5 = Math.max(h5Raw, h6 + MIN_FONT_STEP_REM);
-    const h4 = Math.max(h4Raw, h5 + MIN_FONT_STEP_REM);
-    const h3 = Math.max(h3Raw, h4 + MIN_FONT_STEP_REM);
-    const h2 = Math.max(h2Raw, h3 + MIN_FONT_STEP_REM);
-    const h1 = Math.max(h1Raw, h2 + MIN_FONT_STEP_REM);
-    const p = h6;
-
-    const formatSize = (rem: number) => {
-      const px = Math.round(rem * 16);
-      const formatted = rem.toFixed(4).replace(/\.?0+$/, "");
-      return `${formatted}rem (${px}px)`;
-    };
-
-    return [
-      { label: "H1 (Page Title)", value: formatSize(h1) },
-      { label: "H2", value: formatSize(h2) },
-      { label: "H3", value: formatSize(h3) },
-      { label: "H4", value: formatSize(h4) },
-      { label: "H5", value: formatSize(h5) },
-      { label: "H6", value: formatSize(h6) },
-      { label: "Paragraph", value: formatSize(p) },
-    ];
+    return calcDesktopSizes(base).map(({ label, size, px }) => ({
+      label,
+      value: `${size}rem (${px}px)`,
+    }));
   };
 
   const sizes = calcSizes();
