@@ -314,8 +314,16 @@ describe('samaritan reasoner (full tool dispatch)', function() {
     });
   });
 
-  it('declines (not throws) when the model responds with plain text instead of a tool call', function() {
+  it('shows plain text from the model as an answer instead of discarding it', function() {
     provider.complete = function() { return Promise.resolve({ toolCall: null, text: 'Sure!' }); };
+    return reasoner.reason(blockContext(), { message: 'Add something.' }).then(function(result) {
+      result.status.should.equal('ANSWERED');
+      result.answer.text.should.equal('Sure!');
+    });
+  });
+
+  it('declines when the model returns neither a tool call nor any text', function() {
+    provider.complete = function() { return Promise.resolve({ toolCall: null, text: '   ' }); };
     return reasoner.reason(blockContext(), { message: 'Add something.' }).then(function(result) {
       result.status.should.equal('DECLINED');
     });

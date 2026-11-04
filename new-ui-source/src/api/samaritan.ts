@@ -41,7 +41,7 @@ export type ProposeResponse =
   | { requestId: string; status: "DECLINED"; declined: { reason: string; category: string } }
   | { requestId: string; status: "PROPOSED"; actionId: string; intent: SamaritanIntent; plan: SamaritanAction; risk: string; requiresApproval: boolean }
   | { requestId: string; status: "PLAN_PROPOSED"; intent: SamaritanIntent; plan: { actions: SamaritanAction[] }; risk: string; requiresApproval: boolean }
-  | { requestId: string; status: "OBJECTIVES_DRAFTED"; objectives: string[] };
+  | { requestId: string; status: "OBJECTIVES_DRAFTED"; objectives: string[]; title?: string };
 
 export interface ApproveResponse {
   actionId: string;

@@ -7,7 +7,9 @@
 // step before anything is written (see the Review step below) - Samaritan
 // never writes without a human approving the exact plan first.
 import { useRef, useState } from "react";
-import { createCourse, createTopic } from "@/api/adaptAuthoring";
+import { createCourse, createTopic, updateCourse } from "@/api/adaptAuthoring";
+import { apiClient } from "@/api/client";
+import { ACCEPTED_SOURCE_TYPES, composeSourceText, readSourceFile, type SourceFile } from "./sourceMaterial";
 import { proposeRequest, approvePlan, type SamaritanAction, type ApprovePlanResponse } from "@/api/samaritan";
 
 interface Props {
@@ -81,6 +83,10 @@ export default function BuildWithAiWizard({ onClose, onComplete, defaultTheme, d
   const [description, setDescription] = useState("");
   const [title, setTitle] = useState("");
   const [objectives, setObjectives] = useState<string[]>([]);
+  const [sources, setSources] = useState<SourceFile[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const topicIdRef = useRef<string | null>(null);
 
   const [audienceLevel, setAudienceLevel] = useState<AudienceLevel>("beginner");
   const [courseType, setCourseType] = useState<CourseType>("knowledge");
@@ -101,9 +107,48 @@ export default function BuildWithAiWizard({ onClose, onComplete, defaultTheme, d
       { title: title.trim() || "Untitled Course", description, theme: defaultTheme, menuStyle: defaultMenu },
       { skipDefaultSeed: true }
     );
-    await createTopic(created.id, created.id, title.trim() || "Untitled Course", 1);
+    topicIdRef.current = await createTopic(created.id, created.id, title.trim() || "Untitled Course", 1);
     courseIdRef.current = created.id;
     return created.id;
+  }
+
+  // Source files are read server-side (the storyboard's own Word/PDF/PowerPoint
+  // import) and only their text is kept, to ground the generation prompts.
+  async function addFiles(fileList: FileList | File[]) {
+    const files = Array.from(fileList);
+    if (!files.length) return;
+    setSources((prev) => [...prev, ...files.map((f) => ({ name: f.name, status: "reading" as const, text: "" }))]);
+    const results = await Promise.all(files.map((f) => readSourceFile(f)));
+    setSources((prev) => {
+      const next = [...prev];
+      results.forEach((r) => {
+        const i = next.findIndex((x) => x.name === r.name && x.status === "reading");
+        if (i >= 0) next[i] = r;
+      });
+      return next;
+    });
+  }
+
+  function sourceBlock(): string {
+    const { text, truncated } = composeSourceText(sources);
+    if (!text) return "";
+    return `Source material (use this as the primary source; do not invent facts beyond it${truncated ? "; it was shortened to fit" : ""}):\n${text}`;
+  }
+
+  const sourcesReading = sources.some((s) => s.status === "reading");
+
+  // A blank title is filled from Samaritan's suggestion: the author sees it,
+  // and the already-created course and its root topic are renamed to match.
+  async function applySuggestedTitle(courseId: string, suggested?: string) {
+    const next = suggested?.trim();
+    if (!next || title.trim()) return;
+    setTitle(next);
+    try {
+      await updateCourse(courseId, { title: next, displayTitle: next });
+      if (topicIdRef.current) await apiClient.put(`/api/content/contentobject/${topicIdRef.current}`, { title: next, displayTitle: next });
+    } catch {
+      /* cosmetic - the title can still be edited later in Course Settings */
+    }
   }
 
   async function generateObjectives() {
@@ -114,10 +159,11 @@ export default function BuildWithAiWizard({ onClose, onComplete, defaultTheme, d
       const courseId = await ensureCourse();
       const response = await proposeRequest({
         courseId,
-        message: `Draft learning objectives for a course about: ${description}`
+        message: [`Draft learning objectives for a course about: ${description}`, sourceBlock()].filter(Boolean).join("\n\n")
       });
       if (response.status === "OBJECTIVES_DRAFTED") {
         setObjectives(response.objectives);
+        await applySuggestedTitle(courseId, response.title);
         setStep(1);
       } else if (response.status === "DECLINED") {
         setError(response.declined.reason);
@@ -138,7 +184,7 @@ export default function BuildWithAiWizard({ onClose, onComplete, defaultTheme, d
     try {
       const response = await proposeRequest({
         courseId: courseIdRef.current,
-        message: `Draft learning objectives for a course about: ${description}`
+        message: [`Draft learning objectives for a course about: ${description}`, sourceBlock()].filter(Boolean).join("\n\n")
       });
       if (response.status === "OBJECTIVES_DRAFTED") setObjectives(response.objectives);
     } catch (err) {
@@ -153,6 +199,7 @@ export default function BuildWithAiWizard({ onClose, onComplete, defaultTheme, d
     const lines = [
       `Create a course outline about: ${description}`,
       title.trim() ? `Course title: ${title.trim()}` : "",
+      sourceBlock(),
       objectives.length
         ? `Learning objectives (already approved by the user - use these exactly, do not invent new ones):\n${objectives.map((o) => `- ${o}`).join("\n")}`
         : "",
@@ -242,40 +289,108 @@ export default function BuildWithAiWizard({ onClose, onComplete, defaultTheme, d
           {step === 0 && (
             <div className="flex flex-col gap-4">
               <div>
-                <h2 className="text-lg font-bold text-[#111827] mb-1">Describe your course</h2>
-                <p className="text-sm text-[#6b7280]">Tell Samaritan what the course should cover - it will draft objectives and a structure for you to review.</p>
+                <h2 className="text-2xl font-bold text-[#111827] mb-2">Describe the course you want to build</h2>
+                <p className="text-base text-[#4b5563]">
+                  Tell us the topic, audience and anything the course must cover. Attach source material and AI will draft the learning objectives for you.
+                </p>
               </div>
-              <textarea
-                ref={textareaRef}
-                autoFocus
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={9}
-                placeholder='e.g. Create a beginner course on airway management for first-year nursing students. Cover assessment, basic manoeuvres and when to escalate.'
-                className="w-full px-4 py-3 text-sm border-[1.5px] border-[#e5e7eb] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent resize-none"
-              />
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setIsDragging(true);
+                }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsDragging(false);
+                  void addFiles(e.dataTransfer.files);
+                }}
+                className={`rounded-2xl border-[1.5px] bg-white transition-colors ${isDragging ? "border-[#2d6fa8] bg-[#eaf3fa]" : "border-[#d1d5db]"}`}
+              >
+                <textarea
+                  ref={textareaRef}
+                  autoFocus
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={9}
+                  placeholder="e.g. Create a beginner course on airway management for first-year nursing students. Cover assessment, basic manoeuvres and when to escalate. Use the attached protocol document as the primary source."
+                  className="w-full px-5 py-4 text-sm bg-transparent rounded-t-2xl focus:outline-none resize-none"
+                />
+                {sources.length > 0 && (
+                  <ul className="flex flex-wrap gap-2 px-5 pb-3">
+                    {sources.map((f, i) => (
+                      <li
+                        key={`${f.name}-${i}`}
+                        title={f.error}
+                        className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs ${
+                          f.status === "error" ? "border-[#fecaca] bg-[#fef2f2] text-[#991b1b]" : "border-[#d1d5db] bg-[#f9fafb] text-[#374151]"
+                        }`}
+                      >
+                        <span className="max-w-[220px] truncate">{f.name}</span>
+                        <span className="text-[#9ca3af]">{f.status === "reading" ? "Reading..." : f.status === "error" ? f.error : "Ready"}</span>
+                        <button
+                          type="button"
+                          aria-label={`Remove ${f.name}`}
+                          onClick={() => setSources((prev) => prev.filter((_, j) => j !== i))}
+                          className="text-[#6b7280] hover:text-[#111827]"
+                        >
+                          &times;
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div className="flex items-center gap-3 border-t border-[#e5e7eb] px-4 py-3">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept={ACCEPTED_SOURCE_TYPES}
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files) void addFiles(e.target.files);
+                      e.target.value = "";
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center gap-2 rounded-lg border border-[#d1d5db] bg-white px-4 py-2 text-sm font-medium text-[#111827] hover:bg-[#f9fafb] transition-colors"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="17 8 12 3 7 8" />
+                      <line x1="12" y1="3" x2="12" y2="15" />
+                    </svg>
+                    Attach source material
+                  </button>
+                  <span className="flex-1 text-sm text-[#6b7280]">Drag &amp; drop Word, PDF or PowerPoint files here</span>
+                  <button
+                    type="button"
+                    onClick={generateObjectives}
+                    disabled={!description.trim() || busy || sourcesReading}
+                    className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] disabled:bg-[#e5e7eb] disabled:text-[#9ca3af] disabled:cursor-not-allowed rounded-lg transition-colors"
+                  >
+                    {busy ? "Generating..." : "Generate objectives"}
+                  </button>
+                </div>
+              </div>
               <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1.5">Course title (optional)</label>
+                <label className="block text-sm font-bold text-[#111827] mb-1.5">
+                  Course title <span className="font-normal text-[#6b7280]">(optional)</span>
+                </label>
                 <input
                   type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="e.g. Airway Management for Nursing Students"
-                  className="w-full px-3 py-2.5 text-sm border border-[#d1d5db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent"
+                  className="w-full px-4 py-3 text-sm border border-[#d1d5db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent"
                 />
-                <p className="text-xs text-[#9ca3af] mt-1">Leave blank and Samaritan will suggest a title.</p>
+                <p className="text-xs text-[#6b7280] mt-1.5">Leave blank and AI will suggest a title from your description.</p>
               </div>
-              <div className="flex items-center justify-between mt-2">
-                <button type="button" onClick={onClose} className="text-sm text-[#6b7280] hover:text-[#111827]">
+              <div className="mt-2">
+                <button type="button" onClick={onClose} className="rounded-lg border border-[#d1d5db] px-5 py-2.5 text-sm font-medium text-[#111827] hover:bg-[#f9fafb] transition-colors">
                   &larr; Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={generateObjectives}
-                  disabled={!description.trim() || busy}
-                  className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors"
-                >
-                  {busy ? "Generating..." : "Generate objectives"}
                 </button>
               </div>
             </div>

@@ -59,6 +59,7 @@ import StoryboardTopBar from './StoryboardTopBar';
 import ReviewCenter from './ReviewCenter';
 import GenerateDialog from './GenerateDialog';
 import AiAssistPopover from './AiAssistPopover';
+import SamaritanWorkspace from '../samaritan/SamaritanWorkspace';
 import CommentPopover from './CommentPopover';
 import ShareForReviewDialog from './ShareForReviewDialog';
 import { storyboardActions, type AiAssistRequest, type CommentRequest } from './storyboardActions';
@@ -363,25 +364,12 @@ export default function StoryboardWorkspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId, booted, sb.dirty]);
 
-  // Document-level "Ask Samaritan" (toolbar): open the SAME Samaritan popup,
-  // seeded from the cursor block. Insert → new Text component at the cursor;
-  // Replace → rewrite the cursor block. (Card-level AI supplies its own
-  // handlers via the storyboardActions channel.)
-  const openEnrichAi = () => {
-    setAiConfig({
-      initialText: activeBlock?.text || editorRef.current?.getActiveText() || '',
-      onInsert: (text) => {
-        const result = editorRef.current?.insertComponent('text', {
-          data: { description: text, showTitle: false },
-          afterId: activeBlock?.id,
-        });
-        if (result && !result.id && result.warning) flash(result.warning);
-        setHeadings(editorRef.current?.getHeadings() ?? []);
-        setSummary(editorRef.current?.getSummary() ?? EMPTY_SUMMARY);
-      },
-      onReplace: (text) => editorRef.current?.replaceActive(text),
-    });
-  };
+  // Document-level "Enrich with AI" (toolbar): opens the Samaritan co-author
+  // panel. Its approved writes go to the Adapt course (which this storyboard
+  // mirrors); onStructureChanged pulls the result back in through the same
+  // refreshFromCourse sync used when the page regains focus. The card-level AI
+  // menu still supplies its own text-assist handlers via storyboardActions.
+  const [samaritanOpen, setSamaritanOpen] = useState(false);
 
   const handleSave = async () => {
     if (saveRunning) return; // a Save is already in flight — see saveRunning's declaration
@@ -740,7 +728,8 @@ export default function StoryboardWorkspace({
           <DocumentToolbar
             onInsert={insert}
             onInsertHeading={insertHeading}
-            onEnrichAI={openEnrichAi}
+            onEnrichAI={() => setSamaritanOpen((o) => !o)}
+            enrichOpen={samaritanOpen}
           />
           <div className="flex-1 overflow-y-auto">
             {/* Authoring canvas ~60% of the viewport (Lovable proportions),
@@ -797,6 +786,26 @@ export default function StoryboardWorkspace({
             </article>
           </div>
         </main>
+
+        {/* Right — Enrich with Samaritan (course co-author with approved writes) */}
+        {samaritanOpen && courseId && (
+          <SamaritanWorkspace
+            courseId={courseId}
+            selectedBlockId={null}
+            selectedComponentId={null}
+            hasCanvasSelection={false}
+            open={samaritanOpen}
+            onOpenChange={setSamaritanOpen}
+            variant="docked"
+            title="Enrich with Samaritan"
+            writeBlockedReason={
+              sb.dirty ? 'You have unsaved storyboard changes. Save first, so edits made by Samaritan do not collide with them.' : null
+            }
+            onStructureChanged={() => {
+              void refreshFromCourse();
+            }}
+          />
+        )}
 
         {/* Right — Review Center (comments + audit, AC8/AC9) */}
         {showReview ? (

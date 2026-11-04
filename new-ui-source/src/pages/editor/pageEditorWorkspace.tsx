@@ -3377,6 +3377,7 @@ export default function CourseEditor({
 }: CourseEditorProps) {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [isSamaritanOpen, setIsSamaritanOpen] = useState(!!initialAiTopic);
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
   const [leftPanelWidth, setLeftPanelWidth] = useState(LEFT_PANEL_DEFAULT_WIDTH);
   const [isResizingLeftPanel, setIsResizingLeftPanel] = useState(false);
@@ -12514,6 +12515,9 @@ export default function CourseEditor({
           selectedComponentId={selectedComponentId}
           hasCanvasSelection={hasCanvasSelection}
           autoSendMessage={initialAiTopic}
+          open={isSamaritanOpen}
+          onOpenChange={setIsSamaritanOpen}
+          anchorId="page-editor-top-bar"
           onExecuted={(componentId) =>
             loadStructureFromDatabase({
               pageId: selectedPageId,
@@ -12528,6 +12532,8 @@ export default function CourseEditor({
         />
       )}
       <PageEditorTopBar
+        isSamaritanOpen={isSamaritanOpen}
+        onToggleSamaritan={courseId && courseId !== "new-course" ? () => setIsSamaritanOpen((o) => !o) : undefined}
         courseTitle={courseTitle}
         onCourseTitleChange={setCourseTitle}
         onToggleLeftPanel={() => setLeftPanelOpen((o) => !o)}

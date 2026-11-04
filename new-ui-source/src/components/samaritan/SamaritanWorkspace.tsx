@@ -19,7 +19,7 @@
 // persistent conversation history is introduced (kept separate from the
 // durable action history, which lives entirely server-side).
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   proposeRequest,
@@ -40,6 +40,20 @@ interface Props {
   // Fired once on mount, opening the panel automatically (e.g. a future
   // "regenerate this page" entry point elsewhere in the editor).
   autoSendMessage?: string;
+  // Open state is owned by the host so the launcher can live in the host's own
+  // top bar (top-right, per the design) instead of a floating button. Falls
+  // back to internal state when the host does not control it.
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  // "overlay": fixed to the right edge below the element with id `anchorId`
+  // (the editor's top bars). "docked": rendered in place as a flex child, so
+  // it pushes the surrounding content (the storyboard layout).
+  variant?: "overlay" | "docked";
+  anchorId?: string;
+  title?: string;
+  // When set, approving is disabled and this is shown instead - e.g. the
+  // storyboard has unsaved edits that a write to the course would collide with.
+  writeBlockedReason?: string | null;
   onExecuted?: (componentId: string) => void;
   onStructureChanged?: () => void;
 }
@@ -68,48 +82,47 @@ const QUICK_ACTIONS: QuickAction[] = [
     id: "review",
     label: "Review course content",
     icon: (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="9 11 12 14 22 4" />
-        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-      </svg>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
     ),
     prompt: (hasSelection) =>
       hasSelection
         ? "Review the currently selected content and summarize its state."
-        : "Review the current course content and summarize its state, calling out anything incomplete or inconsistent."
+        : "Review the whole course and summarize its state, calling out anything incomplete or inconsistent."
   },
   {
-    id: "improve",
+    id: "objectives",
     label: "Improve learning objectives",
     icon: (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M9 11l3 3L22 4" />
-        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-      </svg>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><polyline points="3 6 4 7 6 5" /><polyline points="3 12 4 13 6 11" /><polyline points="3 18 4 19 6 17" /></svg>
     ),
-    prompt: () => "Suggest learning objectives for this course based on its current content, or improvements to make the existing ones clearer."
+    prompt: () =>
+      "Find the learning objectives wherever they are in this course and improve them, then propose the change so I can approve it. If the course has none, write them from its content."
+  },
+  {
+    id: "add",
+    label: "Add components",
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+    ),
+    prompt: () =>
+      "Look at the course for components that are missing, such as a knowledge-check question where a section has none, and propose adding them. Write the content yourself."
   },
   {
     id: "regen",
     label: "Regenerate sections",
     icon: (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="23 4 23 10 17 10" />
-        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-      </svg>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" /></svg>
     ),
     prompt: (hasSelection) =>
       hasSelection
         ? "Rewrite the content of the selected section to improve it."
-        : "Which sections of this course would most benefit from being regenerated, and why?"
+        : "Pick the Text sections that would most benefit from a rewrite and propose improved versions."
   },
   {
     id: "gaps",
     label: "Identify content gaps",
     icon: (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z" />
-      </svg>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z" /></svg>
     ),
     prompt: () => "Identify any gaps in this course's content coverage."
   }
@@ -132,6 +145,28 @@ function summarizeForHistory(response: ProposeResponse): string {
   if (response.status === "PROPOSED") return `Proposed: ${describeChanges(response.plan)} - ${response.plan.reason}`;
   if (response.status === "OBJECTIVES_DRAFTED") return `Drafted objectives: ${response.objectives.join("; ")}`;
   return `Proposed a plan of ${response.plan.actions.length} actions: ${response.plan.actions.map((a) => a.actionType).join(", ")}`;
+}
+
+function plainPreview(html: unknown, max = 140): string {
+  const text = String(html ?? "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  return text.length > max ? `${text.slice(0, max)}...` : text;
+}
+
+// One readable line per action in a plan card, instead of the raw action type.
+function describePlanAction(a: SamaritanAction): string {
+  const p = a.parameters as Record<string, any>;
+  switch (a.actionType) {
+    case "CREATE_PAGE": return `Add page "${p.title}"`;
+    case "CREATE_ARTICLE": return `Add article "${p.title}"`;
+    case "CREATE_BLOCK": return `Add block "${p.title}"`;
+    case "ADD_COMPONENT": {
+      const preview = plainPreview(p.displayTitle ?? p.body);
+      return `Add ${p._component} "${p.title}"${preview ? ` - ${preview}` : ""}`;
+    }
+    case "REWRITE_CONTENT": return `Rewrite text: ${plainPreview(p.content, 200)}`;
+    case "CREATE_COURSE": return `Create course "${p.title}"`;
+    default: return `${a.actionType}: ${a.reason}`;
+  }
 }
 
 function describeChanges(plan: SamaritanAction): string {
@@ -167,16 +202,41 @@ export default function SamaritanWorkspace({
   selectedComponentId,
   hasCanvasSelection,
   autoSendMessage,
+  open: openProp,
+  onOpenChange,
+  variant = "overlay",
+  anchorId,
+  title = "Ask Samaritan",
+  writeBlockedReason,
   onExecuted,
   onStructureChanged
 }: Props) {
-  const [open, setOpen] = useState(!!autoSendMessage);
+  const [openState, setOpenState] = useState(!!autoSendMessage);
+  const open = openProp ?? openState;
+  const setOpen = (next: boolean) => {
+    setOpenState(next);
+    onOpenChange?.(next);
+  };
+  const [topOffset, setTopOffset] = useState(0);
   const [message, setMessage] = useState("");
   const [turns, setTurns] = useState<Turn[]>([]);
   const [activeGoalLabel, setActiveGoalLabel] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const autoSent = useRef(false);
   const history = useRef<ConversationTurn[]>([]);
+
+  // Overlay mode sits directly under the host's top bars (so the launcher in
+  // those bars stays clickable) rather than covering the top of the screen.
+  useLayoutEffect(() => {
+    if (variant !== "overlay" || !open) return;
+    const measure = () => {
+      const anchor = anchorId ? document.getElementById(anchorId) : null;
+      setTopOffset(anchor ? Math.round(anchor.getBoundingClientRect().bottom) : 0);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [variant, open, anchorId]);
 
   const selection = currentSelection(selectedComponentId, hasCanvasSelection, selectedBlockId);
 
@@ -279,31 +339,26 @@ export default function SamaritanWorkspace({
   // of the viewport - which is exactly what made the panel appear to run
   // off-screen/out of frame. Portaling sidesteps that regardless of which
   // ancestor is responsible.
-  if (!open) {
-    return createPortal(
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        aria-label="Open Ask Samaritan"
-        className="fixed bottom-4 right-4 z-[9999] w-12 h-12 rounded-full bg-[#6b4fa8] hover:bg-[#5a3f91] shadow-xl flex items-center justify-center text-white transition-colors"
-      >
-        <HeartIcon size={20} inverted />
-      </button>,
-      document.body
-    );
-  }
+  if (!open) return null;
 
-  return createPortal(
-    <aside className="fixed top-0 right-0 h-full w-[340px] z-[9999] bg-white border-l border-[#e5e7eb] shadow-xl flex flex-col text-sm">
+  const panel = (
+    <aside
+      className={
+        variant === "docked"
+          ? "w-[340px] shrink-0 h-full bg-white border-l border-[#e5e7eb] flex flex-col text-sm"
+          : "fixed right-0 bottom-0 w-[340px] z-[9999] bg-white border-l border-[#e5e7eb] shadow-xl flex flex-col text-sm"
+      }
+      style={variant === "overlay" ? { top: topOffset } : undefined}
+    >
       <div className="h-12 shrink-0 flex items-center justify-between pl-4 pr-2.5 border-b border-[#e5e7eb]">
         <div className="flex items-center gap-2">
-          <span className="text-[#6b4fa8]"><HeartIcon size={18} /></span>
-          <span className="font-bold text-sm text-[#111827]">Ask Samaritan</span>
+          <span className="text-[#2d6fa8]"><HeartIcon size={18} /></span>
+          <span className="font-bold text-sm text-[#111827]">{title}</span>
         </div>
         <button
           type="button"
           onClick={() => setOpen(false)}
-          aria-label="Close Ask Samaritan"
+          aria-label={`Close ${title}`}
           className="w-8 h-8 rounded-md flex items-center justify-center text-[#6b7280] hover:bg-[#f3f4f6] hover:text-[#111827] transition-colors"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -315,8 +370,8 @@ export default function SamaritanWorkspace({
 
       {turns.length === 0 ? (
         <div className="flex-1 overflow-y-auto px-3.5 pt-5 pb-4">
-          <div className="flex flex-col items-center gap-2.5 text-center bg-[#f5f0ff] rounded-xl px-4 pt-5 pb-4.5 mb-5">
-            <div className="w-11 h-11 rounded-full bg-[#6b4fa8] flex items-center justify-center">
+          <div className="flex flex-col items-center gap-2.5 text-center bg-[#eaf3fa] rounded-xl px-4 pt-5 pb-4.5 mb-5">
+            <div className="w-11 h-11 rounded-full bg-[#2d6fa8] flex items-center justify-center">
               <HeartIcon size={22} inverted />
             </div>
             <p className="font-bold text-sm text-[#111827]">Hi, I'm Samaritan</p>
@@ -333,7 +388,7 @@ export default function SamaritanWorkspace({
                 type="button"
                 disabled={busy}
                 onClick={() => send(action.prompt(!!selection), action.label)}
-                className="flex items-center gap-2.5 px-3 py-2.5 border border-[#e5e7eb] rounded-lg text-sm text-[#374151] hover:bg-[#f9fafb] hover:border-[#c4b5f4] transition-colors disabled:opacity-40"
+                className="flex items-center gap-2.5 px-3 py-2.5 border border-[#e5e7eb] rounded-lg text-sm text-[#374151] hover:bg-[#f9fafb] hover:border-[#9cc3e3] transition-colors disabled:opacity-40"
               >
                 <span className="text-[#6b7280]">{action.icon}</span>
                 {action.label}
@@ -355,14 +410,14 @@ export default function SamaritanWorkspace({
               onChange={(e) => setMessage(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Ask Samaritan anything about your course…"
-              className="w-full px-3 py-2.5 pr-10 text-sm border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6b4fa8] focus:border-transparent resize-none"
+              className="w-full px-3 py-2.5 pr-10 text-sm border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent resize-none"
             />
             <button
               type="button"
               onClick={() => send(message)}
               disabled={busy || !message.trim()}
               aria-label="Send"
-              className="absolute right-1.5 bottom-1.5 w-7 h-7 rounded-md bg-[#6b4fa8] disabled:bg-[#d1d5db] flex items-center justify-center text-white transition-colors"
+              className="absolute right-1.5 bottom-1.5 w-7 h-7 rounded-md bg-[#2d6fa8] disabled:bg-[#d1d5db] flex items-center justify-center text-white transition-colors"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="22" y1="2" x2="11" y2="13" />
@@ -374,18 +429,21 @@ export default function SamaritanWorkspace({
         </div>
       ) : (
         <>
-          <div className="px-3 py-1.5 bg-[#f5f0ff] border-b border-[#e5e7eb] flex items-center gap-1.5 shrink-0">
-            <span className="text-[#6b4fa8]">
+          <div className="px-3 py-1.5 bg-[#eaf3fa] border-b border-[#e5e7eb] flex items-center gap-1.5 shrink-0">
+            <span className="text-[#2d6fa8]">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z" />
               </svg>
             </span>
-            <span className="text-xs text-[#4b3a7c] flex-1">{activeGoalLabel || "Conversation"}</span>
+            <span className="text-xs text-[#1d3547] flex-1">{activeGoalLabel || "Conversation"}</span>
             <button type="button" onClick={resetChat} className="text-xs text-[#6b7280] hover:text-[#111827]">
               New chat
             </button>
           </div>
 
+          {writeBlockedReason && (
+            <p className="px-3 py-1.5 text-xs bg-amber-50 text-amber-800 border-b border-amber-200 shrink-0">{writeBlockedReason}</p>
+          )}
           <div className="flex-1 overflow-y-auto p-3 space-y-3">
             {turns.map((turn, i) => (
               <div key={i}>
@@ -415,7 +473,7 @@ export default function SamaritanWorkspace({
                     <p className="text-xs text-gray-600 mb-2">{turn.plan.reason}</p>
                     <p className="text-xs mb-2">Risk: <strong>{turn.risk}</strong></p>
                     <div className="flex gap-2">
-                      <button className="px-2 py-1 bg-green-600 text-white rounded text-xs" disabled={busy} onClick={() => decide(turn.actionId, true)}>Approve</button>
+                      <button className="px-2 py-1 bg-green-600 text-white rounded text-xs" disabled={busy || !!writeBlockedReason} onClick={() => decide(turn.actionId, true)}>Approve</button>
                       <button className="px-2 py-1 bg-gray-200 rounded text-xs" disabled={busy} onClick={() => decide(turn.actionId, false)}>Cancel</button>
                     </div>
                   </div>
@@ -431,12 +489,12 @@ export default function SamaritanWorkspace({
                     )}
                     <ul className="text-xs my-1 max-h-40 overflow-y-auto">
                       {turn.actions.map((a) => (
-                        <li key={a.actionId}>- {a.actionType}: {a.reason}</li>
+                        <li key={a.actionId}>- {describePlanAction(a)}</li>
                       ))}
                     </ul>
                     <p className="text-xs mb-2">Risk: <strong>{turn.risk}</strong></p>
                     <div className="flex gap-2">
-                      <button className="px-2 py-1 bg-green-600 text-white rounded text-xs" disabled={busy} onClick={() => decidePlan(turn.requestId, true)}>Approve plan</button>
+                      <button className="px-2 py-1 bg-green-600 text-white rounded text-xs" disabled={busy || !!writeBlockedReason} onClick={() => decidePlan(turn.requestId, true)}>Approve plan</button>
                       <button className="px-2 py-1 bg-gray-200 rounded text-xs" disabled={busy} onClick={() => decidePlan(turn.requestId, false)}>Cancel</button>
                     </div>
                   </div>
@@ -478,14 +536,14 @@ export default function SamaritanWorkspace({
                 onChange={(e) => setMessage(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Reply to Samaritan…"
-                className="w-full px-3 py-2.5 pr-10 text-sm bg-[#f9fafb] border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6b4fa8] focus:border-transparent resize-none"
+                className="w-full px-3 py-2.5 pr-10 text-sm bg-[#f9fafb] border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent resize-none"
               />
               <button
                 type="button"
                 onClick={() => send(message)}
                 disabled={busy || !message.trim()}
                 aria-label="Send"
-                className="absolute right-1.5 bottom-1.5 w-7 h-7 rounded-md bg-[#6b4fa8] disabled:bg-[#d1d5db] flex items-center justify-center text-white transition-colors"
+                className="absolute right-1.5 bottom-1.5 w-7 h-7 rounded-md bg-[#2d6fa8] disabled:bg-[#d1d5db] flex items-center justify-center text-white transition-colors"
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="22" y1="2" x2="11" y2="13" />
@@ -497,7 +555,7 @@ export default function SamaritanWorkspace({
           </div>
         </>
       )}
-    </aside>,
-    document.body
+    </aside>
   );
+  return variant === "docked" ? panel : createPortal(panel, document.body);
 }

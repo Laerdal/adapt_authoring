@@ -3,6 +3,7 @@ import { Lightbulb } from "lucide-react";
 import GuideDialog, { type GuidePanel, type GuideSection } from "../../components/common/GuideDialog";
 import CommonCourseTopBarRow from "../../components/course/CommonCourseTopBarRow";
 import PublishMenuButton from "../../components/publish/PublishMenuButton";
+import SamaritanIcon from "../../components/storyboard/SamaritanIcon";
 
 const PAGE_EDITOR_GUIDE_PANELS: GuidePanel[] = [
   {
@@ -81,6 +82,10 @@ interface PageEditorTopBarProps {
   previewDisabled?: boolean;
   isSaving?: boolean;
   isSaveDisabled?: boolean;
+  // Launcher for the Ask Samaritan side panel. Omitted when there is no saved
+  // course yet (nothing for Samaritan to work on).
+  onToggleSamaritan?: () => void;
+  isSamaritanOpen?: boolean;
 }
 
 const ICON_BASE = "/new/assets/icons";
@@ -121,6 +126,8 @@ export default function PageEditorTopBar({
   previewDisabled = false,
   isSaving = false,
   isSaveDisabled = false,
+  onToggleSamaritan,
+  isSamaritanOpen = false,
 }: PageEditorTopBarProps) {
   const [isGuideOpen, setIsGuideOpen] = useState(false);
 
@@ -160,11 +167,26 @@ export default function PageEditorTopBar({
         <Lightbulb size={16} strokeWidth={1.8} aria-hidden="true" />
         <span>How-To Guide</span>
       </button>
+      {onToggleSamaritan && (
+        <button
+          type="button"
+          onClick={onToggleSamaritan}
+          aria-pressed={isSamaritanOpen}
+          className={`inline-flex items-center gap-1.5 rounded-[8px] border px-3 py-2 text-[13px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2d6fa8] ${
+            isSamaritanOpen
+              ? "border-[#2d6fa8] bg-[#eaf3fa] text-[#1d3547]"
+              : "border-[#d8dde6] bg-white text-[#1d3547] hover:bg-[#f1f5f8]"
+          }`}
+        >
+          <SamaritanIcon className="h-4 w-4" />
+          <span>Ask Samaritan</span>
+        </button>
+      )}
     </div>
   );
 
   return (
-    <div className="flex flex-col shrink-0">
+    <div id="page-editor-top-bar" className="flex flex-col shrink-0">
       <CommonCourseTopBarRow
         courseTitle={
           <input
