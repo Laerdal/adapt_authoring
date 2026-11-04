@@ -424,14 +424,15 @@ function MenuDropdown({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <InfoFieldLabel label={label} hint={hint} className="text-[#374151]" />
+      <InfoFieldLabel label={label} hint={hint} className="text-[var(--life-neutral-700)]" />
       <div className="relative">
         <button
           ref={btnRef}
           type="button"
           onClick={handleOpen}
-          className="w-full flex items-center justify-between px-3 py-2 border border-[#d1d5db] rounded-[8px] bg-white text-sm text-[#374151] hover:border-[#9ca3af] transition-colors cursor-pointer"
-          style={{ borderRadius: 8 }}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          className={`life-field justify-between cursor-pointer ${open ? "life-field--open" : ""}`}
         >
           <span>{value}</span>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${open ? "rotate-180" : ""}`}>
@@ -477,7 +478,7 @@ function MenuDropdown({
                 zIndex: 9999,
               };
             })()}
-            className="bg-white border border-[#e5e7eb] rounded-[8px] shadow-lg py-1 overflow-hidden overflow-y-auto"
+            role="listbox" className="life-menu overflow-hidden overflow-y-auto life-scroll"
             data-radius="8px"
           >
             {options.map((opt) => (
@@ -489,9 +490,9 @@ function MenuDropdown({
                   onChange(opt);
                   setOpen(false);
                 }}
-                className={`w-full text-left px-3 py-2.5 text-sm flex items-center justify-between transition-colors cursor-pointer ${
-                  value === opt ? "bg-[#dbeeff] text-[#2d6fa8] font-medium" : "text-[#374151] hover:bg-[#f9fafb]"
-                }`}
+                role="option"
+                aria-selected={value === opt}
+                className="life-menu-item justify-between"
               >
                 {opt || "Default"}
                 {value === opt ? (
@@ -532,11 +533,10 @@ function MenuCheckbox({
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
         aria-label={label}
-        className="sr-only peer"
+        className="life-check mt-0.5"
       />
-      <CheckboxIndicator checked={checked} className="mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
       <div className="flex flex-col gap-0.5">
-        <span className="text-sm font-semibold text-[#374151]">{label}{hint ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}</span>
+        <span className="text-sm font-semibold text-[var(--life-neutral-700)]">{label}{hint ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}</span>
         {description ? <span className="text-[13px] text-[var(--life-neutral-300)]">{description}</span> : null}
       </div>
     </label>
@@ -568,11 +568,11 @@ function ExternalAssetModal({
     <div className="fixed inset-0 z-[70] bg-black/50 flex items-center justify-center px-4" onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
       <div className="w-full max-w-lg bg-white rounded-xl border border-[var(--life-neutral-200)] shadow-xl overflow-hidden">
         <div className="px-5 py-4 bg-[var(--life-neutral-020)] border-b border-[var(--life-neutral-200)] flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-[#111827]">{title}</h3>
+          <h3 className="text-sm font-semibold text-[var(--life-neutral-850)]">{title}</h3>
           <button
             type="button"
             onClick={onCancel}
-            className="w-8 h-8 flex items-center justify-center rounded-[8px] border border-transparent bg-white text-[#9ca3af] transition-colors cursor-pointer hover:bg-[var(--life-critical-050)] hover:text-[var(--life-critical-600)] hover:border-[var(--life-critical-050)]"
+            className="w-8 h-8 flex items-center justify-center rounded-[8px] border border-transparent bg-white text-[var(--life-neutral-400)] transition-colors cursor-pointer hover:bg-[var(--life-critical-050)] hover:text-[var(--life-critical-600)] hover:border-[var(--life-critical-050)]"
             aria-label="Close external asset dialog"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -582,19 +582,19 @@ function ExternalAssetModal({
           </button>
         </div>
         <div className="px-5 py-4 flex flex-col gap-3">
-          <label className="text-sm font-semibold text-[#374151]">External asset URL</label>
+          <label className="text-sm font-semibold text-[var(--life-neutral-700)]">External asset URL</label>
           <input
             type="url"
             value={value}
             onChange={(e) => setValue(e.target.value)}
             placeholder="https://example.com/image.png"
-            className="w-full border border-[#d1d5db] rounded-[8px] px-3 py-2 text-sm text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent"
+            className="life-field"
           />
           <p className="text-[13px] text-[var(--life-neutral-300)]">Paste an absolute URL to use an externally hosted image.</p>
         </div>
         <div className="px-5 py-4 border-t border-[var(--life-neutral-200)] flex items-center justify-end gap-2.5">
-          <button type="button" onClick={onCancel} className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors cursor-pointer">Cancel</button>
-          <button type="button" onClick={() => onSave(value.trim())} className="px-4 py-2 text-sm font-medium text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors cursor-pointer">Save External Asset</button>
+          <button type="button" onClick={onCancel} className="life-btn life-btn--secondary">Cancel</button>
+          <button type="button" onClick={() => onSave(value.trim())} className="life-btn life-btn--primary">Save External Asset</button>
         </div>
       </div>
     </div>,
@@ -618,15 +618,16 @@ function MenuAccordion({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="border border-[#e5e7eb] rounded-xl overflow-hidden bg-white mb-2.5">
+    <div className="life-accordion mb-2.5">
       <button
         type="button"
         onClick={onToggle}
-        className="group w-full flex items-center justify-between gap-3 px-5 py-4 text-left cursor-pointer bg-white text-[#111827] hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] transition-colors"
+        aria-expanded={open}
+        className="life-accordion-trigger group !min-h-[64px] !px-5"
       >
         <div>
           <div className="text-sm font-bold text-current flex items-center gap-1.5">{title}{hint ? <InfoIcon label={title} hint={hint} /> : null}</div>
-          {subtitle ? <div className="text-[13px] text-[#6b7280] mt-[4px] leading-[1.45] group-hover:text-[#0f5f75]">{subtitle}</div> : null}
+          {subtitle ? <div className="text-[13px] text-[var(--life-neutral-600)] mt-[4px] leading-[1.45] font-normal">{subtitle}</div> : null}
         </div>
         <span className="shrink-0 ml-auto text-current">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -634,20 +635,23 @@ function MenuAccordion({
           </svg>
         </span>
       </button>
-      {open ? <div className="px-[22px] py-[20px] border-t border-[#f3f4f6] bg-white flex flex-col gap-4">{children}</div> : null}
+      {open ? <div className="px-[22px] py-[20px] border-t border-[var(--life-neutral-050)] bg-white flex flex-col gap-4">{children}</div> : null}
     </div>
   );
 }
 
 function AlignButtons({ value, onChange }: { value: Align; onChange: (v: Align) => void }) {
   return (
-    <div className="grid grid-cols-3 border border-[var(--life-neutral-200)] rounded-lg overflow-hidden">
+    <div role="tablist" aria-label="Alignment" className="life-tabs w-full">
       {(["left", "center", "right"] as Align[]).map((v, i) => (
         <button
           key={v}
           type="button"
+          role="tab"
+          aria-selected={value === v}
+          aria-label={`Align ${v}`}
           onClick={() => onChange(v)}
-          className={`h-9 flex items-center justify-center cursor-pointer transition-colors ${value === v ? "bg-[var(--life-primary-500)] text-white" : "bg-white text-[var(--life-neutral-500)] hover:bg-[var(--life-neutral-050)]"} ${i > 0 ? "border-l border-[var(--life-neutral-200)]" : ""}`}
+          className="life-tab flex-1"
         >
           {v === "left" ? (
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="21" y1="6" x2="3" y2="6" /><line x1="15" y1="12" x2="3" y2="12" /><line x1="21" y1="18" x2="3" y2="18" /></svg>
@@ -1284,11 +1288,11 @@ export function MenuPage({
   return (
     <>
       <SaveStatusToast toast={saveSuccess ? { type: "success", message: "Changes saved successfully" } : null} onDismiss={() => setSaveSuccess(false)} />
-      <div className="flex flex-col h-full w-full bg-[#f7f9fb]">
-        <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-center gap-4">
+      <div className="flex flex-col h-full w-full bg-[var(--life-neutral-020)]">
+        <div className="shrink-0 px-6 py-5 bg-white border-b border-[var(--life-neutral-100)] flex items-center gap-4">
           <div>
             <h2 className="text-xl font-bold text-[var(--life-base-black)] m-0">Menu</h2>
-            <p className="text-sm text-[#6b7280] mt-0.5 mb-0">Configure how learners will navigate your course.</p>
+            <p className="text-sm text-[var(--life-neutral-600)] mt-0.5 mb-0">Configure how learners will navigate your course.</p>
           </div>
           <div className="ml-auto">
               <SaveChangesButton dirty={hasChanges} saving={isSaving} disabled={!courseId} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
@@ -1296,7 +1300,7 @@ export function MenuPage({
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="flex flex-row items-start min-h-full w-full">
-        <div className="flex flex-col flex-1 min-w-0 bg-[#f7f9fb] border-r border-[var(--life-neutral-200)] px-4 sm:px-6 lg:px-8 pt-6 lg:pt-8 pb-12 lg:pb-16">
+        <div className="flex flex-col flex-1 min-w-0 bg-[var(--life-neutral-020)] border-r border-[var(--life-neutral-200)] px-4 sm:px-6 lg:px-8 pt-6 lg:pt-8 pb-12 lg:pb-16">
           <div className="mb-7">
             <div className="px-3.5 py-2.5 rounded-lg bg-[var(--life-accent1-050)] border border-[var(--life-accent1-300)] flex items-start gap-2">
               <span className="text-[var(--life-accent1-600)] shrink-0 mt-[1px]">
@@ -1335,7 +1339,7 @@ export function MenuPage({
                   value={config.logoAltText}
                   onChange={(e) => set("logoAltText", e.target.value)}
                   placeholder="e.g. Company logo"
-                  className="w-full border border-[var(--life-neutral-200)] rounded-lg px-3.5 py-2.5 text-sm text-[var(--life-base-black)] placeholder:text-[var(--life-neutral-400)] focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] focus:border-transparent"
+                  className="life-field"
                 />
               </div>
             </MenuAccordion>
@@ -1397,7 +1401,7 @@ export function MenuPage({
                       type="number"
                       value={config.headerMinHeight[bp]}
                       onChange={(e) => set("headerMinHeight", { ...config.headerMinHeight, [bp]: e.target.value })}
-                      className="w-full border border-[var(--life-neutral-200)] rounded-lg px-3.5 py-2.5 text-sm text-[var(--life-base-black)] placeholder:text-[var(--life-neutral-400)] focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] focus:border-transparent"
+                      className="life-field"
                     />
                   </div>
                 ))}
@@ -1439,7 +1443,7 @@ export function MenuPage({
                   value={config.lockedText}
                   onChange={(e) => set("lockedText", e.target.value)}
                   placeholder={DEFAULT_LOCKED_NAV_TEXT}
-                  className="w-full border border-[var(--life-neutral-200)] rounded-lg px-3.5 py-2.5 text-sm text-[var(--life-base-black)] placeholder:text-[var(--life-neutral-400)] focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] focus:border-transparent"
+                  className="life-field"
                 />
               </div>
             </MenuAccordion>

@@ -41,11 +41,11 @@ function CheckboxRow({
   disabled?: boolean;
 }) {
   return (
-    <label className={`flex items-start gap-3 py-2 px-2 rounded-lg cursor-pointer group ${disabled ? "opacity-40 pointer-events-none" : "hover:bg-[#f9fafb]"}`}>
+    <label className={`flex items-start gap-3 py-2 px-2 rounded-lg cursor-pointer group ${disabled ? "opacity-40 pointer-events-none" : "hover:bg-[var(--life-neutral-020)]"}`}>
       <div
         onClick={() => !disabled && onChange(!checked)}
         className={`mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors ${
-          checked ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)]" : "border-[#d1d5db] bg-white group-hover:border-[#93c5fd]"
+          checked ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)]" : "border-[var(--life-neutral-200)] bg-white group-hover:border-[var(--life-primary-300)]"
         }`}
       >
         {checked && (
@@ -54,7 +54,7 @@ function CheckboxRow({
           </svg>
         )}
       </div>
-      <span className="text-sm text-[#374151] leading-snug">
+      <span className="text-sm text-[var(--life-neutral-700)] leading-snug">
         {label}
         {hint ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}
       </span>
@@ -77,7 +77,7 @@ function ToggleSwitch({
 }) {
   return (
     <div className={`flex items-center justify-between gap-3 py-2 ${disabled ? "opacity-40" : ""}`}>
-      <span className="text-sm text-[#374151] leading-snug">
+      <span className="text-sm text-[var(--life-neutral-700)] leading-snug">
         {label}
         {hint ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}
       </span>
@@ -88,16 +88,8 @@ function ToggleSwitch({
         aria-checked={checked}
         disabled={disabled}
         onClick={() => !disabled && onChange(!checked)}
-        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] focus:ring-offset-1 ${
-          checked ? "bg-[var(--life-primary-500)]" : "bg-[#d1d5db]"
-        } ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
-      >
-        <span
-          className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${
-            checked ? "translate-x-5" : "translate-x-1"
-          }`}
-        />
-      </button>
+        className="life-switch"
+      />
     </div>
   );
 }
@@ -123,16 +115,16 @@ function NavAccordion({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
+    <div className="life-accordion">
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="group w-full flex items-center justify-between gap-3 px-5 py-4 text-left bg-white text-[#111827] transition-colors hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] disabled:bg-[#f7f7f7] disabled:text-[#b7b7b7]"
+        className="life-accordion-trigger group !min-h-[64px] !px-5"
       >
         <div className="min-w-0">
           <h3 className="text-sm font-bold text-current flex items-center gap-1.5">{title}{hint ? <InfoIcon label={title} hint={hint} /> : null}</h3>
-          {subtitle && <p className="text-xs text-[#6b7280] mt-0.5 leading-snug group-hover:text-[#0f5f75]">{subtitle}</p>}
+          {subtitle && <p className="text-xs text-[var(--life-neutral-600)] mt-0.5 leading-snug font-normal">{subtitle}</p>}
         </div>
         <svg
           className="shrink-0 ml-auto text-current"
@@ -141,7 +133,7 @@ function NavAccordion({
           <polyline points={open ? "6 9 12 15 18 9" : "9 6 15 12 9 18"} />
         </svg>
       </button>
-      {open && <div className="px-5 pb-5 pt-1 border-t border-[#f3f4f6] flex flex-col gap-3">{children}</div>}
+      {open && <div className="px-5 pb-5 pt-1 border-t border-[var(--life-neutral-050)] flex flex-col gap-3">{children}</div>}
     </div>
   );
 }
@@ -165,21 +157,16 @@ function NavSelect<T extends string>({
   return (
     <div className="flex flex-col gap-1.5">
       <InfoFieldLabel label={label} hint={hint} help={help} />
-      <div className="relative">
-        <select
-          value={value}
-          onChange={(e) => onChange(e.target.value as T)}
-          aria-label={label}
-          className="w-full border border-[#e5e7eb] rounded-lg px-3 py-2.5 text-sm text-[var(--life-base-black)] bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] focus:border-transparent pr-8"
-        >
-          {options.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
-        <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
-      </div>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value as T)}
+        aria-label={label}
+        className="life-field"
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
       {help && <p className="text-[11px] text-[var(--life-neutral-300)] leading-snug">{help}</p>}
     </div>
   );
@@ -206,7 +193,7 @@ function NavTextInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full px-3 py-2 text-sm rounded-lg border border-[#e5e7eb] bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent transition-colors"
+        className="life-field"
       />
     </div>
   );
@@ -265,30 +252,23 @@ function FooterButtonRow({
       <button
         type="button"
         onClick={() => onChange(!checked)}
+        role="checkbox"
         aria-label={`Toggle ${label} button`}
-        aria-pressed={checked}
-        className="shrink-0"
+        aria-checked={checked}
+        className="life-checkbox shrink-0"
       >
-        <span
-          className={`w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors ${
-            checked ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)]" : "border-[#d1d5db] bg-white group-hover:border-[#93c5fd]"
-          }`}
-        >
-          {checked && (
-            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-          )}
-        </span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
       </button>
-      <span className={`shrink-0 ${checked ? "text-[var(--life-primary-500)]" : "text-[#9ca3af]"}`}>{icon}</span>
+      <span className={`shrink-0 ${checked ? "text-[var(--life-primary-500)]" : "text-[var(--life-neutral-400)]"}`}>{icon}</span>
       <input
         type="text"
         value={value}
         aria-label={`${label} button text`}
         placeholder={label}
         onChange={(e) => onTextChange(e.target.value)}
-        className="flex-1 min-w-0 px-0 py-1 text-sm bg-transparent text-[#374151] border-0 outline-none shadow-none"
+        className="flex-1 min-w-0 px-0 py-1 text-sm bg-transparent text-[var(--life-neutral-700)] border-0 outline-none shadow-none"
       />
       {hint ? <InfoIcon label={label} hint={hint} className="ml-1" /> : null}
     </div>
@@ -503,12 +483,12 @@ export function NavigationPage({
   }, [pages, s.start._isEnabled, s.start._startIds.length]);
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#f7f9fb]">
+    <div className="flex flex-col h-full w-full bg-[var(--life-neutral-020)]">
       {/* Header */}
-      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-center gap-4">
+      <div className="shrink-0 px-6 py-5 bg-white border-b border-[var(--life-neutral-100)] flex items-center gap-4">
         <div>
           <h2 className="text-xl font-bold text-[var(--life-base-black)]">Navigation</h2>
-          <p className="text-sm text-[#6b7280] mt-0.5">Configure the navigation bar, start behavior, and header/footer for your course.</p>
+          <p className="text-sm text-[var(--life-neutral-600)] mt-0.5">Configure the navigation bar, start behavior, and header/footer for your course.</p>
         </div>
         <div className="ml-auto">
           <SaveChangesButton dirty={dirty} saving={saving} disabled={!courseId} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
@@ -519,7 +499,7 @@ export function NavigationPage({
       <div className="flex-1 overflow-y-auto min-h-0">
         <div className="max-w-2xl px-6 py-6 flex flex-col gap-4">
           {loading ? (
-            <div className="flex items-center justify-center py-16 text-sm text-[#6b7280]">
+            <div className="flex items-center justify-center py-16 text-sm text-[var(--life-neutral-600)]">
               <svg className="animate-spin mr-2" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 12a9 9 0 1 1-6.219-8.56" />
               </svg>
@@ -557,7 +537,7 @@ export function NavigationPage({
                       <p className="text-[11px] text-[var(--life-neutral-300)]">No start pages added yet.</p>
                     )}
                     {s.start._startIds.map((item, i) => (
-                      <div key={i} className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] p-4 flex flex-col gap-3">
+                      <div key={i} className="rounded-lg border border-[var(--life-neutral-100)] bg-[var(--life-neutral-020)] p-4 flex flex-col gap-3">
                         <div className="flex items-end gap-2">
                           <div className="flex-1">
                             <NavSelect
@@ -572,7 +552,7 @@ export function NavigationPage({
                             type="button"
                             aria-label="Remove start page"
                             onClick={() => removeStartId(i)}
-                            className="mb-1 p-2 rounded-lg text-[#9ca3af] hover:text-[var(--life-critical-500)] hover:bg-[var(--life-critical-050)] transition-colors"
+                            className="life-icon-btn life-icon-btn--sm life-icon-btn--critical"
                           >
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                               <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6h16zM10 11v6M14 11v6" />
@@ -589,7 +569,7 @@ export function NavigationPage({
                         onClick={addStartId}
                         disabled={!pages.length}
                         title={!pages.length ? "Add a page to the course first" : undefined}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium text-[var(--life-base-white)] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
+                        className="life-btn life-btn--primary"
                       >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                           <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
@@ -641,21 +621,21 @@ export function NavigationPage({
                     <InfoFieldLabel label={getSchemaLabel(getSchemaNode(headerLogoSchema, "_items"), "Logo")} hint={getSchemaHint(getSchemaNode(headerLogoSchema, "_items"))} />
 
                     {s.headerLogo.src ? (
-                      <div className="flex items-center gap-3 p-3 border border-[#e5e7eb] rounded-lg bg-white">
+                      <div className="flex items-center gap-3 p-3 border border-[var(--life-neutral-100)] rounded-lg bg-white">
                         <img src={s.headerLogo.assetId ? `/api/asset/serve/${s.headerLogo.assetId}` : s.headerLogo.src} alt="logo" className="h-9 max-w-[96px] object-contain rounded" />
-                        <span className="text-[11px] text-[#6b7280] truncate flex-1 min-w-0">{s.headerLogo.src}</span>
+                        <span className="text-[11px] text-[var(--life-neutral-600)] truncate flex-1 min-w-0">{s.headerLogo.src}</span>
                         <div className="shrink-0 flex items-center gap-2">
                           <button
                             type="button"
                             onClick={() => setAssetPickerOpen(true)}
-                            className="text-xs px-2.5 py-1.5 border border-[var(--life-primary-500)] rounded-[8px] text-[var(--life-primary-500)] hover:bg-[var(--life-primary-050)] transition-colors"
+                            className="life-btn life-btn--secondary"
                           >
                             Change
                           </button>
                           <button
                             type="button"
                             onClick={() => setHeaderLogo({ src: "", assetId: undefined })}
-                            className="text-xs px-2.5 py-1.5 border border-[var(--life-critical-500)] rounded-[8px] text-[var(--life-critical-500)] hover:bg-[var(--life-critical-050)] transition-colors"
+                            className="life-btn life-btn--secondary !text-[var(--life-critical-600)] !border-[var(--life-critical-500)] hover:!bg-[var(--life-critical-050)]"
                           >
                             Remove
                           </button>
@@ -666,7 +646,7 @@ export function NavigationPage({
                         <button
                           type="button"
                           onClick={() => setAssetPickerOpen(true)}
-                          className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium text-[var(--life-base-white)] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] rounded-lg transition-colors"
+                          className="life-btn life-btn--primary"
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
@@ -676,7 +656,7 @@ export function NavigationPage({
                         <button
                           type="button"
                           onClick={() => setExternalOpen((v) => !v)}
-                          className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium text-[var(--life-primary-500)] border border-[var(--life-primary-500)] hover:bg-[var(--life-primary-050)] active:bg-[var(--life-primary-100)] rounded-lg transition-colors"
+                          className="life-btn life-btn--secondary"
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
@@ -697,7 +677,7 @@ export function NavigationPage({
                     )}
 
                     <div className="flex flex-col gap-0.5">
-                      <p className="text-xs font-semibold text-[#374151]">Logo recommendations</p>
+                      <p className="text-xs font-semibold text-[var(--life-neutral-700)]">Logo recommendations</p>
                       <p className="text-[11px] text-[var(--life-neutral-300)]">Preferred aspect ratio: 4:1</p>
                       <p className="text-[11px] text-[var(--life-neutral-300)]">Use PNG with transparent background for best results</p>
                     </div>

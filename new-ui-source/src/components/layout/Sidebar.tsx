@@ -109,33 +109,32 @@ export default function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
   const NavItem = ({ label, icon }: { label: string; icon: React.ReactNode }) => {
     const isActive = active === label;
     const href = NAV_ROUTES[label];
-    const cls = `w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors text-left ${
-      isActive ? "bg-[#2d6fa8] text-white font-medium" : "text-[#374151] hover:bg-[#f3f4f6] font-normal"
-    }`;
+    const cls = "life-nav-item";
+    const ariaCurrent = isActive ? "page" : undefined;
     const content = (
       <>
-        <span className={isActive ? "text-white" : "text-[#6b7280]"}>{icon}</span>
+        <span className="life-nav-icon">{icon}</span>
         {label}
       </>
     );
     if (href) {
       return (
-        <Link to={href} onClick={() => { setActive(label); onMobileClose?.(); }} className={cls}>
+        <Link to={href} aria-current={ariaCurrent} onClick={() => { setActive(label); onMobileClose?.(); }} className={cls}>
           {content}
         </Link>
       );
     }
     return (
-      <button type="button" onClick={() => { setActive(label); onMobileClose?.(); }} className={cls}>
+      <button type="button" aria-current={ariaCurrent} onClick={() => { setActive(label); onMobileClose?.(); }} className={cls}>
         {content}
       </button>
     );
   };
 
   const sidebarContent = (
-    <aside className="w-56 h-full bg-white border-r border-[#e5e7eb] flex flex-col">
+    <aside className="w-56 h-full bg-white border-r border-[var(--life-neutral-100)] flex flex-col">
       {/* Logo */}
-      <div className="px-4 h-14 flex items-center justify-between border-b border-[#e5e7eb] shrink-0">
+      <div className="px-4 h-14 flex items-center justify-between border-b border-[var(--life-neutral-100)] shrink-0">
         <div className="flex items-center gap-2.5">
           <img
             src="/adapt-logo.jpeg"
@@ -144,7 +143,7 @@ export default function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
             height={32}
             className="rounded-lg shrink-0"
           />
-          <span className="font-semibold text-[#111827] text-sm tracking-tight">Adapt Studio</span>
+          <span className="font-semibold text-[var(--life-neutral-850)] text-sm tracking-tight">Adapt Studio</span>
         </div>
         {/* Close button — only visible inside mobile drawer */}
         {onMobileClose && (
@@ -152,7 +151,7 @@ export default function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
             type="button"
             onClick={onMobileClose}
             aria-label="Close navigation"
-            className="md:hidden p-1.5 rounded-lg text-[#6b7280] hover:bg-[#f3f4f6] transition-colors"
+            className="md:hidden p-1.5 rounded-lg text-[var(--life-neutral-600)] hover:bg-[var(--life-neutral-050)] transition-colors"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -169,7 +168,7 @@ export default function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
       </nav>
 
       {/* Divider */}
-      <div className="mx-3 my-3 border-t border-[#e5e7eb]" />
+      <div className="mx-3 my-3 border-t border-[var(--life-neutral-100)]" />
 
       {/* Secondary nav */}
       <nav className="px-3 space-y-0.5 overflow-y-auto flex-1 pb-4">

@@ -1,0 +1,361 @@
+/* ── LIFE components (ADAPT-3938) ───────────────────────────────────
+   Shared component classes for Studio. Built only on the LIFE tokens declared
+   in index.css; every interactive component defines default / hover / active /
+   focus / disabled. Prefer these (or the React wrappers in components/common)
+   over inline hex colours. Wrapped in @layer components so Tailwind utilities
+   (w-full, ml-auto, ...) can still adjust layout. */
+@layer components {
+  /* Buttons — heights: sm 32 / md 40 / lg 48 */
+  .life-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    height: 40px; padding: 0 16px; border: 1px solid transparent; border-radius: var(--radius-md);
+    font-family: var(--font-family-primary); font-size: var(--text-button); font-weight: var(--font-weight-medium);
+    line-height: 1; white-space: nowrap; cursor: pointer; text-decoration: none;
+    transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+  }
+  .life-btn:focus-visible,
+  .life-icon-btn:focus-visible,
+  .life-nav-item:focus-visible,
+  .life-menu-item:focus-visible,
+  .life-profile-btn:focus-visible {
+    outline: 2px solid var(--life-primary-400); outline-offset: 2px;
+  }
+  .life-btn:disabled, .life-btn[aria-disabled="true"] { cursor: not-allowed; }
+  .life-btn--sm { height: 32px; padding: 0 12px; }
+  .life-btn--lg { height: 48px; padding: 0 24px; font-size: var(--font-size-base); }
+
+  .life-btn--primary { background: var(--life-color-bg-fill-primary); color: var(--life-color-text-on-primary); }
+  .life-btn--primary:hover:not(:disabled) { background: var(--life-primary-600); }
+  .life-btn--primary:active:not(:disabled) { background: var(--life-primary-700); }
+  .life-btn--primary:disabled { background: var(--life-neutral-100); color: var(--life-neutral-400); }
+
+  .life-btn--secondary { background: var(--life-base-white); border-color: var(--life-primary-500); color: var(--life-color-text-primary); }
+  .life-btn--secondary:hover:not(:disabled) { background: var(--life-primary-050); }
+  .life-btn--secondary:active:not(:disabled) { background: var(--life-primary-100); }
+  .life-btn--secondary:disabled { border-color: var(--life-neutral-200); color: var(--life-neutral-400); }
+
+  /* Text button — primary-coloured label, no container (e.g. "Add Topic") */
+  .life-btn--text { background: transparent; color: var(--life-color-text-primary); padding: 0 8px; }
+  .life-btn--text:hover:not(:disabled) { background: var(--life-primary-050); color: var(--life-primary-700); }
+  .life-btn--text:active:not(:disabled) { background: var(--life-primary-100); }
+  .life-btn--text:disabled { color: var(--life-neutral-400); }
+
+  .life-btn--ghost { background: transparent; color: var(--life-neutral-700); }
+  .life-btn--ghost:hover:not(:disabled) { background: var(--life-neutral-050); color: var(--life-neutral-850); }
+  .life-btn--ghost:active:not(:disabled) { background: var(--life-neutral-100); }
+  .life-btn--ghost:disabled { color: var(--life-neutral-400); }
+
+  .life-btn--danger { background: var(--life-color-bg-fill-critical); color: var(--life-color-text-on-primary); }
+  .life-btn--danger:hover:not(:disabled) { background: var(--life-critical-600); }
+  .life-btn--danger:active:not(:disabled) { background: color-mix(in oklab, var(--life-critical-600) 85%, black); }
+  .life-btn--danger:disabled { background: var(--life-neutral-100); color: var(--life-neutral-400); }
+
+  /* Icon button — 40 / sm 32 square */
+  .life-icon-btn {
+    display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px;
+    border: 1px solid transparent; border-radius: var(--radius-md); background: transparent;
+    color: var(--life-neutral-600); cursor: pointer;
+    transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+  }
+  .life-icon-btn--sm { width: 32px; height: 32px; }
+  .life-icon-btn--xs { width: 28px; height: 28px; border-radius: var(--radius-sm); }
+  .life-icon-btn:hover:not(:disabled) { background: var(--life-neutral-050); color: var(--life-neutral-850); }
+  .life-icon-btn:active:not(:disabled) { background: var(--life-neutral-100); }
+  .life-icon-btn:disabled { color: var(--life-neutral-300); cursor: not-allowed; }
+  .life-icon-btn--critical:hover:not(:disabled) { background: var(--life-critical-050); color: var(--life-critical-600); }
+  .life-icon-btn--outlined { background: var(--life-base-white); border-color: var(--life-color-border-default); }
+
+  /* Text / search / dropdown field */
+  .life-field {
+    display: flex; align-items: center; gap: 8px; width: 100%; height: 40px; padding: 0 12px;
+    background: var(--input-background); border: 1px solid var(--life-neutral-300); border-radius: var(--radius-md);
+    font-family: var(--font-family-primary); font-size: var(--text-p); color: var(--life-color-text-default);
+    transition: border-color 120ms ease, box-shadow 120ms ease;
+  }
+  .life-field::placeholder { color: var(--life-neutral-500); }
+  .life-field:hover:not(:disabled):not(:focus) { border-color: var(--life-neutral-500); }
+  .life-field:focus, .life-field:focus-within { outline: none; border-color: var(--life-primary-500); box-shadow: 0 0 0 3px var(--life-primary-100); }
+  .life-field:disabled { background: var(--life-neutral-050); color: var(--life-neutral-400); cursor: not-allowed; }
+  .life-field[aria-invalid="true"] { border-color: var(--life-critical-500); }
+  .life-field[aria-invalid="true"]:focus { box-shadow: 0 0 0 3px var(--life-critical-100); }
+  textarea.life-field { height: auto; padding: 10px 12px; resize: none; }
+  .life-field--open { border-color: var(--life-primary-500); }
+  .life-field--active { border-color: var(--life-primary-500); background: var(--life-primary-050); color: var(--life-primary-700); }
+  .life-label { display: block; margin-bottom: 6px; font-size: var(--text-label); font-weight: var(--font-weight-medium); color: var(--life-color-text-default); }
+
+  /* Native <select> as a Life dropdown field: <select className="life-field">.
+     Keeps native keyboard/a11y; replaces the OS arrow with a Life chevron. */
+  select.life-field {
+    appearance: none; -webkit-appearance: none; padding-right: 32px; text-overflow: ellipsis; cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235E5E5E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 10px center; background-size: 16px;
+  }
+  select.life-field:disabled { background-color: var(--life-neutral-050); }
+
+  /* Native radio / checkbox inputs: <input type="radio" className="life-radio"> */
+  input.life-radio, input.life-check {
+    appearance: none; -webkit-appearance: none; flex: none; width: 20px; height: 20px; margin: 0; cursor: pointer;
+    background: var(--life-base-white); border: 2px solid var(--life-neutral-500);
+    transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+  }
+  input.life-radio { border-radius: var(--radius-full); }
+  input.life-check { border-radius: var(--radius-sm); }
+  input.life-radio:hover:not(:disabled), input.life-check:hover:not(:disabled) { border-color: var(--life-primary-500); background-color: var(--life-primary-050); }
+  input.life-radio:checked { border-color: var(--life-primary-500); background-color: var(--life-base-white); box-shadow: inset 0 0 0 4px var(--life-primary-500); }
+  input.life-check:checked {
+    background-color: var(--life-primary-500); border-color: var(--life-primary-500);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E");
+    background-size: 12px; background-position: center; background-repeat: no-repeat;
+  }
+  input.life-radio:focus-visible, input.life-check:focus-visible { outline: 2px solid var(--life-primary-400); outline-offset: 2px; }
+  input.life-radio:disabled, input.life-check:disabled { border-color: var(--life-neutral-200); background-color: var(--life-neutral-050); cursor: not-allowed; }
+  input.life-radio:checked:disabled { box-shadow: inset 0 0 0 4px var(--life-neutral-300); }
+  input.life-check:checked:disabled { background-color: var(--life-neutral-300); border-color: var(--life-neutral-300); }
+
+  /* Toggle switch: <button role="switch" aria-checked className="life-switch"> */
+  .life-switch {
+    position: relative; flex: none; width: 40px; height: 24px; padding: 0; border: 0; border-radius: var(--radius-full);
+    background: var(--life-neutral-300); cursor: pointer; transition: background-color 120ms ease;
+  }
+  .life-switch::after {
+    content: ""; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: var(--radius-full);
+    background: var(--life-base-white); box-shadow: var(--elevation-sm); transition: transform 160ms ease;
+  }
+  .life-switch:hover:not(:disabled) { background: var(--life-neutral-400); }
+  .life-switch[aria-checked="true"] { background: var(--life-primary-500); }
+  .life-switch[aria-checked="true"]:hover:not(:disabled) { background: var(--life-primary-600); }
+  .life-switch[aria-checked="true"]::after { transform: translateX(16px); }
+  .life-switch:focus-visible { outline: 2px solid var(--life-primary-400); outline-offset: 2px; }
+  .life-switch:disabled { background: var(--life-neutral-100); cursor: not-allowed; }
+  .life-switch:disabled::after { box-shadow: none; background: var(--life-neutral-050); }
+
+  /* Accordion — trigger button (aria-expanded) + panel */
+  .life-accordion { background: var(--life-base-white); border: 1px solid var(--life-color-border-subtle); border-radius: var(--radius-md); overflow: hidden; }
+  .life-accordion-trigger {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 48px; padding: 0 16px;
+    background: transparent; border: 0; cursor: pointer; text-align: left;
+    font-family: var(--font-family-primary); font-size: var(--text-p); font-weight: var(--font-weight-medium); color: var(--life-neutral-850);
+    transition: background-color 120ms ease;
+  }
+  .life-accordion-trigger:hover { background: var(--life-neutral-020); }
+  .life-accordion-trigger:active { background: var(--life-neutral-050); }
+  .life-accordion-trigger[aria-expanded="true"] { background: var(--life-primary-020); color: var(--life-primary-700); }
+  .life-accordion-trigger:focus-visible { outline: 2px solid var(--life-primary-400); outline-offset: -2px; }
+  .life-accordion-trigger svg { flex: none; transition: transform 160ms ease; }
+  .life-accordion-panel { padding: 16px; border-top: 1px solid var(--life-color-border-subtle); }
+
+  /* Dropdown button — toned-down pill that opens a menu (e.g. role picker).
+     Tone via modifier: --warning / --primary / --positive / --neutral. */
+  .life-dropdown-btn {
+    display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px;
+    border: 1px solid transparent; border-radius: var(--radius-full); cursor: pointer;
+    font-family: var(--font-family-primary); font-size: var(--text-label); font-weight: var(--font-weight-medium);
+    transition: filter 120ms ease, box-shadow 120ms ease;
+  }
+  .life-dropdown-btn:hover:not(:disabled) { filter: brightness(0.96); }
+  .life-dropdown-btn:active:not(:disabled) { filter: brightness(0.92); }
+  .life-dropdown-btn[aria-expanded="true"] { box-shadow: 0 0 0 3px var(--life-primary-100); }
+  .life-dropdown-btn:focus-visible { outline: 2px solid var(--life-primary-400); outline-offset: 2px; }
+  .life-dropdown-btn:disabled { opacity: .5; cursor: not-allowed; }
+  .life-dropdown-btn--warning { background: var(--life-warning-100); color: var(--life-warning-500); }
+  .life-dropdown-btn--primary { background: var(--life-primary-100); color: var(--life-primary-700); }
+  .life-dropdown-btn--positive { background: var(--life-positive-100); color: var(--life-positive-500); }
+  .life-dropdown-btn--neutral { background: var(--life-neutral-050); color: var(--life-neutral-700); }
+  .life-badge--warning { background: var(--life-warning-100); color: var(--life-warning-500); }
+  .life-badge--primary { background: var(--life-primary-100); color: var(--life-primary-700); }
+  .life-badge--positive { background: var(--life-positive-100); color: var(--life-positive-500); }
+  .life-badge { display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: var(--radius-full); font-size: var(--text-label); font-weight: var(--font-weight-bold); }
+
+  /* Dropdown menu + items */
+  .life-menu {
+    background: var(--life-base-white); border: 1px solid var(--life-color-border-subtle); border-radius: var(--radius-md);
+    box-shadow: var(--elevation-md); padding: 4px 0;
+  }
+  .life-menu-item {
+    display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; padding: 0 12px;
+    background: transparent; border: 0; text-align: left; cursor: pointer;
+    font-family: var(--font-family-primary); font-size: var(--text-p); color: var(--life-color-text-default);
+    transition: background-color 120ms ease, color 120ms ease;
+  }
+  .life-menu-item:hover:not(:disabled) { background: var(--life-neutral-050); }
+  .life-menu-item:active:not(:disabled) { background: var(--life-neutral-100); }
+  .life-menu-item[aria-selected="true"] { background: var(--life-primary-050); color: var(--life-primary-700); font-weight: var(--font-weight-medium); }
+  .life-menu-item:disabled { color: var(--life-neutral-300); cursor: not-allowed; }
+  .life-menu-item--critical { color: var(--life-color-text-critical); }
+  .life-menu-item--critical:hover:not(:disabled) { background: var(--life-critical-050); }
+  .life-menu-divider { height: 1px; margin: 4px 0; background: var(--life-color-border-subtle); }
+  .life-menu-heading { padding: 8px 12px 4px; font-size: var(--text-label); font-weight: var(--font-weight-bold); letter-spacing: .04em; text-transform: uppercase; color: var(--life-neutral-500); }
+
+  /* Nav rail item */
+  .life-nav-item {
+    display: flex; align-items: center; gap: 12px; width: 100%; height: 40px; padding: 0 12px;
+    border-radius: var(--radius-md); background: transparent; color: var(--life-neutral-700);
+    font-size: var(--text-p); text-align: left; text-decoration: none; cursor: pointer;
+    transition: background-color 120ms ease, color 120ms ease;
+  }
+  .life-nav-item .life-nav-icon { color: var(--life-neutral-500); }
+  .life-nav-item:hover { background: var(--life-neutral-050); color: var(--life-neutral-850); }
+  .life-nav-item:active { background: var(--life-neutral-100); }
+  .life-nav-item[aria-current="page"] { background: var(--life-primary-100); color: var(--life-primary-700); font-weight: var(--font-weight-medium); }
+  .life-nav-item[aria-current="page"] .life-nav-icon { color: var(--life-primary-700); }
+
+  /* Profile button */
+  .life-profile-btn {
+    display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: var(--radius-full);
+    background: var(--life-primary-500); color: var(--life-base-white); font-size: var(--text-label); font-weight: var(--font-weight-bold);
+    border: 0; cursor: pointer; transition: background-color 120ms ease;
+  }
+  .life-profile-btn:hover { background: var(--life-primary-600); }
+  .life-profile-btn:active, .life-profile-btn[aria-expanded="true"] { background: var(--life-primary-700); }
+
+  /* Tabs (horizontal, segmented) — default / hover / selected / focus / disabled */
+  .life-tabs {
+    display: inline-flex; align-items: center; gap: 4px; padding: 4px;
+    background: var(--life-neutral-050); border-radius: var(--radius-md);
+  }
+  .life-tab {
+    display: inline-flex; align-items: center; justify-content: center; height: 32px; padding: 0 12px;
+    border: 0; border-radius: var(--radius-sm); background: transparent; white-space: nowrap; cursor: pointer;
+    font-family: var(--font-family-primary); font-size: var(--text-label); font-weight: var(--font-weight-medium);
+    color: var(--life-neutral-600); transition: background-color 120ms ease, color 120ms ease;
+  }
+  .life-tab:hover:not(:disabled):not([aria-selected="true"]) { background: var(--life-neutral-100); color: var(--life-neutral-850); }
+  .life-tab[aria-selected="true"] { background: var(--life-base-white); color: var(--life-primary-700); box-shadow: var(--elevation-sm); }
+  .life-tab:focus-visible { outline: 2px solid var(--life-primary-400); outline-offset: 2px; }
+  .life-tab:disabled { color: var(--life-neutral-300); cursor: not-allowed; }
+
+  /* Data table — wrap in .life-table-wrap; header / row hover / footer */
+  .life-table-wrap { background: var(--life-base-white); border: 1px solid var(--life-color-border-subtle); border-radius: var(--radius-lg); overflow: hidden; }
+  .life-table { width: 100%; border-collapse: collapse; font-size: var(--text-p); color: var(--life-color-text-default); }
+  .life-table th {
+    height: 48px; padding: 0 16px; text-align: left; white-space: nowrap;
+    background: var(--life-neutral-020); border-bottom: 1px solid var(--life-color-border-subtle);
+    font-size: var(--text-label); font-weight: var(--font-weight-bold); color: var(--life-neutral-600);
+  }
+  .life-table td { padding: 12px 16px; border-bottom: 1px solid var(--life-color-border-subtle); vertical-align: middle; }
+  .life-table tbody tr { transition: background-color 120ms ease; }
+  .life-table tbody tr:hover { background: var(--life-neutral-020); }
+  .life-table tbody tr:last-child td { border-bottom: 0; }
+  .life-table .life-table-empty { padding: 64px 16px; text-align: center; color: var(--life-neutral-500); }
+  /* Variant for tables whose rows open popup menus (menus must not be clipped) */
+  .life-table-wrap--visible { overflow: visible; }
+  .life-table-wrap--visible thead th:first-child { border-top-left-radius: var(--radius-lg); }
+  .life-table-wrap--visible thead th:last-child { border-top-right-radius: var(--radius-lg); }
+  .life-table-wrap--visible .life-table-footer { border-bottom-left-radius: var(--radius-lg); border-bottom-right-radius: var(--radius-lg); }
+  .life-table th.life-th-sortable { cursor: pointer; user-select: none; }
+  .life-table th.life-th-sortable:hover { color: var(--life-primary-700); }
+  .life-table-footer {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 8px 16px; border-top: 1px solid var(--life-color-border-subtle); background: var(--life-neutral-020);
+    font-size: var(--text-p); color: var(--life-neutral-600);
+  }
+
+  /* Paginator — numbered page buttons: default / hover / current / disabled */
+  .life-paginator { display: flex; align-items: center; gap: 4px; }
+  .life-page-btn {
+    display: inline-flex; align-items: center; justify-content: center; min-width: 32px; height: 32px; padding: 0 6px;
+    border: 0; border-radius: var(--radius-md); background: transparent; cursor: pointer;
+    font-family: var(--font-family-primary); font-size: var(--text-p); font-weight: var(--font-weight-medium); color: var(--life-neutral-700);
+    transition: background-color 120ms ease, color 120ms ease;
+  }
+  .life-page-btn:hover:not(:disabled):not([aria-current="page"]) { background: var(--life-neutral-100); }
+  .life-page-btn:active:not(:disabled) { background: var(--life-neutral-200); }
+  .life-page-btn[aria-current="page"] { background: var(--life-primary-500); color: var(--life-base-white); }
+  .life-page-btn:disabled { color: var(--life-neutral-300); cursor: not-allowed; }
+  .life-page-btn:focus-visible { outline: 2px solid var(--life-primary-400); outline-offset: 2px; }
+  .life-select {
+    height: 32px; padding: 0 8px; background: var(--life-base-white); border: 1px solid var(--life-neutral-300); border-radius: var(--radius-md);
+    font-size: var(--text-p); color: var(--life-neutral-850); cursor: pointer;
+  }
+  .life-select:hover { border-color: var(--life-neutral-500); }
+  .life-select:focus { outline: none; border-color: var(--life-primary-500); box-shadow: 0 0 0 3px var(--life-primary-100); }
+
+  /* Checkbox box — for custom role="checkbox" buttons (Checkbox.tsx covers native inputs).
+     default / hover / checked / focus / disabled */
+  .life-checkbox {
+    display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0;
+    border: 2px solid var(--life-neutral-500); border-radius: var(--radius-sm); background: var(--life-base-white);
+    color: transparent; cursor: pointer;
+    transition: background-color 120ms ease, border-color 120ms ease;
+  }
+  .life-checkbox:hover:not(:disabled) { border-color: var(--life-primary-500); background: var(--life-primary-050); }
+  .life-checkbox[aria-checked="true"] { background: var(--life-primary-500); border-color: var(--life-primary-500); color: var(--life-base-white); }
+  .life-checkbox[aria-checked="true"]:hover:not(:disabled) { background: var(--life-primary-600); border-color: var(--life-primary-600); }
+  .life-checkbox:focus-visible { outline: 2px solid var(--life-primary-400); outline-offset: 2px; }
+  .life-checkbox:disabled { border-color: var(--life-neutral-200); background: var(--life-neutral-050); color: transparent; cursor: not-allowed; }
+  .life-checkbox[aria-checked="true"]:disabled { background: var(--life-neutral-200); border-color: var(--life-neutral-200); color: var(--life-base-white); }
+
+  /* Tooltip — add data-tooltip="text" to the trigger; shows on hover and keyboard focus.
+     --end aligns the bubble to the trigger's right edge (for triggers at a container edge). */
+  [data-tooltip] { position: relative; }
+  [data-tooltip]::after {
+    content: attr(data-tooltip); position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+    z-index: 40; padding: 6px 10px; border-radius: var(--radius-sm); white-space: nowrap; pointer-events: none;
+    background: var(--life-neutral-850); color: var(--life-base-white);
+    font-family: var(--font-family-primary); font-size: var(--text-label); font-weight: var(--font-weight-regular); line-height: 1.3;
+    opacity: 0; visibility: hidden; transition: opacity 120ms ease;
+  }
+  [data-tooltip]:hover::after, [data-tooltip]:focus-visible::after { opacity: 1; visibility: visible; }
+  [data-tooltip].life-tooltip--end::after { left: auto; right: 0; transform: none; }
+
+  [data-tooltip].life-tooltip--right::after { bottom: auto; left: calc(100% + 8px); top: 50%; transform: translateY(-50%); }
+
+  /* Nav rail (side navigation) — group heading + items with left accent bar.
+     States: default / hover / active(pressed) / selected (aria-current) / focus. */
+  .life-navrail-group {
+    display: flex; align-items: center; justify-content: space-between; width: 100%; height: 40px; padding: 0 20px;
+    background: transparent; border: 0; cursor: pointer; text-align: left;
+    font-family: var(--font-family-primary); font-size: 11px; font-weight: var(--font-weight-bold);
+    letter-spacing: .08em; text-transform: uppercase; color: var(--life-neutral-600);
+    transition: color 120ms ease, background-color 120ms ease;
+  }
+  .life-navrail-group:hover { background: var(--life-neutral-020); color: var(--life-neutral-850); }
+  .life-navrail-group[data-active="true"] { color: var(--life-primary-600); }
+  .life-navrail-item {
+    position: relative; display: flex; align-items: center; gap: 12px; width: 100%; height: 40px; padding: 0 20px;
+    background: transparent; border: 0; cursor: pointer; text-align: left;
+    font-family: var(--font-family-primary); font-size: var(--text-p); color: var(--life-neutral-700);
+    transition: background-color 120ms ease, color 120ms ease;
+  }
+  .life-navrail-item::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: transparent; border-radius: 0 2px 2px 0; }
+  .life-navrail-item:hover { background: var(--life-neutral-050); color: var(--life-neutral-850); }
+  .life-navrail-item:active { background: var(--life-neutral-100); }
+  .life-navrail-item[aria-current="page"] { background: var(--life-primary-100); color: var(--life-primary-700); font-weight: var(--font-weight-medium); }
+  .life-navrail-item[aria-current="page"]::before { background: var(--life-primary-500); }
+  .life-navrail-item:focus-visible, .life-navrail-group:focus-visible { outline: 2px solid var(--life-primary-400); outline-offset: -2px; }
+
+  /* Line tabs — underline indicator (e.g. Open / Resolved) */
+  .life-tabs-line { display: flex; align-items: center; gap: 24px; border-bottom: 1px solid var(--life-color-border-subtle); background: var(--life-base-white); padding: 0 16px; }
+  .life-tab-line {
+    position: relative; display: inline-flex; align-items: center; height: 44px; padding: 0 2px; margin-bottom: -1px;
+    background: none; border: 0; border-bottom: 2px solid transparent; cursor: pointer;
+    font-family: var(--font-family-primary); font-size: var(--text-p); font-weight: var(--font-weight-regular); color: var(--life-neutral-600);
+    transition: color 120ms ease, border-color 120ms ease;
+  }
+  .life-tab-line:hover:not([aria-selected="true"]) { color: var(--life-neutral-850); border-bottom-color: var(--life-neutral-200); }
+  .life-tab-line[aria-selected="true"] { color: var(--life-primary-700); font-weight: var(--font-weight-medium); border-bottom-color: var(--life-primary-500); }
+  .life-tab-line:focus-visible { outline: 2px solid var(--life-primary-400); outline-offset: 2px; border-radius: var(--radius-sm); }
+
+  /* Scrollbar — apply to any scrollable list/menu */
+  .life-scroll { scrollbar-width: thin; scrollbar-color: var(--life-neutral-300) transparent; }
+  .life-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+  .life-scroll::-webkit-scrollbar-track { background: transparent; }
+  .life-scroll::-webkit-scrollbar-thumb { background: var(--life-neutral-300); border-radius: var(--radius-full); border: 2px solid transparent; background-clip: content-box; }
+  .life-scroll::-webkit-scrollbar-thumb:hover { background: var(--life-neutral-500); background-clip: content-box; }
+
+  /* Chip / tag */
+  .life-chip {
+    display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: var(--radius-full);
+    background: var(--life-primary-050); color: var(--life-primary-700); font-size: var(--text-label); font-weight: var(--font-weight-medium);
+  }
+  .life-chip--neutral { background: var(--life-neutral-050); color: var(--life-neutral-700); }
+
+  /* Card — states: default / hover / focus-within */
+  .life-card {
+    display: flex; flex-direction: column; background: var(--life-base-white);
+    border: 1px solid var(--life-color-border-subtle); border-radius: var(--radius-lg); box-shadow: var(--elevation-sm);
+    transition: box-shadow 120ms ease, border-color 120ms ease;
+  }
+  .life-card:hover { border-color: var(--life-primary-200); box-shadow: var(--elevation-md); }
+  .life-card:focus-within { border-color: var(--life-primary-500); box-shadow: 0 0 0 3px var(--life-primary-100); }
+}

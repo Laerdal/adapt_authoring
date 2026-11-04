@@ -5,6 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import AiAssistant from "@/components/common/AiAssistant";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import ErrorDialog from "@/components/common/ErrorDialog";
+import Paginator from "@/components/common/Paginator";
 
 type Role = "Super Admin" | "Authenticated User" | "Course Creator";
 
@@ -43,9 +44,9 @@ type SortKey = keyof User;
 type SortDir = "asc" | "desc";
 
 const ROLE_COLORS: Record<Role, string> = {
-  "Super Admin":        "bg-[#fef3c7] text-[#92400e]",
-  "Course Creator":     "bg-[#dbeeff] text-[#1e4d73]",
-  "Authenticated User": "bg-[#f0fdf4] text-[#166534]",
+  "Super Admin":        "life-dropdown-btn--warning life-badge--warning",
+  "Course Creator":     "life-dropdown-btn--primary life-badge--primary",
+  "Authenticated User": "life-dropdown-btn--positive life-badge--positive",
 };
 
 function isValidEmailQuery(value: string): boolean {
@@ -218,10 +219,10 @@ export default function UserManagementPage() {
 
   const SortIcon = ({ col }: { col: SortKey }) => (
     <span className="ml-1 inline-flex flex-col gap-[1px] opacity-50 group-hover:opacity-100">
-      <svg width="8" height="5" viewBox="0 0 8 5" fill={sortKey === col && sortDir === "asc" ? "#2d6fa8" : "#9ca3af"}>
+      <svg width="8" height="5" viewBox="0 0 8 5" fill={sortKey === col && sortDir === "asc" ? "var(--life-primary-500)" : "var(--life-neutral-400)"}>
         <path d="M4 0L8 5H0L4 0Z" />
       </svg>
-      <svg width="8" height="5" viewBox="0 0 8 5" fill={sortKey === col && sortDir === "desc" ? "#2d6fa8" : "#9ca3af"}>
+      <svg width="8" height="5" viewBox="0 0 8 5" fill={sortKey === col && sortDir === "desc" ? "var(--life-primary-500)" : "var(--life-neutral-400)"}>
         <path d="M4 5L0 0H8L4 5Z" />
       </svg>
     </span>
@@ -233,8 +234,8 @@ export default function UserManagementPage() {
       {/* ── Page header ── */}
       <div className="px-6 md:px-8 pt-6 pb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-[#111827] leading-tight">User Management</h1>
-          <p className="text-sm text-[#6b7280] mt-1">Manage users, roles, and access for this instance</p>
+          <h1 className="text-2xl md:text-3xl font-bold text-[var(--life-neutral-850)] leading-tight">User Management</h1>
+          <p className="text-sm text-[var(--life-neutral-600)] mt-1">Manage users, roles, and access for this instance</p>
         </div>
       </div>
 
@@ -242,7 +243,7 @@ export default function UserManagementPage() {
       <div className="px-6 md:px-8 pb-1 flex flex-wrap items-center gap-3">
         {/* Search */}
         <div className="relative flex-1 min-w-[220px] max-w-sm">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9ca3af]" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--life-neutral-400)]" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
           <input
@@ -254,11 +255,7 @@ export default function UserManagementPage() {
             aria-label="Search users by email"
             aria-invalid={!!searchError}
             aria-describedby={searchError ? "search-error" : undefined}
-            className={`w-full pl-9 ${search ? "pr-8" : "pr-4"} py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent bg-white placeholder-[#9ca3af] text-[#111827] transition-colors ${
-              searchError
-                ? "border-[#ef4444] focus:ring-[#ef4444]"
-                : "border-[#e5e7eb] focus:ring-[#2d6fa8]"
-            }`}
+            className={`life-field pl-9 ${search ? "pr-8" : "pr-4"}`}
           />
           {search && (
             <button
@@ -266,7 +263,7 @@ export default function UserManagementPage() {
               onClick={clearSearch}
               title="Clear search"
               aria-label="Clear search"
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#9ca3af] hover:text-[#374151] transition-colors"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--life-neutral-500)] hover:text-[var(--life-neutral-850)] transition-colors"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -276,21 +273,18 @@ export default function UserManagementPage() {
         </div>
 
         {/* Role filter */}
-        <div className="flex items-center gap-1 bg-[#f3f4f6] rounded-lg p-1">
+        <div role="tablist" aria-label="Filter by role" className="life-tabs">
           {(["All", ...ROLES] as const).map((option) => (
             <button
               key={option}
               type="button"
-              aria-pressed={roleFilter === option}
+              role="tab"
+              aria-selected={roleFilter === option}
               onClick={() => {
                 setRoleFilter(option);
                 setPage(1);
               }}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
-                roleFilter === option
-                  ? "bg-white text-[#2d6fa8] shadow-sm"
-                  : "text-[#6b7280] hover:text-[#374151]"
-              }`}
+              className="life-tab"
             >
               {option}
             </button>
@@ -300,9 +294,9 @@ export default function UserManagementPage() {
         {/* Active filter chips */}
         {search && !searchError && (
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#f3f4f6] text-xs text-[#374151] font-medium">
-              Email: <span className="text-[#2d6fa8]">"{search}"</span>
-              <button type="button" onClick={clearSearch} aria-label="Remove email filter" className="text-[#9ca3af] hover:text-[#374151] ml-0.5">
+            <span className="life-chip life-chip--neutral">
+              Email: <span className="text-[var(--life-primary-600)]">"{search}"</span>
+              <button type="button" onClick={clearSearch} aria-label="Remove email filter" className="text-[var(--life-neutral-500)] hover:text-[var(--life-neutral-850)] ml-0.5">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
                   <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
@@ -316,7 +310,7 @@ export default function UserManagementPage() {
       {/* Search validation error */}
       {searchError && (
         <div className="px-6 md:px-8 pb-3">
-          <p id="search-error" role="alert" className="text-xs text-[#ef4444] flex items-center gap-1.5">
+          <p id="search-error" role="alert" className="text-xs text-[var(--life-color-text-critical)] flex items-center gap-1.5">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
             </svg>
@@ -327,10 +321,10 @@ export default function UserManagementPage() {
 
       {/* ── Table ── */}
       <div className="flex-1 px-6 md:px-8 pb-4">
-        <div className="rounded-xl border border-[#e5e7eb] overflow-visible bg-white">
-          <table className="w-full text-sm min-w-[700px]">
+        <div className="life-table-wrap life-table-wrap--visible">
+          <table className="life-table min-w-[700px]">
             <thead>
-              <tr className="bg-[#f9fafb] border-b border-[#e5e7eb]">
+              <tr>
                 {(
                   [
                     { key: "email",        label: "Email Address" },
@@ -342,8 +336,10 @@ export default function UserManagementPage() {
                 ).map(({ key, label }) => (
                   <th
                     key={key}
+                    scope="col"
+                    aria-sort={sortKey === key ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
                     onClick={() => handleSort(key)}
-                    className={`group px-4 py-3 text-xs font-semibold text-[#374151] uppercase tracking-wide cursor-pointer select-none whitespace-nowrap hover:text-[#2d6fa8] transition-colors ${key === "email" ? "text-left" : "text-center"}`}
+                    className={`group life-th-sortable ${key === "email" ? "!text-left" : "!text-center"}`}
                   >
                     <span className={`inline-flex items-center gap-1 ${key === "email" ? "" : "justify-center w-full"}`}>
                       {label}
@@ -351,37 +347,39 @@ export default function UserManagementPage() {
                     </span>
                   </th>
                 ))}
-                <th className="px-4 py-3 text-center text-xs font-semibold text-[#374151] uppercase tracking-wide whitespace-nowrap">Actions</th>
+                <th scope="col" className="!text-center">Actions</th>
               </tr>
             </thead>
             <tbody>
               {paginated.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-16 text-center text-sm text-[#9ca3af]">No users found</td>
+                  <td colSpan={6} className="life-table-empty">No users found</td>
                 </tr>
               ) : paginated.map((user) => {
                 const isCurrentUser = user.email.toLowerCase() === currentUser?.email.toLowerCase();
                 const isUserDisabled = !!user.isDeleted;
 
                 return (
-                <tr key={user.id} className={`border-b border-[#f3f4f6] hover:bg-[#fafafa] transition-colors group/row ${isCurrentUser ? "font-bold" : ""}`}>
+                <tr key={user.id} className={`group/row ${isCurrentUser ? "font-bold" : ""}`}>
                   {/* Email */}
-                  <td className={`px-4 py-3 text-[#111827] ${isCurrentUser ? "font-bold" : "font-normal"} ${isUserDisabled ? "opacity-60 grayscale-[0.25] saturate-50" : ""}`}>{user.email}</td>
+                  <td className={`${isCurrentUser ? "font-bold" : "font-normal"} ${isUserDisabled ? "opacity-60 grayscale-[0.25] saturate-50" : ""}`}>{user.email}</td>
 
                   {/* Tenant */}
-                  <td className={`px-4 py-3 text-center ${isCurrentUser ? "font-bold text-[#111827]" : "text-[#6b7280]"} ${isUserDisabled ? "opacity-60 grayscale-[0.25] saturate-50" : ""}`}>{user.tenant}</td>
+                  <td className={`text-center ${isCurrentUser ? "font-bold" : "text-[var(--life-neutral-600)]"} ${isUserDisabled ? "opacity-60 grayscale-[0.25] saturate-50" : ""}`}>{user.tenant}</td>
 
                   {/* Role — click to change */}
-                  <td className={`px-4 py-3 text-center relative ${isUserDisabled ? "opacity-60 grayscale-[0.25] saturate-50" : ""}`}>
+                  <td className={`text-center relative ${isUserDisabled ? "opacity-60 grayscale-[0.25] saturate-50" : ""}`}>
                     {isCurrentUser || isUserDisabled ? (
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${ROLE_COLORS[user.role]}`}>
+                      <span className={`life-badge ${ROLE_COLORS[user.role]}`}>
                         {user.role}
                       </span>
                     ) : (
                       <button
                         type="button"
+                        aria-haspopup="menu"
+                        aria-expanded={roleMenuTarget === user.id}
                         onClick={() => setRoleMenuTarget(roleMenuTarget === user.id ? null : user.id)}
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${ROLE_COLORS[user.role]} hover:opacity-80 transition-opacity`}
+                        className={`life-dropdown-btn ${ROLE_COLORS[user.role]}`}
                       >
                         {user.role}
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -390,14 +388,17 @@ export default function UserManagementPage() {
                       </button>
                     )}
                     {!isCurrentUser && !isUserDisabled && roleMenuTarget === user.id && (
-                      <div className="absolute left-3 top-full mt-1 w-44 bg-white border border-[#e5e7eb] rounded-lg shadow-xl z-30 py-1">
-                        <p className="px-3 py-1.5 text-xs font-semibold text-[#9ca3af] uppercase tracking-wide">Change role</p>
+                      <div role="menu" className="life-menu absolute left-3 top-full mt-1 w-48 z-30 text-left">
+                        <p className="life-menu-heading">Change role</p>
                         {ROLES.map((r) => (
                           <button
                             key={r}
                             type="button"
+                            role="menuitemradio"
+                            aria-checked={user.role === r}
+                            aria-selected={user.role === r}
                             onClick={() => changeRole(user.id, r)}
-                            className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center justify-between ${user.role === r ? "text-[#2d6fa8] font-medium" : "text-[#374151] hover:bg-[#f9fafb]"}`}
+                            className="life-menu-item justify-between"
                           >
                             {r}
                             {user.role === r && (
@@ -412,19 +413,19 @@ export default function UserManagementPage() {
                   </td>
 
                   {/* Failed logins */}
-                  <td className={`px-4 py-3 text-center ${isUserDisabled ? "opacity-60 grayscale-[0.25] saturate-50" : ""}`}>
-                    <span className={`${isCurrentUser ? "font-bold text-[#111827]" : `font-medium ${user.failedLogins >= 5 ? "text-[#ef4444]" : user.failedLogins >= 1 ? "text-[#f59e0b]" : "text-[#6b7280]"}`}`}>
+                  <td className={`text-center ${isUserDisabled ? "opacity-60 grayscale-[0.25] saturate-50" : ""}`}>
+                    <span className={`${isCurrentUser ? "font-bold" : `font-medium ${user.failedLogins >= 5 ? "text-[var(--life-critical-600)]" : user.failedLogins >= 1 ? "text-[var(--life-warning-500)]" : "text-[var(--life-neutral-600)]"}`}`}>
                       {user.failedLogins}
                     </span>
                   </td>
 
                   {/* Last access */}
-                  <td className={`px-4 py-3 text-center tabular-nums ${isCurrentUser ? "font-bold text-[#111827]" : "text-[#6b7280]"} ${isUserDisabled ? "opacity-60 grayscale-[0.25] saturate-50" : ""}`}>{user.lastAccess}</td>
+                  <td className={`text-center tabular-nums ${isCurrentUser ? "font-bold" : "text-[var(--life-neutral-600)]"} ${isUserDisabled ? "opacity-60 grayscale-[0.25] saturate-50" : ""}`}>{user.lastAccess}</td>
 
                   {/* Actions */}
-                  <td className="px-4 py-3 text-center">
+                  <td className="text-center">
                     {isCurrentUser ? (
-                      <span className="block text-center text-xs text-[#111827] font-bold leading-snug w-40 mx-auto">Please log in as another admin for full access.</span>
+                      <span className="block text-center text-xs font-bold leading-snug w-40 mx-auto">Please log in as another admin for full access.</span>
                     ) : (
                     <div className="flex items-center justify-center gap-1 relative">
                       {/* Delete */}
@@ -432,7 +433,8 @@ export default function UserManagementPage() {
                         type="button"
                         onClick={() => setDeleteTarget(user)}
                         title="Delete user"
-                        className="p-1.5 rounded-lg text-[#9ca3af] hover:text-[#ef4444] hover:bg-[#fef2f2] transition-colors"
+                        aria-label={`Delete ${user.email}`}
+                        className="life-icon-btn life-icon-btn--sm life-icon-btn--critical"
                       >
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                           <polyline points="3 6 5 6 21 6" />
@@ -447,7 +449,10 @@ export default function UserManagementPage() {
                         type="button"
                         onClick={() => setActionMenuTarget(actionMenuTarget === user.id ? null : user.id)}
                         title="More actions"
-                        className="p-1.5 rounded-lg text-[#9ca3af] hover:text-[#374151] hover:bg-[#f3f4f6] transition-colors"
+                        aria-label={`More actions for ${user.email}`}
+                        aria-haspopup="menu"
+                        aria-expanded={actionMenuTarget === user.id}
+                        className="life-icon-btn life-icon-btn--sm"
                       >
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
                           <circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" />
@@ -455,11 +460,12 @@ export default function UserManagementPage() {
                       </button>
 
                       {actionMenuTarget === user.id && (
-                        <div className="absolute right-0 top-full mt-1 w-52 bg-white border border-[#e5e7eb] rounded-lg shadow-xl z-30 py-1">
+                        <div role="menu" className="life-menu absolute right-0 top-full mt-1 w-56 z-30 text-left">
                           <button
                             type="button"
                             onClick={() => handleActionMenu(user.id, user.isDeleted ? "restore-user" : "disable-user")}
-                            className="w-full text-left px-3 py-2 text-sm text-[#374151] hover:bg-[#f9fafb] flex items-center gap-2.5"
+                            role="menuitem"
+                            className="life-menu-item"
                           >
                             <img
                               src={user.isDeleted ? "/assets/icons/UserRow.svg" : "/assets/icons/DisableUserIcon.svg"}
@@ -471,7 +477,8 @@ export default function UserManagementPage() {
                           <button
                             type="button"
                             onClick={() => handleActionMenu(user.id, "transfer")}
-                            className="w-full text-left px-3 py-2 text-sm text-[#374151] hover:bg-[#f9fafb] flex items-center gap-2.5"
+                            role="menuitem"
+                            className="life-menu-item"
                           >
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
                               <path d="M16 3h5v5M8 21H3v-5" /><path d="M21 3l-7 7M3 21l7-7" />
@@ -481,7 +488,8 @@ export default function UserManagementPage() {
                           <button
                             type="button"
                             onClick={() => handleActionMenu(user.id, "delete-unshared")}
-                            className="w-full text-left px-3 py-2 text-sm text-[#374151] hover:bg-[#f9fafb] flex items-center gap-2.5"
+                            role="menuitem"
+                            className="life-menu-item"
                           >
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
                               <path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z" /><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z" />
@@ -492,7 +500,8 @@ export default function UserManagementPage() {
                           <button
                             type="button"
                             onClick={() => handleActionMenu(user.id, "share-all")}
-                            className="w-full text-left px-3 py-2 text-sm text-[#374151] hover:bg-[#f9fafb] flex items-center gap-2.5"
+                            role="menuitem"
+                            className="life-menu-item"
                           >
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
                               <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
@@ -511,100 +520,15 @@ export default function UserManagementPage() {
             </tbody>
           </table>
 
-          {/* ── Table footer / pagination ── */}
-          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t border-[#e5e7eb] bg-[#f9fafb]">
-            {/* Row count + page size */}
-            <div className="flex items-center gap-3 text-sm text-[#6b7280]">
-              <span>
-                {filtered.length === 0
-                  ? "0 results"
-                  : `${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, filtered.length)} of ${filtered.length} user${filtered.length !== 1 ? "s" : ""}`}
-              </span>
-              <span className="text-[#d1d5db]">|</span>
-              <span>Rows per page:</span>
-              <select
-                value={pageSize}
-                onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
-                className="text-sm border border-[#e5e7eb] rounded-md px-2 py-1 text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] bg-white"
-                title="Rows per page"
-              >
-                {PAGE_SIZE_OPTIONS.map((n) => (
-                  <option key={n} value={n}>{n}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Page navigation */}
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => setPage(1)}
-                disabled={page === 1}
-                title="First page"
-                className="p-1.5 rounded-lg text-[#6b7280] hover:bg-[#e5e7eb] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="11 17 6 12 11 7" /><polyline points="18 17 13 12 18 7" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                title="Previous page"
-                className="p-1.5 rounded-lg text-[#6b7280] hover:bg-[#e5e7eb] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="15 18 9 12 15 6" />
-                </svg>
-              </button>
-
-              {Array.from({ length: totalPages }, (_, i) => i + 1)
-                .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
-                .reduce<(number | "…")[]>((acc, p, idx, arr) => {
-                  if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push("…");
-                  acc.push(p);
-                  return acc;
-                }, [])
-                .map((p, idx) =>
-                  p === "…" ? (
-                    <span key={`ellipsis-${idx}`} className="px-1 text-[#9ca3af] text-sm">…</span>
-                  ) : (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => setPage(p as number)}
-                      className={`min-w-[30px] h-[30px] rounded-lg text-sm font-medium transition-colors ${page === p ? "bg-[#2d6fa8] text-white" : "text-[#374151] hover:bg-[#e5e7eb]"}`}
-                    >
-                      {p}
-                    </button>
-                  )
-                )}
-
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                title="Next page"
-                className="p-1.5 rounded-lg text-[#6b7280] hover:bg-[#e5e7eb] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="9 18 15 12 9 6" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                onClick={() => setPage(totalPages)}
-                disabled={page === totalPages}
-                title="Last page"
-                className="p-1.5 rounded-lg text-[#6b7280] hover:bg-[#e5e7eb] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="13 17 18 12 13 7" /><polyline points="6 17 11 12 6 7" />
-                </svg>
-              </button>
-            </div>
-          </div>
+          <Paginator
+            page={page}
+            pageSize={pageSize}
+            totalItems={filtered.length}
+            pageSizeOptions={PAGE_SIZE_OPTIONS}
+            itemLabel="user"
+            onPageChange={setPage}
+            onPageSizeChange={(n) => { setPageSize(n); setPage(1); }}
+          />
         </div>
       </div>
 

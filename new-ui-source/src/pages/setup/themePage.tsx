@@ -118,13 +118,13 @@ const DEFAULT_CUSTOM: CustomThemeValues = {
 function ColorField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-xs font-medium text-[#374151] flex items-center gap-1">
+      <span className="text-xs font-medium text-[var(--life-neutral-700)] flex items-center gap-1">
         {label}
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
         </svg>
       </span>
-      <label className="w-11 h-11 rounded-lg border-2 border-[#e5e7eb] overflow-hidden cursor-pointer hover:border-[var(--life-primary-500)] transition-colors block">
+      <label className="w-11 h-11 rounded-lg border-2 border-[var(--life-neutral-100)] overflow-hidden cursor-pointer hover:border-[var(--life-primary-500)] transition-colors block">
         <input type="color" value={value} onChange={(e) => onChange(e.target.value)} aria-label={label} title={label} className="w-full h-full opacity-0 absolute" />
         <span className="w-full h-full block rounded-md" style={{ backgroundColor: value }} />
       </label>
@@ -136,7 +136,7 @@ function ColorField({ label, value, onChange }: { label: string; value: string; 
 function FontSelect({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-xs font-medium text-[#374151] flex items-center gap-1">
+      <span className="text-xs font-medium text-[var(--life-neutral-700)] flex items-center gap-1">
         {label}
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
@@ -148,13 +148,10 @@ function FontSelect({ label, value, onChange }: { label: string; value: string; 
           onChange={(e) => onChange(e.target.value)}
           aria-label={label}
           title={label}
-          className="w-full border border-[#e5e7eb] rounded-lg px-3 py-2.5 text-sm text-[#111827] bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] focus:border-transparent pr-8"
+          className="life-field"
         >
           {FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
         </select>
-        <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
       </div>
     </div>
   );
@@ -164,11 +161,11 @@ function FontSelect({ label, value, onChange }: { label: string; value: string; 
 function Accordion({ title, icon, children, defaultOpen = false }: { title: string; icon: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border border-[#e5e7eb] rounded-xl overflow-visible bg-white">
+    <div className="border border-[var(--life-neutral-100)] rounded-xl overflow-visible bg-white">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="group w-full flex items-center justify-between gap-3 px-5 py-4 !h-[56px] text-left bg-white text-[#111827] hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] transition-colors"
+        className="life-accordion-trigger !min-h-[56px] !px-5"
       >
         <div className="flex items-center gap-2.5 text-sm font-semibold text-current">
           <span className="text-current">{icon}</span>
@@ -181,7 +178,7 @@ function Accordion({ title, icon, children, defaultOpen = false }: { title: stri
           <polyline points={open ? "6 9 12 15 18 9" : "9 6 15 12 9 18"} />
         </svg>
       </button>
-      {open && <div className="px-[22px] py-[20px] border-t border-[#f3f4f6] bg-white">{children}</div>}
+      {open && <div className="px-[22px] py-[20px] border-t border-[var(--life-neutral-050)] bg-white">{children}</div>}
     </div>
   );
 }
@@ -195,18 +192,18 @@ function ThemePreview({ cfg }: { cfg: CustomThemeValues }) {
   return (
     <div className="flex flex-col h-full bg-[#f0f4f8]">
       {/* preview header */}
-      <div className="h-10 bg-white border-b border-[#e5e7eb] flex items-center justify-between px-4 shrink-0">
-        <span className="text-xs font-semibold text-[#111827] flex items-center gap-1.5">
+      <div className="h-10 bg-white border-b border-[var(--life-neutral-100)] flex items-center justify-between px-4 shrink-0">
+        <span className="text-xs font-semibold text-[var(--life-neutral-850)] flex items-center gap-1.5">
           <svg width="12" height="12" viewBox="0 0 24 24" fill={cfg.primaryColor} stroke="none"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
           Live Preview
         </span>
         <div className="flex items-center gap-1.5">
-          <button type="button" title="Toggle dark mode" aria-label="Toggle dark mode" className="p-1.5 rounded-lg border border-[#e5e7eb] hover:bg-[#f3f4f6] transition-colors">
+          <button type="button" title="Toggle dark mode" aria-label="Toggle dark mode" className="p-1.5 rounded-lg border border-[var(--life-neutral-100)] hover:bg-[var(--life-neutral-050)] transition-colors">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
             </svg>
           </button>
-          <button type="button" title="Expand preview" aria-label="Expand preview" className="p-1.5 rounded-lg border border-[#e5e7eb] hover:bg-[#f3f4f6] transition-colors">
+          <button type="button" title="Expand preview" aria-label="Expand preview" className="p-1.5 rounded-lg border border-[var(--life-neutral-100)] hover:bg-[var(--life-neutral-050)] transition-colors">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
             </svg>
@@ -216,12 +213,12 @@ function ThemePreview({ cfg }: { cfg: CustomThemeValues }) {
 
       {/* simulated course shell */}
       <div className="flex-1 overflow-y-auto p-4">
-        <div className="bg-white rounded-xl border border-[#e5e7eb] overflow-hidden shadow-sm">
+        <div className="bg-white rounded-xl border border-[var(--life-neutral-100)] overflow-hidden shadow-sm">
           {/* progress bar */}
           <div className="h-1" style={{ backgroundColor: cfg.primaryColor }} />
 
           {/* course nav bar */}
-          <div className="flex items-center gap-3 px-4 py-3 border-b border-[#f3f4f6]" style={{ backgroundColor: cfg.primaryColor }}>
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--life-neutral-050)]" style={{ backgroundColor: cfg.primaryColor }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M19 12H5M12 19l-7-7 7-7"/>
             </svg>
@@ -239,11 +236,11 @@ function ThemePreview({ cfg }: { cfg: CustomThemeValues }) {
             <h1 className="font-bold mb-3" style={{ ...headingStyle, fontSize: h1Size }}>{cfg.pageTitleSize === "h6" ? "-" : "New Menu/Topic Title"}</h1>
 
             {/* article block */}
-            <div className="border border-[#e5e7eb] rounded-lg p-3 mb-3">
+            <div className="border border-[var(--life-neutral-100)] rounded-lg p-3 mb-3">
               <h2 className="font-semibold text-sm mb-1" style={headingStyle}>New Section Title</h2>
-              <div className="border border-[#e5e7eb] rounded-md p-3">
+              <div className="border border-[var(--life-neutral-100)] rounded-md p-3">
                 <h3 className="font-semibold text-xs mb-1" style={headingStyle}>New Content Group Title</h3>
-                <div className="border border-[#e5e7eb] rounded p-3">
+                <div className="border border-[var(--life-neutral-100)] rounded p-3">
                   <p className="font-semibold text-xs mb-1" style={headingStyle}>New Component Title</p>
                   <p className="text-xs mb-1" style={bodyStyle}>Body text</p>
                   <a href="#" className="text-xs underline block mb-1" style={{ color: cfg.linkFontColor, fontFamily: cfg.paragraphFont }}>This is a sample link</a>
@@ -252,7 +249,7 @@ function ThemePreview({ cfg }: { cfg: CustomThemeValues }) {
                   {/* MCQ */}
                   <div className="space-y-2 mb-3">
                     {["Correct", "Incorrect"].map((opt, i) => (
-                      <div key={opt} className="flex items-center gap-2 border border-[#e5e7eb] rounded-md px-3 py-2" style={{ backgroundColor: i === 0 ? cfg.secondaryColor + "22" : "" }}>
+                      <div key={opt} className="flex items-center gap-2 border border-[var(--life-neutral-100)] rounded-md px-3 py-2" style={{ backgroundColor: i === 0 ? cfg.secondaryColor + "22" : "" }}>
                         <div className="w-5 h-5 rounded flex items-center justify-center shrink-0" style={{ backgroundColor: cfg.secondaryColor }}>
                           {i === 0 && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
                         </div>
@@ -334,12 +331,12 @@ function GlobalThemeSection({ cfg, setCfg }: { cfg: CustomThemeValues; setCfg: (
       </div>
       {/* topic title size */}
       <div className="flex flex-col gap-1.5">
-        <span className="text-xs font-medium text-[#374151] flex items-center gap-1">
+        <span className="text-xs font-medium text-[var(--life-neutral-700)] flex items-center gap-1">
           Topic Title Size (H1)
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
           </svg>
-          <button type="button" onClick={() => set("pageTitleSize", DEFAULT_CUSTOM.pageTitleSize)} title="Reset" className="ml-1 text-[#9ca3af] hover:text-[#6b7280]">
+          <button type="button" onClick={() => set("pageTitleSize", DEFAULT_CUSTOM.pageTitleSize)} title="Reset" className="ml-1 text-[var(--life-neutral-400)] hover:text-[var(--life-neutral-600)]">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>
             </svg>
@@ -351,13 +348,10 @@ function GlobalThemeSection({ cfg, setCfg }: { cfg: CustomThemeValues; setCfg: (
             onChange={(e) => set("pageTitleSize", e.target.value)}
             aria-label="Topic Title Size (H1)"
             title="Topic Title Size (H1)"
-            className="w-full border-2 border-[var(--life-primary-500)] rounded-lg px-3 py-2.5 text-sm text-[#111827] bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] pr-8"
+            className="life-field"
           >
             {H1_SIZE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
-          <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="6 9 12 15 18 9"/>
-          </svg>
         </div>
         {cfg.pageTitleSize !== "h6" && <DesktopCalculatedValues baseRem={parseFloat(cfg.pageTitleSize)} />}
       </div>
@@ -399,7 +393,7 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
           <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/>
         </svg>
       ),
-      content: <div className="pt-4 text-sm text-[#9ca3af] italic">Topic structure options coming soon.</div>,
+      content: <div className="pt-4 text-sm text-[var(--life-neutral-400)] italic">Topic structure options coming soon.</div>,
     },
     {
       id: "progress",
@@ -409,7 +403,7 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
           <line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/>
         </svg>
       ),
-      content: <div className="pt-4 text-sm text-[#9ca3af] italic">Progress styling options coming soon.</div>,
+      content: <div className="pt-4 text-sm text-[var(--life-neutral-400)] italic">Progress styling options coming soon.</div>,
     },
     {
       id: "navigation",
@@ -419,7 +413,7 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
           <polygon points="3 11 22 2 13 21 11 13 3 11"/>
         </svg>
       ),
-      content: <div className="pt-4 text-sm text-[#9ca3af] italic">Navigation styling options coming soon.</div>,
+      content: <div className="pt-4 text-sm text-[var(--life-neutral-400)] italic">Navigation styling options coming soon.</div>,
     },
     {
       id: "menu",
@@ -429,7 +423,7 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
           <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
         </svg>
       ),
-      content: <div className="pt-4 text-sm text-[#9ca3af] italic">Menu styling options coming soon.</div>,
+      content: <div className="pt-4 text-sm text-[var(--life-neutral-400)] italic">Menu styling options coming soon.</div>,
     },
     {
       id: "feedback",
@@ -439,7 +433,7 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
           <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
         </svg>
       ),
-      content: <div className="pt-4 text-sm text-[#9ca3af] italic">Feedback & validation options coming soon.</div>,
+      content: <div className="pt-4 text-sm text-[var(--life-neutral-400)] italic">Feedback & validation options coming soon.</div>,
     },
     {
       id: "overlays",
@@ -449,15 +443,15 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
           <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
         </svg>
       ),
-      content: <div className="pt-4 text-sm text-[#9ca3af] italic">Overlays styling options coming soon.</div>,
+      content: <div className="pt-4 text-sm text-[var(--life-neutral-400)] italic">Overlays styling options coming soon.</div>,
     },
   ];
 
   return (
     <div className="flex h-full overflow-hidden">
       {/* left: accordion editor */}
-      <div className="w-1/2 h-full overflow-y-auto border-r border-[#e5e7eb] bg-white">
-        <div className="flex items-center gap-2 px-5 py-3 border-b border-[#f3f4f6] shrink-0">
+      <div className="w-1/2 h-full overflow-y-auto border-r border-[var(--life-neutral-100)] bg-white">
+        <div className="flex items-center gap-2 px-5 py-3 border-b border-[var(--life-neutral-050)] shrink-0">
           <button type="button" onClick={onBack} className="text-xs text-[var(--life-primary-500)] hover:underline flex items-center gap-1">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M19 12H5M12 19l-7-7 7-7"/>
@@ -465,38 +459,38 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
             Theme
           </button>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
-          <span className="text-xs text-[#374151] font-medium">Custom Theme</span>
+          <span className="text-xs text-[var(--life-neutral-700)] font-medium">Custom Theme</span>
         </div>
         {/* Custom Icons: Sprite Sheets */}
-        <div className="px-5 pt-4 pb-5 border-b border-[#f3f4f6]">
-          <p className="text-xs font-semibold text-[#374151] mb-1">Custom Icons: Sprite Sheets</p>
-          <p className="text-xs text-[#6b7280] mb-3 leading-relaxed">Upload an SVG sprite sheet to replace default icons across the course.</p>
-          <label className="flex flex-col items-center justify-center w-full h-20 border-2 border-dashed border-[#d1d5db] rounded-xl cursor-pointer hover:border-[var(--life-primary-500)] hover:bg-[var(--life-primary-020)] transition-colors group">
+        <div className="px-5 pt-4 pb-5 border-b border-[var(--life-neutral-050)]">
+          <p className="text-xs font-semibold text-[var(--life-neutral-700)] mb-1">Custom Icons: Sprite Sheets</p>
+          <p className="text-xs text-[var(--life-neutral-600)] mb-3 leading-relaxed">Upload an SVG sprite sheet to replace default icons across the course.</p>
+          <label className="flex flex-col items-center justify-center w-full h-20 border-2 border-dashed border-[var(--life-neutral-200)] rounded-xl cursor-pointer hover:border-[var(--life-primary-500)] hover:bg-[var(--life-primary-020)] transition-colors group">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="group-hover:stroke-[var(--life-primary-500)] transition-colors mb-1">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
             </svg>
-            <span className="text-xs text-[#6b7280] group-hover:text-[var(--life-primary-500)] transition-colors">Click to upload sprite sheet (.svg)</span>
+            <span className="text-xs text-[var(--life-neutral-600)] group-hover:text-[var(--life-primary-500)] transition-colors">Click to upload sprite sheet (.svg)</span>
             <input type="file" accept=".svg" aria-label="Upload SVG sprite sheet" className="hidden" />
           </label>
         </div>
 
         {/* Custom Icons: Single Icons */}
-        <div className="px-5 pt-4 pb-5 border-b border-[#f3f4f6]">
-          <p className="text-xs font-semibold text-[#374151] mb-1">Custom Icons: Single Icons</p>
-          <p className="text-xs text-[#6b7280] mb-3 leading-relaxed">Upload individual SVG icon files to override specific icons in the course.</p>
-          <label className="flex flex-col items-center justify-center w-full h-20 border-2 border-dashed border-[#d1d5db] rounded-xl cursor-pointer hover:border-[var(--life-primary-500)] hover:bg-[var(--life-primary-020)] transition-colors group">
+        <div className="px-5 pt-4 pb-5 border-b border-[var(--life-neutral-050)]">
+          <p className="text-xs font-semibold text-[var(--life-neutral-700)] mb-1">Custom Icons: Single Icons</p>
+          <p className="text-xs text-[var(--life-neutral-600)] mb-3 leading-relaxed">Upload individual SVG icon files to override specific icons in the course.</p>
+          <label className="flex flex-col items-center justify-center w-full h-20 border-2 border-dashed border-[var(--life-neutral-200)] rounded-xl cursor-pointer hover:border-[var(--life-primary-500)] hover:bg-[var(--life-primary-020)] transition-colors group">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="group-hover:stroke-[var(--life-primary-500)] transition-colors mb-1">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
             </svg>
-            <span className="text-xs text-[#6b7280] group-hover:text-[var(--life-primary-500)] transition-colors">Click to upload icons (.svg)</span>
+            <span className="text-xs text-[var(--life-neutral-600)] group-hover:text-[var(--life-primary-500)] transition-colors">Click to upload icons (.svg)</span>
             <input type="file" accept=".svg" multiple aria-label="Upload single SVG icons" className="hidden" />
           </label>
         </div>
 
         {/* Configuration: Component */}
-        <div className="px-5 pt-4 pb-5 border-b border-[#f3f4f6]">
-          <p className="text-xs font-semibold text-[#374151] mb-0.5">Configuration: Component</p>
-          <p className="text-xs text-[#6b7280] mb-3 leading-relaxed">Component-level behavior and feedback configuration.</p>
+        <div className="px-5 pt-4 pb-5 border-b border-[var(--life-neutral-050)]">
+          <p className="text-xs font-semibold text-[var(--life-neutral-700)] mb-0.5">Configuration: Component</p>
+          <p className="text-xs text-[var(--life-neutral-600)] mb-3 leading-relaxed">Component-level behavior and feedback configuration.</p>
           <div className="space-y-1">
             {(
               [
@@ -506,11 +500,11 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
                 { key: "hidePartiallyCorrect",      label: "Hide partially correct feedback on the question and result topic" },
               ] as { key: keyof typeof componentConfig; label: string }[]
             ).map(({ key, label }) => (
-              <label key={key} className="flex items-start gap-3 py-2 px-2 rounded-lg hover:bg-[#f9fafb] cursor-pointer group">
+              <label key={key} className="flex items-start gap-3 py-2 px-2 rounded-lg hover:bg-[var(--life-neutral-020)] cursor-pointer group">
                 <div
                   onClick={() => toggleConfig(key)}
                   className={`mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors cursor-pointer ${
-                    componentConfig[key] ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)]" : "border-[#d1d5db] bg-white group-hover:border-[var(--life-primary-300)]"
+                    componentConfig[key] ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)]" : "border-[var(--life-neutral-200)] bg-white group-hover:border-[var(--life-primary-300)]"
                   }`}
                 >
                   {componentConfig[key] && (
@@ -519,7 +513,7 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
                     </svg>
                   )}
                 </div>
-                <span className="text-xs text-[#374151] leading-snug">{label}</span>
+                <span className="text-xs text-[var(--life-neutral-700)] leading-snug">{label}</span>
               </label>
             ))}
           </div>
@@ -1108,7 +1102,7 @@ function LifeListField({
           const idError = idKey === '_spriteSheetId' ? itemErrors._spriteSheetId : itemErrors.iconId;
 
           return (
-          <div key={`${idKey}-${index}`} className="border border-[#e5e7eb] rounded-lg p-3 space-y-3 bg-[#fafafa]">
+          <div key={`${idKey}-${index}`} className="border border-[var(--life-neutral-100)] rounded-lg p-3 space-y-3 bg-[var(--life-neutral-020)]">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <InfoFieldLabel
@@ -1121,9 +1115,9 @@ function LifeListField({
                   value={idKey === '_spriteSheetId' ? (item as LifeSpriteSheet)._spriteSheetId : (item as LifeSingleIcon).iconId}
                   onChange={(e) => onChange(index, idKey, e.target.value)}
                   aria-invalid={!!idError}
-                  className={`text-xs w-full border rounded px-2 py-1.5 text-[#111827] outline-none ${idError ? 'border-[#ef4444] focus:border-[#ef4444]' : 'border-[#d1d5db] focus:border-[var(--life-primary-500)]'}`}
+                  className={`text-xs w-full border rounded px-2 py-1.5 text-[var(--life-neutral-850)] outline-none ${idError ? 'border-[var(--life-critical-500)] focus:border-[var(--life-critical-500)]' : 'border-[var(--life-neutral-200)] focus:border-[var(--life-primary-500)]'}`}
                 />
-                {idError && <p className="mt-1 text-xs text-[#ef4444]">{idError}</p>}
+                {idError && <p className="mt-1 text-xs text-[var(--life-critical-500)]">{idError}</p>}
               </div>
               <div>
                 <InfoFieldLabel
@@ -1136,15 +1130,15 @@ function LifeListField({
                   value={item.src}
                   onChange={(e) => onChange(index, 'src', e.target.value)}
                   aria-invalid={!!itemErrors.src}
-                  className={`text-xs w-full border rounded px-2 py-1.5 text-[#111827] outline-none ${itemErrors.src ? 'border-[#ef4444] focus:border-[#ef4444]' : 'border-[#d1d5db] focus:border-[var(--life-primary-500)]'}`}
+                  className={`text-xs w-full border rounded px-2 py-1.5 text-[var(--life-neutral-850)] outline-none ${itemErrors.src ? 'border-[var(--life-critical-500)] focus:border-[var(--life-critical-500)]' : 'border-[var(--life-neutral-200)] focus:border-[var(--life-primary-500)]'}`}
                 />
-                {itemErrors.src && <p className="mt-1 text-xs text-[#ef4444]">{itemErrors.src}</p>}
+                {itemErrors.src && <p className="mt-1 text-xs text-[var(--life-critical-500)]">{itemErrors.src}</p>}
               </div>
             </div>
             <button
               type="button"
               onClick={() => onRemove(index)}
-              className="text-xs font-semibold px-3 py-1.5 border border-[#ef4444] text-[#ef4444] rounded-md hover:bg-[#fef2f2] transition-colors"
+              className="life-btn life-btn--secondary !text-[var(--life-critical-600)] !border-[var(--life-critical-500)] hover:!bg-[var(--life-critical-050)]"
             >
               Remove
             </button>
@@ -1154,7 +1148,7 @@ function LifeListField({
       <button
         type="button"
         onClick={onAdd}
-        className="px-5 py-2 text-xs font-semibold text-white bg-[var(--life-primary-500)] rounded-md hover:bg-[var(--life-primary-700)] transition-colors"
+        className="life-btn life-btn--primary"
       >
         Add
       </button>
@@ -1924,12 +1918,12 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     <div>
       <InfoFieldLabel label={label} hint={hint} className="mb-2" />
       <div className="flex gap-2 items-center">
-        <label className="w-8 h-8 rounded border border-[#d1d5db] cursor-pointer flex-shrink-0 block overflow-hidden relative">
+        <label className="w-8 h-8 rounded border border-[var(--life-neutral-200)] cursor-pointer flex-shrink-0 block overflow-hidden relative">
           <span className="block w-full h-full" style={{ backgroundColor: value || 'transparent' }} />
           <input type="color" name={`${label}-picker`} aria-label={`${label} picker`} value={/^#[0-9a-f]{6}$/i.test(value) ? value : '#ffffff'} onChange={e => onChange(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" />
         </label>
-        <input type="text" name={`${label}-hex`} aria-label={`${label} hex value`} value={value.toUpperCase()} placeholder="Inherit" onChange={e => { const v = e.target.value; if (v === '' || /^#[0-9A-Fa-f]{0,6}$/.test(v)) onChange(v); }} className="text-xs min-w-0 flex-1 border border-[#d1d5db] rounded px-2 py-1 text-[#111827] focus:border-[var(--life-primary-500)] outline-none" />
-        <button type="button" title={`Reset ${label} to inherited/default colour`} onClick={() => onChange('')} className="text-xs text-[#374151] underline">Reset</button>
+        <input type="text" name={`${label}-hex`} aria-label={`${label} hex value`} value={value.toUpperCase()} placeholder="Inherit" onChange={e => { const v = e.target.value; if (v === '' || /^#[0-9A-Fa-f]{0,6}$/.test(v)) onChange(v); }} className="life-field" />
+        <button type="button" title={`Reset ${label} to inherited/default colour`} onClick={() => onChange('')} className="text-xs text-[var(--life-neutral-700)] underline">Reset</button>
       </div>
     </div>
   );
@@ -1938,7 +1932,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
   const FontDropdownField = ({ label, hint, value, onChange }: { label: string; hint?: string; value: string; onChange: (v: string) => void }) => (
     <div>
       <InfoFieldLabel label={label} hint={hint} className="mb-2" />
-      <select name={label} aria-label={label} value={value} onChange={e => onChange(e.target.value)} className="text-xs w-full border border-[#d1d5db] rounded px-2 py-1 text-[#111827] bg-white cursor-pointer focus:border-[var(--life-primary-500)] outline-none">
+      <select name={label} aria-label={label} value={value} onChange={e => onChange(e.target.value)} className="life-field">
         {FONT_OPTIONS.map(f => <option key={f} value={f}>{f}</option>)}
       </select>
     </div>
@@ -2071,7 +2065,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     const previewContent = (
       <div className="min-h-0 flex-1 overflow-y-auto p-0" style={{ fontSize: '13px' }}>
         <div style={{ maxWidth: '760px', margin: '0 auto' }}>
-          <div className="overflow-hidden rounded-xl border border-[#e5e7eb]" style={{ backgroundColor: previewBg }}>
+          <div className="overflow-hidden rounded-xl border border-[var(--life-neutral-100)]" style={{ backgroundColor: previewBg }}>
             <div style={{ background: navBg, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '10px', borderBottom: previewDarkMode ? '1px solid #374151' : '1px solid #f3f4f6' }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={navIconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M19 12H5M12 19l-7-7 7-7" />
@@ -2213,7 +2207,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
         >
           <div
             ref={dialogRef}
-            className="mx-auto flex w-full max-w-6xl min-h-0 flex-col overflow-hidden rounded-2xl border border-[#e5e7eb] bg-white shadow-2xl"
+            className="mx-auto flex w-full max-w-6xl min-h-0 flex-col overflow-hidden rounded-2xl border border-[var(--life-neutral-100)] bg-white shadow-2xl"
             style={{ position: 'relative', zIndex: 10000 }}
             role="dialog"
             aria-modal="true"
@@ -2221,18 +2215,18 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
             tabIndex={-1}
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-[#e5e7eb] shrink-0 sticky top-0 z-10">
+            <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-[var(--life-neutral-100)] shrink-0 sticky top-0 z-10">
               <div className="flex items-center gap-2">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill={primaryColor} stroke="none">
                   <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
                 </svg>
-                <span className="text-sm font-semibold text-[#111827]">Live Preview</span>
+                <span className="text-sm font-semibold text-[var(--life-neutral-850)]">Live Preview</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-[#6b7280] mr-1">Press Esc to close</span>
+                <span className="text-xs text-[var(--life-neutral-600)] mr-1">Press Esc to close</span>
                 <button
                   onClick={() => setPreviewDarkMode(!previewDarkMode)}
-                  className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#d1d5db] bg-white px-3 text-sm font-medium text-[#374151] shadow-sm hover:bg-[#f9fafb]"
+                  className="life-btn life-btn--secondary"
                   title={darkModeTitle}
                   aria-label={darkModeTitle}
                   type="button"
@@ -2258,7 +2252,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                 </button>
                 <button
                   onClick={() => setIsPreviewExpanded(false)}
-                  className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#d1d5db] bg-white px-3 text-sm font-medium text-[#374151] shadow-sm hover:bg-[#f9fafb]"
+                  className="life-btn life-btn--secondary"
                   title="Minimize preview"
                   aria-label="Minimize preview"
                   type="button"
@@ -2281,19 +2275,19 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
 
     return (
       <>
-        <div className="flex flex-col h-full rounded-xl overflow-hidden border border-[#e5e7eb]" style={{ backgroundColor: canvasBg }}>
-          <div className="flex items-center justify-between px-4 py-2.5 bg-white border-b border-[#e5e7eb] shrink-0">
+        <div className="flex flex-col h-full rounded-xl overflow-hidden border border-[var(--life-neutral-100)]" style={{ backgroundColor: canvasBg }}>
+          <div className="flex items-center justify-between px-4 py-2.5 bg-white border-b border-[var(--life-neutral-100)] shrink-0">
             <div className="flex items-center gap-2">
               <svg width="12" height="12" viewBox="0 0 24 24" fill={primaryColor} stroke="none">
                 <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
               </svg>
-              <span className="text-xs font-semibold text-[#111827]">Live Preview</span>
+              <span className="text-xs font-semibold text-[var(--life-neutral-850)]">Live Preview</span>
             </div>
             <div className="flex gap-1.5">
               <button
                 ref={triggerRef}
                 onClick={() => setPreviewDarkMode(!previewDarkMode)}
-                className="w-8 h-8 flex items-center justify-center bg-transparent border border-[#e5e7eb] rounded-lg text-[#6b7280] hover:bg-[#f9fafb]"
+                className="w-8 h-8 flex items-center justify-center bg-transparent border border-[var(--life-neutral-100)] rounded-lg text-[var(--life-neutral-600)] hover:bg-[var(--life-neutral-020)]"
                 title={darkModeTitle}
                 aria-label={darkModeTitle}
                 type="button"
@@ -2319,7 +2313,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
               <button
                 ref={triggerRef}
                 onClick={() => setIsPreviewExpanded(true)}
-                className="w-8 h-8 flex items-center justify-center bg-transparent border border-[#e5e7eb] rounded-lg text-[#6b7280] hover:bg-[#f9fafb]"
+                className="w-8 h-8 flex items-center justify-center bg-transparent border border-[var(--life-neutral-100)] rounded-lg text-[var(--life-neutral-600)] hover:bg-[var(--life-neutral-020)]"
                 title="Expand preview"
                 aria-label="Expand preview"
                 type="button"
@@ -2351,18 +2345,18 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
             <span>{'<'}</span>
             <span className="text-xs font-semibold">Theme</span>
           </button>
-          <span className="text-[#6b7280]">/</span>
-          <span className="text-xs font-bold text-[#111827]">Custom Theme</span>
+          <span className="text-[var(--life-neutral-600)]">/</span>
+          <span className="text-xs font-bold text-[var(--life-neutral-850)]">Custom Theme</span>
         </div>
 
         <div className="space-y-2">
           {CUSTOM_ACCORDION_DEFS.map((acc) => {
             const isOpen = activeCustomAccordion === acc.id;
             return (
-              <div key={acc.id} className="border border-[#e5e7eb] rounded-lg overflow-visible bg-white">
+              <div key={acc.id} className="border border-[var(--life-neutral-100)] rounded-lg overflow-visible bg-white">
                 <button
                   onClick={() => setActiveCustomAccordion(isOpen ? null : acc.id)}
-                  className="group w-full flex items-center justify-between gap-3 px-5 py-4 !h-[56px] text-left bg-white text-[#111827] hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] transition-colors"
+                  className="life-accordion-trigger !min-h-[56px] !px-5"
                 >
                   <span className="text-sm font-bold text-current">{acc.label}</span>
                   <svg className="shrink-0 ml-auto text-current" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -2370,7 +2364,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                   </svg>
                 </button>
                 {isOpen && acc.id === 'global' && (
-                  <div className="px-4 py-4 bg-white border-t border-[#e5e7eb]">
+                  <div className="px-4 py-4 bg-white border-t border-[var(--life-neutral-100)]">
                     <div className="grid grid-cols-2 gap-4">
                       <ColorPickerField label="Primary colour" value={customSettings.primaryColor} onChange={v => setCustomSettings({...customSettings, primaryColor: v})} />
                       <ColorPickerField label="Secondary colour" value={customSettings.secondaryColor} onChange={v => setCustomSettings({...customSettings, secondaryColor: v})} />
@@ -2388,8 +2382,8 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                       <ColorPickerField label="Link font colour" value={customSettings.linkFontColor} onChange={v => setCustomSettings({...customSettings, linkFontColor: v})} />
                     </div>
                     <div className="mt-4">
-                      <p className="text-xs font-bold text-[#111827] mb-2">Topic Title Size</p>
-                      <select value={customSettings.pageTitleSize} onChange={e => setCustomSettings({...customSettings, pageTitleSize: e.target.value})} className="text-xs w-full border-2 border-[var(--life-primary-500)] rounded px-2 py-1 text-[#111827] bg-white cursor-pointer focus:outline-none">
+                      <p className="text-xs font-bold text-[var(--life-neutral-850)] mb-2">Topic Title Size</p>
+                      <select value={customSettings.pageTitleSize} onChange={e => setCustomSettings({...customSettings, pageTitleSize: e.target.value})} className="life-field">
                         {PAGE_TITLE_OPTIONS.map(h => <option key={h} value={h}>{PAGE_TITLE_LABELS[h]}</option>)}
                       </select>
                       {customSettings.pageTitleSize !== 'H6' && PAGE_TITLE_SIZE_REM[customSettings.pageTitleSize] != null && <DesktopCalculatedValues baseRem={PAGE_TITLE_SIZE_REM[customSettings.pageTitleSize]} />}
@@ -2404,21 +2398,21 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
 
       {/* Right: live preview */}
       <div style={{ position: 'sticky', top: '32px' }}>
-        <p className="text-xs font-bold text-[#111827] mb-3">Live Preview</p>
+        <p className="text-xs font-bold text-[var(--life-neutral-850)] mb-3">Live Preview</p>
         <LivePreview />
-        <p className="text-xs text-[#6b7280] mt-2 text-center">Preview updates as you change settings</p>
+        <p className="text-xs text-[var(--life-neutral-600)] mt-2 text-center">Preview updates as you change settings</p>
       </div>
     </div>
   );
 
   return (
     // <div className="max-w-3xl w-full px-6 py-6">
-    <div className="flex flex-col h-full w-full bg-[#f7f9fb] font-[var(--font-family-primary)]">
+    <div className="flex flex-col h-full w-full bg-[var(--life-neutral-020)] font-[var(--font-family-primary)]">
       <SaveStatusToast toast={saveSuccess ? { type: "success", message: "Changes saved successfully" } : null} onDismiss={() => setSaveSuccess(false)} />
-      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-center gap-4">
+      <div className="shrink-0 px-6 py-5 bg-white border-b border-[var(--life-neutral-100)] flex items-center gap-4">
         <div>
           <h2 className="text-xl font-bold text-[var(--life-base-black)] m-0">Theme</h2>
-          <p className="text-sm text-[#6b7280] mt-0.5 mb-0">Choose and configure the visual theme for your course.</p>
+          <p className="text-sm text-[var(--life-neutral-600)] mt-0.5 mb-0">Choose and configure the visual theme for your course.</p>
         </div>
         <div className="ml-auto">
           <SaveChangesButton dirty={hasChanges} saving={saving} disabled={!courseId || !selected || selectedThemeSchemaFamily !== selected} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
@@ -2429,7 +2423,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       <div className="flex items-start justify-between mb-6">
         <div>
           <h2 className="text-base font-semibold text-[var(--life-base-black)]">
-            Select Theme <span className="text-red-500">*</span>
+            Select Theme <span className="text-[var(--life-critical-500)]">*</span>
           </h2>
           <p className="text-sm text-[var(--life-neutral-300)] mt-0.5"> Changing the theme options will replace any unsaved selections you've made in the form below; make sure there's nothing you want to keep! </p>
         </div>
@@ -2446,7 +2440,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
               className={`relative text-left rounded-xl border-2 p-5 transition-all cursor-pointer focus:outline-none ${
                 isSelected
                   ? "border-[var(--life-primary-500)] bg-[var(--life-primary-020)] shadow-md"
-                  : "border-[#e5e7eb] bg-white hover:border-[var(--life-primary-300)] hover:shadow-sm"
+                  : "border-[var(--life-neutral-100)] bg-white hover:border-[var(--life-primary-300)] hover:shadow-sm"
               }`}
             >
               {isSelected && (
@@ -2456,8 +2450,8 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                   </svg>
                 </div>
               )}
-              <p className="font-semibold text-[#111827] text-sm mb-1">{theme.name}</p>
-              <p className="text-xs text-[#6b7280] leading-snug mb-4">{theme.description}</p>
+              <p className="font-semibold text-[var(--life-neutral-850)] text-sm mb-1">{theme.name}</p>
+              <p className="text-xs text-[var(--life-neutral-600)] leading-snug mb-4">{theme.description}</p>
               <div className="flex gap-2">
                 {theme.swatches.map((color) => (
                   <span
@@ -2473,7 +2467,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       </div>
 
       {/* Separator */}
-      <div className="h-px bg-[#e5e7eb] my-5" />
+      <div className="h-px bg-[var(--life-neutral-100)] my-5" />
 
       {/* Preset Section */}
       <div className="flex items-center gap-3 flex-wrap mb-5">
@@ -2482,7 +2476,8 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           <select
             value={selectedPresetId}
             onChange={(e) => setSelectedPresetId(e.target.value)}
-            className="text-xs px-2.5 py-1.5 border border-[#d1d5db] rounded-md bg-white text-[#111827] cursor-pointer outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] focus:border-transparent"
+            aria-label="Theme preset"
+            className="life-field w-auto min-w-[160px]"
           >
             <option value="">No preset</option>
             {presets.map((p) => (
@@ -2497,14 +2492,15 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
               value={newPresetName}
               onChange={(e) => setNewPresetName(e.target.value)}
               placeholder="Preset name"
-              className="text-xs px-2.5 py-1.5 border border-[#d1d5db] rounded-md focus:ring-2 focus:ring-[var(--life-primary-500)] focus:border-transparent outline-none"
+              aria-label="Preset name"
+              className="life-field w-auto"
               onKeyDown={(e) => { if (e.key === 'Enter') handleSavePreset(); if (e.key === 'Escape') { setShowPresetNameInput(false); setNewPresetName(''); } }}
               autoFocus
             />
-            <button onClick={handleSavePreset} className="text-xs font-semibold px-3 py-1.5 bg-[var(--life-primary-500)] text-white rounded-md hover:bg-[var(--life-primary-700)] transition-colors">
+            <button type="button" onClick={handleSavePreset} className="life-btn life-btn--primary">
               OK
             </button>
-            <button onClick={() => { setShowPresetNameInput(false); setNewPresetName(''); }} className="text-xs px-3 py-1.5 border border-[#d1d5db] text-[#6b7280] rounded-md hover:bg-[#f9fafb] transition-colors">
+            <button type="button" onClick={() => { setShowPresetNameInput(false); setNewPresetName(''); }} className="life-btn life-btn--secondary">
               Cancel
             </button>
           </div>
@@ -2512,7 +2508,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           <button
             onClick={() => setShowPresetNameInput(true)}
             disabled={!selected}
-            className="text-xs font-semibold px-5 py-1.5 border border-[var(--life-primary-500)] text-[var(--life-primary-500)] rounded-md hover:bg-[var(--life-primary-020)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="life-btn life-btn--secondary"
           >
             Save preset
           </button>
@@ -2522,7 +2518,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
             type="button"
             onClick={() => setShowManagePresetsModal(true)}
             disabled={!selected}
-            className="text-xs font-semibold px-5 py-1.5 border border-[#d1d5db] text-[#374151] rounded-md hover:bg-[#f9fafb] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="life-btn life-btn--secondary"
           >
             Manage presets
           </button>
@@ -2543,12 +2539,12 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
         />
       )}
 
-      <p className="text-xs text-[#6b7280] mb-5 leading-relaxed">
-        <strong className="text-[#111827]">Tip:</strong> You can save your selections as a 'preset' for quick access later.
+      <p className="text-xs text-[var(--life-neutral-600)] mb-5 leading-relaxed">
+        <strong className="text-[var(--life-neutral-850)]">Tip:</strong> You can save your selections as a 'preset' for quick access later.
       </p>
 
       {/* Separator */}
-      <div className="h-px bg-[#e5e7eb] mb-4" />
+      <div className="h-px bg-[var(--life-neutral-100)] mb-4" />
 
       {/* Configuration Accordions - shown based on selected theme */}
       <div className="space-y-2">
@@ -2650,7 +2646,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
             }}
           >
             <div className="space-y-5">
-              <p className="text-xs text-[#6b7280] leading-relaxed" >
+              <p className="text-xs text-[var(--life-neutral-600)] leading-relaxed" >
                 Content Groups - Adjust the spacing above and below the content group: Double, Standard, Half, or Remove.
               </p>
               <div>
@@ -2661,7 +2657,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                 <select
                   value={lifeBlocksConfig._paddingTop}
                   onChange={(e) => setLifeBlocksConfig((prev) => ({ ...prev, _paddingTop: e.target.value }))}
-                  className="text-xs px-2.5 py-1.5 border border-[#d1d5db] rounded-md bg-white text-[#111827] cursor-pointer outline-none focus:border-[var(--life-primary-500)]"
+                  className="life-field w-auto"
                   style={{ minWidth: "110px" }}
                 >
                   <option value="double">Double</option>
@@ -2678,7 +2674,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                 <select
                   value={lifeBlocksConfig._paddingBottom}
                   onChange={(e) => setLifeBlocksConfig((prev) => ({ ...prev, _paddingBottom: e.target.value }))}
-                  className="text-xs px-2.5 py-1.5 border border-[#d1d5db] rounded-md bg-white text-[#111827] cursor-pointer outline-none focus:border-[var(--life-primary-500)]"
+                  className="life-field w-auto"
                   style={{ minWidth: "110px" }}
                 >
                   <option value="double">Double</option>
@@ -2701,7 +2697,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
             }}
           >
             <div className="space-y-5">
-              <p className="text-xs text-[#6b7280] leading-relaxed">
+              <p className="text-xs text-[var(--life-neutral-600)] leading-relaxed">
                 {getSchemaText(selectedThemeComponentSchema, 'help') ?? 'Component-level behavior and feedback configuration.'}
               </p>
               <div className="flex items-center gap-3 cursor-pointer" onClick={() => setCheckNotFinal(!checkNotFinal)}>
@@ -2826,7 +2822,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           onToggle={() => setActiveAccordion(activeAccordion === "On Screen Classes" ? null : "On Screen Classes")}
         >
           <div className="space-y-5">
-            <p className="text-xs text-[#6b7280] leading-relaxed">
+            <p className="text-xs text-[var(--life-neutral-600)] leading-relaxed">
               These settings allow you to attach classes when content is within the browser viewport.
               Supported classes include fade-in, fade-in-left, fade-in-right, fade-in-top, and fade-in-bottom.
               {" "}A configured local class uses that item's settings; an empty local class uses the course defaults.
@@ -2840,18 +2836,9 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                 aria-checked={onScreenConfig._isEnabled}
                 aria-label="Enable On Screen Classes"
                 onClick={() => setOnScreenConfig((prev) => ({ ...prev, _isEnabled: !prev._isEnabled }))}
-                className="relative w-10 h-5.5 rounded-full border-none cursor-pointer flex-shrink-0 transition-colors"
-                style={{ backgroundColor: onScreenConfig._isEnabled ? "var(--life-primary-500)" : "#d1d5db" }}
-              >
-                <span
-                  className="absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-all"
-                  style={{
-                    boxShadow: "0 1px 3px rgba(0, 0, 0, 0.25)",
-                    transform: onScreenConfig._isEnabled ? "translateX(18px)" : "translateX(0)",
-                  }}
-                />
-              </button>
-              <span className="text-xs text-[#111827] font-semibold">Enable On Screen Classes</span>
+                className="life-switch"
+              />
+              <span className="text-xs text-[var(--life-neutral-850)] font-semibold">Enable On Screen Classes</span>
             </div>
 
             {onScreenConfig._isEnabled && (
@@ -2859,16 +2846,16 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                 {ON_SCREEN_ROW_DEFS.map((row) => {
                   const rowConfig = onScreenConfig._levels[row.key];
                   return (
-                    <div key={row.key} className="bg-[#f9fafb] border border-[#e5e7eb] rounded-lg p-4 space-y-3">
-                      <span className="text-xs font-bold text-[#111827]">{row.label}</span>
+                    <div key={row.key} className="bg-[var(--life-neutral-020)] border border-[var(--life-neutral-100)] rounded-lg p-4 space-y-3">
+                      <span className="text-xs font-bold text-[var(--life-neutral-850)]">{row.label}</span>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
-                          <p className="text-xs font-semibold text-[#6b7280] mb-2">Classes</p>
+                          <p className="text-xs font-semibold text-[var(--life-neutral-600)] mb-2">Classes</p>
                           <select
                             value={rowConfig._classes}
                             onChange={(e) => updateOnScreenRow(row.key, { _classes: e.target.value })}
-                            className="text-xs w-full border border-[#d1d5db] rounded-md px-2.5 py-1.5 text-[#111827] bg-white focus:border-[var(--life-primary-500)] outline-none"
+                            className="life-field"
                           >
                             <option value="">Select a class</option>
                             {ON_SCREEN_CLASS_OPTIONS.filter((option) => option !== '').map((option) => (
@@ -2878,7 +2865,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                         </div>
 
                         <div>
-                          <p className="text-xs font-semibold text-[#6b7280] mb-2">Percent in view</p>
+                          <p className="text-xs font-semibold text-[var(--life-neutral-600)] mb-2">Percent in view</p>
                           <input
                             type="number"
                             min={0}
@@ -2891,7 +2878,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                                 : DEFAULT_ON_SCREEN_CONFIG._levels[row.key]._percentInviewVertical;
                               updateOnScreenRow(row.key, { _percentInviewVertical: safeValue });
                             }}
-                            className="text-xs w-full border border-[#d1d5db] rounded-md px-2.5 py-1.5 text-[#111827] bg-white focus:border-[var(--life-primary-500)] outline-none"
+                            className="life-field"
                           />
                         </div>
                       </div>
@@ -2907,8 +2894,8 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
 
       {/* Vanilla Theme Settings - only shown when Vanilla is selected */}
       {selected === "vanilla" && (
-        <div className="border border-[#e5e7eb] rounded-xl p-6 bg-white mt-2">
-          <h3 className="text-sm font-bold text-[#111827] mb-4">Vanilla Theme Settings</h3>
+        <div className="border border-[var(--life-neutral-100)] rounded-xl p-6 bg-white mt-2">
+          <h3 className="text-sm font-bold text-[var(--life-neutral-850)] mb-4">Vanilla Theme Settings</h3>
           <div className="space-y-2">
             {VANILLA_ACCORDION_DEFS.map((acc) => {
               const isOpen = activeVanillaAccordion === acc.id;
@@ -2916,10 +2903,10 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
               const sectionLabel = getSchemaText(sectionSchema, 'title') ?? acc.label;
               const sectionHint = getSchemaText(sectionSchema, 'help');
               return (
-                <div key={acc.id} className="border border-[#e5e7eb] rounded-lg overflow-visible bg-white">
+                <div key={acc.id} className="border border-[var(--life-neutral-100)] rounded-lg overflow-visible bg-white">
                   <button
                     onClick={() => setActiveVanillaAccordion(isOpen ? null : acc.id)}
-                    className="group w-full flex items-center justify-between gap-3 px-5 py-4 !h-[56px] text-left bg-white text-[#111827] hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] transition-colors"
+                    className="life-accordion-trigger !min-h-[56px] !px-5"
                   >
                     <span className="flex items-center gap-1.5 text-sm font-bold text-current">
                       {sectionLabel}
@@ -2938,7 +2925,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                     </svg>
                   </button>
                   {isOpen && (
-                    <div className="px-5 pb-5 pt-1 bg-white border-t border-[#f3f4f6]">
+                    <div className="px-5 pb-5 pt-1 bg-white border-t border-[var(--life-neutral-050)]">
                       <div className="flex flex-col gap-4">
                         {acc.fields.map((field) => {
                           const key = `${acc.id}::${field.key}`;
@@ -2952,7 +2939,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                               <InfoFieldLabel
                                 label={fieldLabel}
                                 hint={fieldHint}
-                                className="mb-2 text-[#111827]"
+                                className="mb-2 text-[var(--life-neutral-850)]"
                               />
                               <label
                                 style={{
@@ -3009,10 +2996,10 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                   const sectionHint = getSchemaText(getSchemaField(selectedThemeSchema, acc.id), 'help');
                   const sectionSchema = getSchemaField(selectedThemeSchema, acc.id);
                   return (
-                    <div key={acc.id} className="border border-[#e5e7eb] rounded-lg overflow-visible bg-white">
+                    <div key={acc.id} className="border border-[var(--life-neutral-100)] rounded-lg overflow-visible bg-white">
                       <button
                         onClick={() => setActiveCustomAccordion(isOpen ? null : acc.id)}
-                        className="group w-full flex items-center justify-between gap-3 px-5 py-4 !h-[56px] text-left bg-white text-[#111827] hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] transition-colors"
+                        className="life-accordion-trigger !min-h-[56px] !px-5"
                       >
                         <span className="flex items-center gap-1.5 text-sm font-bold text-curren">
                           {getSchemaText(sectionSchema, 'title') ?? acc.label}
@@ -3031,7 +3018,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                         </svg>
                       </button>
                       {isOpen && (
-                        <div className="px-5 pb-5 pt-1 bg-white border-t border-[#f3f4f6]">
+                        <div className="px-5 pb-5 pt-1 bg-white border-t border-[var(--life-neutral-050)]">
                           <div className="grid grid-cols-2 gap-x-4 gap-y-4">
                             {acc.fields.map((field) => {
                               const key = `${acc.id}::${field.key}`;
@@ -3051,7 +3038,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                                       aria-label={fieldLabel}
                                       value={value}
                                       onChange={(e) => setCustomSettingWithDependencies(key, e.target.value)}
-                                      className="text-xs w-full border border-[#d1d5db] rounded px-2 py-1 text-[#111827] bg-white cursor-pointer focus:border-[var(--life-primary-500)] outline-none"
+                                      className="life-field"
                                     >
                                       {(field.options ?? []).map((option) => (
                                         <option key={option.value} value={option.value}>{option.label}</option>
@@ -3198,12 +3185,12 @@ function ManagePresetsModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#e5e7eb]">
-          <h3 className="text-sm font-bold text-[#111827]">Manage presets</h3>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--life-neutral-100)]">
+          <h3 className="text-sm font-bold text-[var(--life-neutral-850)]">Manage presets</h3>
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-[#f3f4f6] text-[#6b7280] transition-colors"
+            className="p-1.5 rounded-lg hover:bg-[var(--life-neutral-050)] text-[var(--life-neutral-600)] transition-colors"
             aria-label="Close"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -3213,21 +3200,21 @@ function ManagePresetsModal({
         </div>
 
         {/* Description */}
-        <p className="text-xs text-[#6b7280] px-5 pt-4 pb-2 leading-relaxed">
+        <p className="text-xs text-[var(--life-neutral-600)] px-5 pt-4 pb-2 leading-relaxed">
           You can view, rename and delete the saved presets for the chosen theme here.
         </p>
 
         {errorMsg && (
-          <p className="text-xs text-[#ef4444] px-5 pb-2">{errorMsg}</p>
+          <p className="text-xs text-[var(--life-critical-500)] px-5 pb-2">{errorMsg}</p>
         )}
 
         {/* Preset list */}
         <div className="px-5 pb-5 space-y-2 max-h-80 overflow-y-auto">
           {presets.length === 0 && (
-            <p className="text-xs text-[#6b7280] italic py-3">No presets available.</p>
+            <p className="text-xs text-[var(--life-neutral-600)] italic py-3">No presets available.</p>
           )}
           {presets.map((preset) => (
-            <div key={preset._id} className="border border-[#e5e7eb] rounded-lg px-3 py-2.5 bg-[#fafafa] space-y-2">
+            <div key={preset._id} className="border border-[var(--life-neutral-100)] rounded-lg px-3 py-2.5 bg-[var(--life-neutral-020)] space-y-2">
               {editingId === preset._id ? (
                 /* Edit mode */
                 <div className="space-y-1.5">
@@ -3237,21 +3224,21 @@ function ManagePresetsModal({
                     onChange={(e) => { setEditingName(e.target.value); setEditError(null); }}
                     onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(preset); if (e.key === 'Escape') cancelEdit(); }}
                     autoFocus
-                    className="text-xs w-full border border-[#d1d5db] rounded-md px-2.5 py-1.5 text-[#111827] focus:ring-2 focus:ring-[var(--life-primary-500)] focus:border-transparent outline-none"
+                    className="life-field"
                   />
-                  {editError && <p className="text-xs text-[#ef4444]">{editError}</p>}
+                  {editError && <p className="text-xs text-[var(--life-critical-500)]">{editError}</p>}
                   <div className="flex gap-1.5">
                     <button
                       type="button"
                       onClick={() => saveEdit(preset)}
-                      className="text-xs font-semibold px-3 py-1.5 bg-[var(--life-primary-500)] text-white rounded-md hover:bg-[var(--life-primary-700)] transition-colors"
+                      className="life-btn life-btn--primary"
                     >
                       Save
                     </button>
                     <button
                       type="button"
                       onClick={cancelEdit}
-                      className="text-xs px-3 py-1.5 border border-[#d1d5db] text-[#6b7280] rounded-md hover:bg-[#f9fafb] transition-colors"
+                      className="text-xs px-3 py-1.5 border border-[var(--life-neutral-200)] text-[var(--life-neutral-600)] rounded-md hover:bg-[var(--life-neutral-020)] transition-colors"
                     >
                       Cancel
                     </button>
@@ -3260,13 +3247,13 @@ function ManagePresetsModal({
               ) : (
                 /* Normal row */
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-[#111827] truncate flex-1">{preset.displayName}</span>
+                  <span className="text-xs text-[var(--life-neutral-850)] truncate flex-1">{preset.displayName}</span>
                   <div className="flex gap-1 shrink-0">
                     <button
                       type="button"
                       onClick={() => startEdit(preset)}
                       title="Rename preset"
-                      className="p-1.5 rounded-md border border-[#e5e7eb] text-[#6b7280] hover:bg-[#f3f4f6] hover:text-[var(--life-primary-500)] transition-colors"
+                      className="p-1.5 rounded-md border border-[var(--life-neutral-100)] text-[var(--life-neutral-600)] hover:bg-[var(--life-neutral-050)] hover:text-[var(--life-primary-500)] transition-colors"
                     >
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
@@ -3277,7 +3264,7 @@ function ManagePresetsModal({
                       onClick={() => { setConfirmDeleteTarget(preset); cancelEdit(); }}
                       title="Delete preset"
                       disabled={deletingId === preset._id}
-                      className="p-1.5 rounded-md border border-[#e5e7eb] text-[#6b7280] hover:bg-[#fef2f2] hover:text-[#ef4444] hover:border-[#ef4444] transition-colors"
+                      className="life-btn life-btn--secondary !text-[var(--life-critical-600)] !border-[var(--life-critical-500)] hover:!bg-[var(--life-critical-050)]"
                     >
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
@@ -3291,11 +3278,11 @@ function ManagePresetsModal({
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-4 border-t border-[#e5e7eb] flex justify-end">
+        <div className="px-5 py-4 border-t border-[var(--life-neutral-100)] flex justify-end">
           <button
             type="button"
             onClick={onClose}
-            className="text-xs font-semibold px-4 py-2 bg-[var(--life-primary-500)] text-white rounded-lg hover:bg-[var(--life-primary-700)] transition-colors"
+            className="life-btn life-btn--primary"
           >
             Done
           </button>
@@ -3330,10 +3317,12 @@ function ThemeAccordion({
   hint?: string;
 }) {
   return (
-    <div className="border border-[#e5e7eb] rounded-lg overflow-visible bg-white">
+    <div className="border border-[var(--life-neutral-100)] rounded-lg overflow-visible bg-white">
       <button
+        type="button"
         onClick={onToggle}
-        className="group w-full flex items-center justify-between gap-3 px-5 py-4 !h-[56px] text-left bg-white text-[#111827] hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] transition-colors"
+        aria-expanded={isOpen}
+        className="life-accordion-trigger !min-h-[56px] !px-5"
       >
         <span className="flex items-center gap-1.5 text-sm font-bold text-current">
           {label}
@@ -3352,7 +3341,7 @@ function ThemeAccordion({
         </svg>
       </button>
       {isOpen && (
-        <div className="px-5 pb-5 pt-1 bg-white border-t border-[#f3f4f6]">
+        <div className="px-5 pb-5 pt-1 bg-white border-t border-[var(--life-neutral-050)]">
           {children}
         </div>
       )}

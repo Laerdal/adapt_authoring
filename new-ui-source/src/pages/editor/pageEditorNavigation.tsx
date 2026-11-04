@@ -207,20 +207,20 @@ export default function PageEditorNavigation({
                 onResetLeftPanelWidth();
               }
             }}
-            className={`group hidden md:flex absolute inset-y-0 -right-1 z-30 w-2 cursor-col-resize touch-none items-center justify-center outline-none ${isResizingLeftPanel ? "bg-[#2e7fa1]/10" : ""}`}
+            className={`group hidden md:flex absolute inset-y-0 -right-1 z-30 w-2 cursor-col-resize touch-none items-center justify-center outline-none ${isResizingLeftPanel ? "bg-[var(--life-primary-500)]/10" : ""}`}
           >
-            <span className={`h-12 w-1 rounded-full transition-colors ${isResizingLeftPanel ? "bg-[#2e7fa1]" : "bg-[#94a3b8] group-hover:bg-[#2e7fa1] group-focus-visible:bg-[#2e7fa1]"}`} />
+            <span className={`h-12 w-1 rounded-full transition-colors ${isResizingLeftPanel ? "bg-[var(--life-primary-500)]" : "bg-[#94a3b8] group-hover:bg-[var(--life-primary-500)] group-focus-visible:bg-[var(--life-primary-500)]"}`} />
           </div>
         </div>
       )}
 
       {!leftPanelOpen && (
-        <aside className="hidden md:flex h-full w-[56px] bg-white border-r border-[#d8dee6] shrink-0 flex-col items-center py-3">
-          <div className="w-full flex flex-col items-center pb-3 border-b border-[#d8dee6]">
+        <aside className="hidden md:flex h-full w-[56px] bg-white border-r border-[var(--life-neutral-200)] shrink-0 flex-col items-center py-3">
+          <div className="w-full flex flex-col items-center pb-3 border-b border-[var(--life-neutral-200)]">
             <button
               type="button"
               onClick={onOpenPanels}
-              className="w-8 h-8 rounded-[6px] flex items-center justify-center text-[#5f6d79] hover:bg-[#f1f5f9] transition-colors"
+              className="life-icon-btn life-icon-btn--sm"
               aria-label="Expand structure"
               title="Expand structure"
             >

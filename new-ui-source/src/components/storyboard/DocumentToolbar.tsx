@@ -31,7 +31,7 @@ export default function DocumentToolbar({
           <button
             type="button"
             onClick={onEnrichAI}
-            className="sb-toolbar-btn sb-toolbar-btn-samaritan"
+            className="life-btn life-btn--secondary sb-toolbar-btn-samaritan"
           >
             <SamaritanIcon className="h-3.5 w-3.5" /> Ask Samaritan
           </button>

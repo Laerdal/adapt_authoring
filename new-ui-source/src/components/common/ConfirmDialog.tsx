@@ -49,16 +49,16 @@ export default function ConfirmDialog({
 
   const variantStyles = {
     danger: {
-      iconBg: "bg-[#fee2e2]",
-      iconColor: "bg-[#dc2626]",
+      iconBg: "bg-[var(--life-critical-100)]",
+      iconColor: "bg-[var(--life-critical-600)]",
       iconFile: "delete-icon.svg",
-      confirmClassName: "bg-[#dc2626] hover:bg-[#b91c1c]",
+      confirmClassName: "life-btn--danger",
     },
     success: {
       iconBg: "bg-[#ecfdf5]",
       iconColor: "bg-[#16a34a]",
       iconFile: null,
-      confirmClassName: "bg-[#16a34a] hover:bg-[#15803d]",
+      confirmClassName: "life-btn--primary",
     },
   }[variant];
 
@@ -80,29 +80,29 @@ export default function ConfirmDialog({
               </svg>
             )}
           </div>
-          <h2 className="font-semibold text-[#111827] text-base mb-3">{title}</h2>
-          <div className="text-sm text-[#6b7280] space-y-5">
+          <h2 className="font-semibold text-[var(--life-neutral-850)] text-base mb-3">{title}</h2>
+          <div className="text-sm text-[var(--life-neutral-600)] space-y-5">
             <p>{message}</p>
             {note && (
               <p>
-                <span className="font-semibold text-[#6b7280]">IMPORTANT:</span> {note}
+                <span className="font-semibold text-[var(--life-neutral-600)]">IMPORTANT:</span> {note}
               </p>
             )}
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[#e5e7eb]">
+        <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[var(--life-neutral-100)]">
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors"
+            className="life-btn life-btn--secondary"
           >
             {cancelLabel}
           </button>
           <button
             type="button"
             onClick={onConfirm}
-            className={`px-5 py-2 text-sm font-semibold text-white ${variantStyles.confirmClassName} rounded-lg transition-colors`}
+            className={`life-btn ${variantStyles.confirmClassName}`}
           >
             {confirmLabel}
           </button>

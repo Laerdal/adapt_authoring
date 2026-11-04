@@ -318,9 +318,9 @@ function ActionButton({
   icon?: ReactNode;
 }) {
   const variantClass = {
-    primary: "border-[var(--life-primary-500)] bg-[var(--life-primary-500)] text-white hover:bg-[var(--life-primary-700)]",
-    secondary: "border-[var(--life-color-border-subtle)] bg-[var(--life-color-bg-surface-default)] text-[var(--life-neutral-700)] hover:bg-[var(--life-color-bg-surface-subtle)]",
-    danger: "border-[var(--life-critical-100)] bg-[var(--life-color-bg-surface-default)] text-[var(--life-critical-600)] hover:bg-[var(--life-critical-050)]",
+    primary: "life-btn--primary",
+    secondary: "life-btn--secondary",
+    danger: "life-btn--secondary !text-[var(--life-critical-600)] !border-[var(--life-critical-500)] hover:!bg-[var(--life-critical-050)]",
   }[variant];
 
   return (
@@ -329,10 +329,7 @@ function ActionButton({
       onClick={onClick}
       disabled={disabled || busy}
       title={title}
-      className={clsx(
-        "inline-flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50",
-        variantClass,
-      )}
+      className={clsx("life-btn", variantClass)}
     >
       {icon}
       {busy ? busyLabel || label : label}
@@ -1152,7 +1149,7 @@ export function TranslationPage({ courseId, courseTitle }: { courseId?: string; 
                         <select
                           value={previewLanguage}
                           onChange={(event) => setPreviewLanguage(event.target.value)}
-                          className="h-14 w-full min-w-[290px] rounded-xl border border-[var(--life-color-border-subtle)] bg-[var(--life-color-bg-surface-default)] px-4 text-base text-[var(--life-color-text-default)] outline-none transition focus:border-[var(--life-primary-500)] sm:w-[420px]"
+                          className="life-field"
                         >
                           {TRANSLATION_LOCALES.map((locale) => (
                             <option key={locale.locales} value={locale.locales}>
@@ -1201,22 +1198,22 @@ export function TranslationPage({ courseId, courseTitle }: { courseId?: string; 
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div className="flex flex-wrap items-center gap-6">
                       <label className="inline-flex items-center gap-3 text-[15px] text-[var(--life-color-text-default)]">
-                        <input type="checkbox" checked={showGlobalStrings} onChange={(event) => setShowGlobalStrings(event.target.checked)} className="h-5 w-5 rounded border-[var(--life-neutral-400)] text-[var(--life-primary-500)] focus:ring-[var(--life-primary-500)]" />
+                        <input type="checkbox" checked={showGlobalStrings} onChange={(event) => setShowGlobalStrings(event.target.checked)} className="life-check" />
                         Global Strings
                       </label>
                       <label className="inline-flex items-center gap-3 text-[15px] text-[var(--life-color-text-default)]">
-                        <input type="checkbox" checked={showCourseStrings} onChange={(event) => setShowCourseStrings(event.target.checked)} className="h-5 w-5 rounded border-[var(--life-neutral-400)] text-[var(--life-primary-500)] focus:ring-[var(--life-primary-500)]" />
+                        <input type="checkbox" checked={showCourseStrings} onChange={(event) => setShowCourseStrings(event.target.checked)} className="life-check" />
                         Course Strings
                       </label>
                     </div>
                     <div className="flex flex-wrap items-center gap-6 text-[15px] text-[var(--life-color-text-default)]">
                       <div className="font-semibold">Translation Memory</div>
                       <label className="inline-flex items-center gap-2">
-                        <input type="radio" name="translation-memory-filter" checked={!missingOnly} onChange={() => setMissingOnly(false)} className="h-5 w-5 border-[var(--life-neutral-400)] text-[var(--life-primary-500)] focus:ring-[var(--life-primary-500)]" />
+                        <input type="radio" name="translation-memory-filter" checked={!missingOnly} onChange={() => setMissingOnly(false)} className="life-radio" />
                         Show All
                       </label>
                       <label className="inline-flex items-center gap-2">
-                        <input type="radio" name="translation-memory-filter" checked={missingOnly} onChange={() => setMissingOnly(true)} className="h-5 w-5 border-[var(--life-neutral-400)] text-[var(--life-primary-500)] focus:ring-[var(--life-primary-500)]" />
+                        <input type="radio" name="translation-memory-filter" checked={missingOnly} onChange={() => setMissingOnly(true)} className="life-radio" />
                         Missing Translation
                       </label>
                     </div>
@@ -1226,22 +1223,22 @@ export function TranslationPage({ courseId, courseTitle }: { courseId?: string; 
                 {previewError ? <Notice tone="error" title="Preview failed">{previewError}</Notice> : null}
                 {!previewError && !hasPreview ? <Notice tone="info" title="Preview not loaded">Load strings to see the content available for translation.</Notice> : null}
 
-                <section className="overflow-hidden rounded-[16px] border border-[var(--life-color-border-subtle)] bg-[var(--life-color-bg-surface-default)] shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full border-collapse text-left text-[15px]">
-                      <thead className="bg-[var(--life-color-bg-surface-default)] text-xs uppercase tracking-normal text-[var(--life-color-text-subtle)]">
+                <section className="life-table-wrap">
+                  <div className="overflow-x-auto life-scroll">
+                    <table className="life-table min-w-full">
+                      <thead>
                         <tr>
-                          <th className="border-b border-r border-[var(--life-color-border-subtle)] px-4 py-4 font-medium">Type</th>
-                          <th className="border-b border-r border-[var(--life-color-border-subtle)] px-4 py-4 font-medium">Section</th>
-                          <th className="border-b border-r border-[var(--life-color-border-subtle)] px-4 py-4 font-medium">Route</th>
-                          <th className="border-b border-r border-[var(--life-color-border-subtle)] px-4 py-4 font-medium">Original</th>
-                          <th className="border-b border-[var(--life-color-border-subtle)] px-4 py-4 font-medium">Translated Strings</th>
+                          <th scope="col">Type</th>
+                          <th scope="col">Section</th>
+                          <th scope="col">Route</th>
+                          <th scope="col">Original</th>
+                          <th scope="col">Translated Strings</th>
                         </tr>
                       </thead>
                       <tbody className="bg-[var(--life-color-bg-surface-default)] text-[var(--life-color-text-default)]">
                         {previewPageRows.length === 0 ? (
                           <tr>
-                            <td colSpan={5} className="px-6 py-12 text-center text-sm text-[var(--life-neutral-400)]">
+                            <td colSpan={5} className="life-table-empty">
                               Load strings to preview the translation scope and memory coverage.
                             </td>
                           </tr>
@@ -1252,16 +1249,16 @@ export function TranslationPage({ courseId, courseTitle }: { courseId?: string; 
                             const sectionLabel = entry.section || inferSection(entry);
                             return (
                               <tr key={`${entry.path || entry.value || index}`} className="align-top">
-                                <td className="border-b border-r border-[var(--life-color-border-subtle)] px-4 py-5">
+                                <td>
                                   <span className={clsx("inline-flex rounded-full px-3 py-1 text-[12px] font-semibold", isGlobal ? "bg-[var(--life-primary-100)] text-[var(--life-primary-700)]" : "bg-[var(--life-color-bg-surface-hover)] text-[var(--life-neutral-700)]")}>{isGlobal ? "Global" : "Course"}</span>
                                 </td>
-                                <td className="border-b border-r border-[var(--life-color-border-subtle)] px-4 py-5">
+                                <td>
                                   <div className="font-medium text-[var(--life-color-text-default)]">{sectionLabel}</div>
                                   {!isGlobal ? <button type="button" className="mt-2 text-[14px] text-[var(--life-primary-500)] underline">Edit Course</button> : null}
                                 </td>
-                                <td className="border-b border-r border-[var(--life-color-border-subtle)] px-4 py-5 text-[var(--life-color-text-default)]">{String(entry.path || "")}</td>
-                                <td className="border-b border-r border-[var(--life-color-border-subtle)] px-4 py-5 text-[var(--life-color-text-default)]">{String(entry.value || "")}</td>
-                                <td className="border-b border-[var(--life-color-border-subtle)] px-4 py-5 italic text-[var(--life-color-text-subtle)]">{memoryTranslation || "No previous translation"}</td>
+                                <td className="text-[var(--life-color-text-default)]">{String(entry.path || "")}</td>
+                                <td className="text-[var(--life-color-text-default)]">{String(entry.value || "")}</td>
+                                <td className="italic text-[var(--life-color-text-subtle)]">{memoryTranslation || "No previous translation"}</td>
                               </tr>
                             );
                           })
@@ -1269,7 +1266,7 @@ export function TranslationPage({ courseId, courseTitle }: { courseId?: string; 
                       </tbody>
                     </table>
                   </div>
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--life-color-border-subtle)] px-4 py-4 text-[14px] text-[var(--life-color-text-subtle)] sm:px-5">
+                  <div className="life-table-footer">
                     <span>Page {previewPage} of {previewTotalPages}</span>
                     <div className="flex items-center gap-2">
                       <ActionButton onClick={() => setPreviewPage((page) => Math.max(1, page - 1))} disabled={previewPage <= 1} variant="secondary" label="Previous" />
@@ -1328,11 +1325,11 @@ export function TranslationPage({ courseId, courseTitle }: { courseId?: string; 
                       <p className="mt-4 max-w-4xl text-[16px] leading-7 text-[var(--life-color-text-subtle)]">This workflow enables a hassle-free translation process by automatically exporting translation strings to the selected vendor and allowing you to import translated strings back into Adapt to create localized translation courses.</p>
                       <div className="mt-8 space-y-5">
                         <label className="flex items-center gap-4 text-[16px] font-medium text-[var(--life-color-text-default)]">
-                          <input type="radio" name="partner-choice" checked={selectedPartner === "smartling"} onChange={() => setSelectedPartner("smartling")} className="h-6 w-6 border-[var(--life-neutral-400)] text-[var(--life-primary-500)] focus:ring-[var(--life-primary-500)]" />
+                          <input type="radio" name="partner-choice" checked={selectedPartner === "smartling"} onChange={() => setSelectedPartner("smartling")} className="life-radio" />
                           SmartLing Integration
                         </label>
                         <label className="flex items-center gap-4 text-[16px] font-medium text-[var(--life-color-text-default)]">
-                          <input type="radio" name="partner-choice" checked={selectedPartner === "medialocate"} onChange={() => setSelectedPartner("medialocate")} className="h-6 w-6 border-[var(--life-neutral-400)] text-[var(--life-primary-500)] focus:ring-[var(--life-primary-500)]" />
+                          <input type="radio" name="partner-choice" checked={selectedPartner === "medialocate"} onChange={() => setSelectedPartner("medialocate")} className="life-radio" />
                           MediaLocate Integration
                         </label>
                       </div>
@@ -1345,16 +1342,16 @@ export function TranslationPage({ courseId, courseTitle }: { courseId?: string; 
                             <h4 className="text-[20px] font-semibold tracking-normal text-[var(--life-color-text-default)]">Smartling Config</h4>
                             <div className="mt-8 space-y-5">
                               <SectionField label="Project ID">
-                                <input value={smartlingProjectId} onChange={(event) => setSmartlingProjectId(event.target.value)} placeholder="Smartling project id" className="h-14 w-full rounded-xl border border-[var(--life-color-border-subtle)] bg-[var(--life-color-bg-surface-default)] px-4 text-[16px] outline-none focus:border-[var(--life-primary-500)]" />
+                                <input value={smartlingProjectId} onChange={(event) => setSmartlingProjectId(event.target.value)} placeholder="Smartling project id" className="life-field" />
                               </SectionField>
                               <div className="grid gap-4 sm:grid-cols-2">
                                 <SectionField label="Target language">
-                                  <select value={smartlingLanguage} onChange={(event) => setSmartlingLanguage(event.target.value)} className="h-14 w-full rounded-xl border border-[var(--life-color-border-subtle)] bg-[var(--life-color-bg-surface-default)] px-4 text-[16px] outline-none focus:border-[var(--life-primary-500)]">
+                                  <select value={smartlingLanguage} onChange={(event) => setSmartlingLanguage(event.target.value)} className="life-field">
                                     {TRANSLATION_LOCALES.map((locale) => <option key={locale.locales} value={locale.locales}>{locale.description}</option>)}
                                   </select>
                                 </SectionField>
                                 <SectionField label="Download locale">
-                                  <select value={smartlingLocaleToDownload} onChange={(event) => setSmartlingLocaleToDownload(event.target.value)} className="h-14 w-full rounded-xl border border-[var(--life-color-border-subtle)] bg-[var(--life-color-bg-surface-default)] px-4 text-[16px] outline-none focus:border-[var(--life-primary-500)]">
+                                  <select value={smartlingLocaleToDownload} onChange={(event) => setSmartlingLocaleToDownload(event.target.value)} className="life-field">
                                     {TRANSLATION_LOCALES.map((locale) => <option key={locale.locales} value={locale.locales}>{locale.description}</option>)}
                                   </select>
                                 </SectionField>
@@ -1381,21 +1378,21 @@ export function TranslationPage({ courseId, courseTitle }: { courseId?: string; 
                             <h4 className="text-[20px] font-semibold tracking-normal text-[var(--life-color-text-default)]">MediaLocate Config</h4>
                             <div className="mt-8 space-y-5">
                               <SectionField label="Target language">
-                                <select value={mediaLocateLanguage} onChange={(event) => setMediaLocateLanguage(event.target.value)} className="h-14 w-full rounded-xl border border-[var(--life-color-border-subtle)] bg-[var(--life-color-bg-surface-default)] px-4 text-[16px] outline-none focus:border-[var(--life-primary-500)]">
+                                <select value={mediaLocateLanguage} onChange={(event) => setMediaLocateLanguage(event.target.value)} className="life-field">
                                   {TRANSLATION_LOCALES.map((locale) => <option key={locale.locales} value={locale.locales}>{locale.description}</option>)}
                                 </select>
                               </SectionField>
                               <SectionField label="Project Name">
-                                <input value={mediaLocateProjectName} onChange={(event) => setMediaLocateProjectName(event.target.value)} placeholder="Optional project name" className="h-14 w-full rounded-xl border border-[var(--life-color-border-subtle)] bg-[var(--life-color-bg-surface-default)] px-4 text-[16px] outline-none focus:border-[var(--life-primary-500)]" />
+                                <input value={mediaLocateProjectName} onChange={(event) => setMediaLocateProjectName(event.target.value)} placeholder="Optional project name" className="life-field" />
                               </SectionField>
                               <SectionField label="Project Description">
-                                <textarea value={mediaLocateDescription} onChange={(event) => setMediaLocateDescription(event.target.value)} rows={5} className="w-full rounded-xl border border-[var(--life-color-border-subtle)] bg-[var(--life-color-bg-surface-default)] px-4 py-3 text-[16px] outline-none focus:border-[var(--life-primary-500)]" />
+                                <textarea value={mediaLocateDescription} onChange={(event) => setMediaLocateDescription(event.target.value)} rows={5} className="life-field" />
                               </SectionField>
                               <SectionField label="Tracking code">
-                                <input value={mediaLocateTrackingCode} onChange={(event) => setMediaLocateTrackingCode(event.target.value)} placeholder="Tracking code" className="h-14 w-full rounded-xl border border-[var(--life-color-border-subtle)] bg-[var(--life-color-bg-surface-default)] px-4 text-[16px] outline-none focus:border-[var(--life-primary-500)]" />
+                                <input value={mediaLocateTrackingCode} onChange={(event) => setMediaLocateTrackingCode(event.target.value)} placeholder="Tracking code" className="life-field" />
                               </SectionField>
                               <SectionField label="Locale">
-                                <input value={mediaLocateLocale} onChange={(event) => setMediaLocateLocale(event.target.value)} placeholder="Locale" className="h-14 w-full rounded-xl border border-[var(--life-color-border-subtle)] bg-[var(--life-color-bg-surface-default)] px-4 text-[16px] outline-none focus:border-[var(--life-primary-500)]" />
+                                <input value={mediaLocateLocale} onChange={(event) => setMediaLocateLocale(event.target.value)} placeholder="Locale" className="life-field" />
                               </SectionField>
                               <div className="flex flex-wrap gap-3">
                                 <ActionButton onClick={() => void handleLoadMediaLocateDetails()} disabled={!courseId} busy={mediaLocateBusy} variant="secondary" label="Load details" busyLabel="Loading details..." />
@@ -1433,11 +1430,11 @@ export function TranslationPage({ courseId, courseTitle }: { courseId?: string; 
                         <h4 className="text-[20px] font-semibold tracking-normal text-[var(--life-color-text-default)]">Export Translation File</h4>
                         <div className="mt-5 space-y-4 text-[16px] text-[var(--life-color-text-default)]">
                           <label className="flex items-center gap-3">
-                            <input type="checkbox" checked={xliffIncludeExternalAssets} onChange={(event) => setXliffIncludeExternalAssets(event.target.checked)} className="h-5 w-5 rounded border-[var(--life-neutral-400)] text-[var(--life-primary-500)] focus:ring-[var(--life-primary-500)]" />
+                            <input type="checkbox" checked={xliffIncludeExternalAssets} onChange={(event) => setXliffIncludeExternalAssets(event.target.checked)} className="life-check" />
                             Include links to external assets
                           </label>
                           <label className="flex items-center gap-3">
-                            <input type="checkbox" checked={xliffIncludeEmptyTarget} onChange={(event) => setXliffIncludeEmptyTarget(event.target.checked)} className="h-5 w-5 rounded border-[var(--life-neutral-400)] text-[var(--life-primary-500)] focus:ring-[var(--life-primary-500)]" />
+                            <input type="checkbox" checked={xliffIncludeEmptyTarget} onChange={(event) => setXliffIncludeEmptyTarget(event.target.checked)} className="life-check" />
                             Include empty <code className="rounded bg-[var(--life-color-bg-surface-subtle)] px-1 py-0.5 text-sm">&lt;target&gt;</code> tag attributes
                           </label>
                           <ActionButton
@@ -1460,7 +1457,7 @@ export function TranslationPage({ courseId, courseTitle }: { courseId?: string; 
                         <h4 className="text-[20px] font-semibold tracking-normal text-[var(--life-color-text-default)]">Upload Translated File</h4>
                         <div className="mt-5 space-y-4">
                           <SectionField label="Translation Language">
-                            <select value={xliffUploadLanguage} onChange={(event) => setXliffUploadLanguage(event.target.value)} className="h-14 w-full rounded-xl border border-[var(--life-color-border-subtle)] bg-[var(--life-color-bg-surface-default)] px-4 text-[16px] outline-none focus:border-[var(--life-primary-500)]">
+                            <select value={xliffUploadLanguage} onChange={(event) => setXliffUploadLanguage(event.target.value)} className="life-field">
                               {TRANSLATION_LOCALES.map((locale) => <option key={locale.locales} value={locale.locales}>{locale.description}</option>)}
                             </select>
                           </SectionField>
@@ -1488,7 +1485,7 @@ export function TranslationPage({ courseId, courseTitle }: { courseId?: string; 
                             <input type="file" accept=".xliff,.xlf" className="hidden" onChange={(event) => setXliffFile(event.target.files?.[0] || null)} />
                           </label>
                           <label className="flex items-center gap-3 text-[16px] text-[var(--life-color-text-default)]">
-                            <input type="checkbox" checked={xliffSkipValidation} onChange={(event) => setXliffSkipValidation(event.target.checked)} className="h-5 w-5 rounded border-[var(--life-neutral-400)] text-[var(--life-primary-500)] focus:ring-[var(--life-primary-500)]" />
+                            <input type="checkbox" checked={xliffSkipValidation} onChange={(event) => setXliffSkipValidation(event.target.checked)} className="life-check" />
                             Skip validation for empty/missing strings?
                           </label>
                           <div className="flex flex-wrap gap-3">
@@ -1548,7 +1545,7 @@ export function TranslationPage({ courseId, courseTitle }: { courseId?: string; 
                       <div className="mt-5 space-y-5">
                         <div className="grid gap-4 sm:grid-cols-2">
                           <SectionField label="Target language">
-                            <select value={leatsLanguage} onChange={(event) => setLeatsLanguage(event.target.value)} className="h-14 w-full rounded-xl border border-[var(--life-color-border-subtle)] bg-[var(--life-color-bg-surface-default)] px-4 text-[16px] outline-none focus:border-[var(--life-primary-500)]">
+                            <select value={leatsLanguage} onChange={(event) => setLeatsLanguage(event.target.value)} className="life-field">
                               {(leatsConfig?.languages.length ? leatsConfig.languages : TRANSLATION_LOCALES.map((locale) => ({ locales: locale.locales, description: locale.description }))).map((locale) => <option key={locale.locales} value={locale.locales}>{locale.description}</option>)}
                             </select>
                           </SectionField>
@@ -1560,9 +1557,9 @@ export function TranslationPage({ courseId, courseTitle }: { courseId?: string; 
                         <label className="flex items-center gap-3 rounded-2xl border border-[var(--life-color-border-subtle)] bg-[var(--life-color-bg-surface-subtle)] px-4 py-4 text-[15px] text-[var(--life-neutral-700)]"><input type="checkbox" checked={leatsIncludeExternalAssets} onChange={(event) => setLeatsIncludeExternalAssets(event.target.checked)} /> Include external asset links</label>
                         <SectionField label={leatsEditingPrompt ? "Custom prompt" : "Prompt preview"} hint="Save or reset the prompt content before starting the translation run.">
                           {leatsEditingPrompt ? (
-                            <textarea value={leatsPromptDraft} onChange={(event) => setLeatsPromptDraft(event.target.value)} rows={14} className="w-full rounded-2xl border border-[var(--life-color-border-subtle)] bg-[var(--life-color-bg-surface-default)] px-4 py-3 text-[15px] leading-6 text-[var(--life-color-text-default)] outline-none focus:border-[var(--life-primary-700)]" />
+                            <textarea value={leatsPromptDraft} onChange={(event) => setLeatsPromptDraft(event.target.value)} rows={14} className="life-field" />
                           ) : (
-                            <textarea value={leatsPrompt || leatsPromptDraft} readOnly rows={14} className="w-full rounded-2xl border border-[var(--life-color-border-subtle)] bg-[var(--life-color-bg-surface-subtle)] px-4 py-3 text-[15px] leading-6 text-[var(--life-color-text-default)] outline-none" />
+                            <textarea value={leatsPrompt || leatsPromptDraft} readOnly rows={14} className="life-field" />
                           )}
                         </SectionField>
                         <p className="flex items-start gap-2 text-[13px] leading-5 text-[var(--life-color-text-subtle)]">

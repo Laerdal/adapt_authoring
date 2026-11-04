@@ -83,7 +83,7 @@ function Chevron({ open }: { open: boolean }) {
 }
 function Grip() {
   return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="text-[#9ca3af]">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="text-[var(--life-neutral-400)]">
       <circle cx="9" cy="6" r="1.5" /><circle cx="15" cy="6" r="1.5" /><circle cx="9" cy="12" r="1.5" /><circle cx="15" cy="12" r="1.5" /><circle cx="9" cy="18" r="1.5" /><circle cx="15" cy="18" r="1.5" />
     </svg>
   );
@@ -185,13 +185,13 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
 
     if (deleteId === p.id) {
       return (
-        <div className="px-2 py-2 rounded-lg bg-[#fef2f2] border border-[#fecaca] text-sm">
+        <div className="px-2 py-2 rounded-lg bg-[var(--life-critical-050)] border border-[var(--life-critical-100)] text-sm">
           <div className="flex items-center gap-2">
-            <span className="flex-1 text-[#991b1b] font-medium">
+            <span className="flex-1 text-[var(--life-critical-600)] font-medium">
               {deleteMessage}
             </span>
-            <button type="button" onClick={() => setDeleteId(null)} className="px-2 py-1 text-xs rounded text-[#6b7280] hover:bg-[#f3f4f6]">Cancel</button>
-            <button type="button" onClick={() => { setDeleteId(null); props.onRemove(p.level, p.id); }} className="px-2 py-1 text-xs rounded bg-[#dc2626] text-white hover:bg-[#b91c1c] font-medium">Delete</button>
+            <button type="button" onClick={() => setDeleteId(null)} className="life-btn life-btn--ghost life-btn--sm">Cancel</button>
+            <button type="button" onClick={() => { setDeleteId(null); props.onRemove(p.level, p.id); }} className="life-btn life-btn--danger">Delete</button>
           </div>
           {p.deleteWarning && (
             <p className="mt-1.5 flex items-center gap-1 text-xs text-[#b45309]">
@@ -207,7 +207,7 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
 
     return (
       <>
-        {isDropBefore && <div className="h-0.5 bg-[#2d6fa8] rounded mb-0.5" />}
+        {isDropBefore && <div className="h-0.5 bg-[var(--life-primary-500)] rounded mb-0.5" />}
         <div
           draggable={!editing}
           onDragStart={() => setDrag({ level: p.level, id: p.id })}
@@ -223,15 +223,15 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
             clearDrag();
           }}
           onDragEnd={clearDrag}
-          className={`group flex items-center gap-1.5 px-2 py-2 rounded-lg transition-colors ${isModule ? 'border-l-2 border-[#3d8f7c]' : ''} ${isDropInto ? 'ring-2 ring-[#2d6fa8] bg-[#f0f7ff]' : 'hover:bg-[#f9fafb]'}`}
+          className={`group flex items-center gap-1.5 px-2 py-2 rounded-lg transition-colors ${isModule ? 'border-l-[3px] border-[var(--life-accent1-500)] !rounded-l-none' : ''} ${isDropInto ? 'ring-2 ring-[var(--life-primary-500)] bg-[var(--life-primary-020)]' : 'hover:bg-[var(--life-neutral-020)]'}`}
           aria-label={`${labels[p.level]}: ${p.title}`}
         >
-          <button type="button" aria-label={`Drag ${p.title}`} className="shrink-0 cursor-grab active:cursor-grabbing p-0.5 rounded hover:bg-[#e5e7eb] opacity-0 group-hover:opacity-100 transition-opacity">
+          <button type="button" aria-label={`Drag ${p.title}`} className="shrink-0 cursor-grab active:cursor-grabbing p-0.5 rounded hover:bg-[var(--life-neutral-100)] opacity-0 group-hover:opacity-100 transition-opacity">
             <Grip />
           </button>
 
           {p.expandable ? (
-            <button type="button" onClick={() => toggle(p.id)} aria-label={isOpen(p.id) ? 'Collapse' : 'Expand'} className="p-0.5 rounded hover:bg-[#e5e7eb] text-[#6b7280] shrink-0">
+            <button type="button" onClick={() => toggle(p.id)} aria-label={isOpen(p.id) ? 'Collapse' : 'Expand'} className="p-0.5 rounded hover:bg-[var(--life-neutral-100)] text-[var(--life-neutral-600)] shrink-0">
               <Chevron open={isOpen(p.id)} />
             </button>
           ) : (
@@ -251,14 +251,14 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
                 onBlur={() => commitRename(p.level)}
                 onClick={(e) => e.stopPropagation()}
                 aria-label="Edit title"
-                className="flex-1 min-w-0 text-sm border border-[#2d6fa8] rounded px-1.5 py-0.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="flex-1 min-w-0 text-sm border border-[var(--life-primary-500)] rounded px-1.5 py-0.5 focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)]"
               />
             ) : (
               <button
                 type="button"
                 onClick={() => startRename(p.id, p.title)}
                 title="Click to rename"
-                className={`min-w-0 truncate text-left text-sm hover:text-[#2d6fa8] ${isModule ? 'font-bold uppercase tracking-wide text-[#374151]' : p.level === 'topic' ? 'font-semibold text-[#111827]' : 'text-[#374151]'}`}
+                className={`min-w-0 truncate text-left text-sm hover:text-[var(--life-primary-500)] ${isModule ? 'font-bold uppercase tracking-wide text-[var(--life-neutral-700)]' : p.level === 'topic' ? 'font-semibold text-[var(--life-neutral-850)]' : 'text-[var(--life-neutral-700)]'}`}
               >
                 {p.title}
               </button>
@@ -275,7 +275,7 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
           </div>
 
           <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-            <button type="button" aria-label={`Delete ${p.title}`} onClick={() => setDeleteId(p.id)} className="p-1 rounded hover:bg-[#fee2e2] text-[#9ca3af] hover:text-[#dc2626]">
+            <button type="button" aria-label={`Delete ${p.title}`} onClick={() => setDeleteId(p.id)} className="life-icon-btn life-icon-btn--sm life-icon-btn--critical">
               <Trash />
             </button>
           </div>
@@ -286,7 +286,7 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
 
   function AddLink({ label, onClick }: { label: string; onClick: () => void }) {
     return (
-      <button type="button" onClick={onClick} aria-label={label} className="flex items-center gap-1.5 text-xs  hover:text-[#2d6fa8] px-2 py-1 rounded hover:bg-[#f0f7ff] transition-colors">
+      <button type="button" onClick={onClick} aria-label={label} className="life-btn life-btn--text life-btn--sm">
         <Plus size={11} />
         {label}
       </button>
@@ -294,7 +294,7 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
   }
 
   // Tighter per-level indent so the hierarchy stays left-aligned (per Figma).
-  const indent = 'ml-3 border-l border-[#e5e7eb] pl-2 space-y-0.5';
+  const indent = 'ml-3 border-l-2 border-[var(--life-neutral-200)] pl-2 space-y-0.5';
 
   // ── Level renderers ─────────────────────────────────────────────────────────
   function renderComponents(components: SComponent[], blockId: string) {
@@ -382,11 +382,11 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div className="border border-[#e5e7eb] rounded-xl p-4 space-y-1">
+    <div className="border border-[var(--life-neutral-200)] rounded-xl p-4 space-y-1">
       {renderChildren(courseId, structure.modules, structure.topics, 'course')}
 
       {/* Course-level add actions */}
-      <div className="flex items-center justify-between pt-3 mt-2 border-t border-[#e5e7eb]">
+      <div className="flex items-center justify-between pt-3 mt-2 border-t border-[var(--life-neutral-200)]">
         <AddLink label={`Add ${labels.topic}`} onClick={() => props.onAddTopic(null)} />
         <AddLink label={`Add ${labels.module}`} onClick={() => props.onAddModule()} />
       </div>

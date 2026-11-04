@@ -129,26 +129,13 @@ function CommentThread({ top, replies, label, authorLabel, replyAuthorLabel, onR
             value={reply}
             onChange={(e) => setReply(e.target.value)}
             placeholder="Reply…"
-            className="flex-1 rounded px-2 py-1 outline-none"
-            style={{
-              fontSize: 13,
-              border: '1px solid var(--life-color-border-subtle)',
-              background: 'var(--life-color-bg-surface-default)',
-              color: 'var(--life-color-text-default)',
-            }}
+            aria-label="Reply"
+            className="life-field flex-1"
           />
           <button
             type="submit"
             disabled={!reply.trim()}
-            style={{
-              fontSize: 12,
-              fontWeight: 600,
-              color: 'var(--life-color-text-primary)',
-              opacity: reply.trim() ? 1 : 0.4,
-              background: 'none',
-              border: 'none',
-              cursor: reply.trim() ? 'pointer' : 'not-allowed',
-            }}
+            className="life-btn life-btn--text"
           >
             Reply
           </button>
@@ -253,31 +240,17 @@ export default function ReviewCenter({
         <SummaryRow label="Status" value={REVIEW_STATUS_LABEL[status as ReviewStatus] ?? status} />
       </div>
 
-      <div
-        className="flex items-center gap-4 px-4"
-        style={{
-          borderBottom: '1px solid var(--life-color-border-subtle)',
-          background: 'var(--life-color-bg-surface-default)',
-        }}
-      >
+      <div role="tablist" aria-label="Comments" className="life-tabs-line">
         {tabs.map((t) => {
           const active = tab === t.id;
           return (
             <button
               key={t.id}
               type="button"
+              role="tab"
+              aria-selected={active}
               onClick={() => setTab(t.id)}
-              className="-mb-px py-2"
-              style={{
-                fontSize: 13,
-                fontFamily: 'var(--font-family-primary)',
-                fontWeight: active ? 600 : 400,
-                borderBottom: `2px solid ${active ? 'var(--life-color-border-primary)' : 'transparent'}`,
-                color: active ? 'var(--life-color-text-default)' : 'var(--life-color-text-subtle)',
-                background: 'none',
-                cursor: 'pointer',
-                transition: 'color 0.12s ease, border-color 0.12s ease',
-              }}
+              className="life-tab-line"
             >
               {t.label}
             </button>
@@ -308,22 +281,15 @@ export default function ReviewCenter({
                 placeholder="Add a comment…"
                 rows={2}
                 disabled={!activeBlock}
-                className="w-full resize-y rounded px-2 py-1 outline-none"
-                style={{
-                  fontSize: 13,
-                  border: '1px solid var(--life-color-border-subtle)',
-                  background: 'var(--life-color-bg-surface-default)',
-                  color: 'var(--life-color-text-default)',
-                  opacity: activeBlock ? 1 : 0.5,
-                }}
+                aria-label="Add a comment"
+                className="life-field"
               />
               <div className="mt-1 flex justify-end">
                 <button
                   type="button"
                   onClick={addTopLevel}
                   disabled={!activeBlock || !draft.trim()}
-                  className="sb-toolbar-btn sb-toolbar-btn-primary"
-                  style={{ fontSize: 12, padding: '5px 12px' }}
+                  className="life-btn life-btn--primary"
                 >
                   Comment
                 </button>

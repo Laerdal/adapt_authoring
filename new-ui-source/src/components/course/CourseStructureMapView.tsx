@@ -124,14 +124,14 @@ export default function CourseStructureMapView(props: Props) {
                 onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commitRename(level as StructureLevel); } else if (e.key === "Escape") { e.preventDefault(); cancelRename(level as StructureLevel, id); } }}
                 onBlur={() => commitRename(level as StructureLevel)}
                 aria-label="Edit title"
-                className="w-full text-xs border border-[#2d6fa8] rounded px-1 py-0.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full text-xs border border-[var(--life-primary-500)] rounded px-1 py-0.5 focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)]"
               />
             ) : onOpen ? (
-              <button type="button" onClick={onOpen} title="Open in editor" className="w-full text-left text-xs font-semibold text-[#111827] truncate hover:text-[#2d6fa8] hover:underline">
+              <button type="button" onClick={onOpen} title="Open in editor" className="w-full text-left text-xs font-semibold text-[var(--life-neutral-850)] truncate hover:text-[var(--life-primary-500)] hover:underline">
                 {title}
               </button>
             ) : (
-              <p className="text-xs font-semibold text-[#111827] truncate">{title}</p>
+              <p className="text-xs font-semibold text-[var(--life-neutral-850)] truncate">{title}</p>
             )}
             <p className="text-[10px] uppercase tracking-wide text-[#4a7fa5] mt-0.5">{levelLabel}</p>
           </div>
@@ -140,7 +140,7 @@ export default function CourseStructureMapView(props: Props) {
               type="button"
               aria-label={`Rename ${title}`}
               onClick={(e) => { e.stopPropagation(); startRename(id, title); }}
-              className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-[#eef2f7] text-[#9ca3af] hover:text-[#2d6fa8]"
+              className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-[#eef2f7] text-[var(--life-neutral-400)] hover:text-[var(--life-primary-500)]"
             >
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
@@ -161,13 +161,13 @@ export default function CourseStructureMapView(props: Props) {
             title={label}
             aria-label={label}
             onClick={onClick}
-            className="w-10 h-10 rounded-full bg-white border-2 border-dashed border-[#cbd5e1] hover:border-[#2d6fa8] hover:bg-[#f0f7ff] text-[#9ca3af] hover:text-[#2d6fa8] flex items-center justify-center transition-colors"
+            className="w-10 h-10 rounded-full bg-white border-2 border-dashed border-[#cbd5e1] hover:border-[var(--life-primary-500)] hover:bg-[var(--life-primary-020)] text-[var(--life-neutral-400)] hover:text-[var(--life-primary-500)] flex items-center justify-center transition-colors"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
             </svg>
           </button>
-          <span className="text-[10px] text-[#9ca3af] whitespace-nowrap">{label}</span>
+          <span className="text-[10px] text-[var(--life-neutral-400)] whitespace-nowrap">{label}</span>
         </div>
       </li>
     );
@@ -269,7 +269,7 @@ export default function CourseStructureMapView(props: Props) {
         <button
           type="button"
           onClick={() => setFullscreen(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-[#374151] border border-[#e5e7eb] rounded-lg hover:bg-[#f9fafb] transition-colors"
+          className="life-btn life-btn--secondary"
         >
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" />
@@ -280,24 +280,24 @@ export default function CourseStructureMapView(props: Props) {
 
       <div className="mb-2">{mapNote}</div>
 
-      <div className="w-full bg-[#fbfbfc] border border-[#e5e7eb] rounded-xl overflow-auto max-h-[560px]">
+      <div className="w-full bg-[var(--life-neutral-020)] border border-[var(--life-neutral-200)] rounded-xl overflow-auto max-h-[560px]">
         {!fullscreen && treeBody}
       </div>
 
       {fullscreen && (
         <div className="fixed inset-0 z-40 bg-white flex flex-col">
-          <div className="h-14 shrink-0 border-b border-[#e5e7eb] flex items-center justify-between px-4">
+          <div className="h-14 shrink-0 border-b border-[var(--life-neutral-100)] flex items-center justify-between px-4">
             <div className="flex items-center gap-2">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2d6fa8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
               </svg>
-              <span className="text-sm font-semibold text-[#111827]">Course Map</span>
+              <span className="text-sm font-semibold text-[var(--life-neutral-850)]">Course Map</span>
             </div>
             <button
               type="button"
               onClick={() => setFullscreen(false)}
               aria-label="Close fullscreen"
-              className="p-1.5 rounded-lg text-[#6b7280] hover:bg-[#f3f4f6] transition-colors"
+              className="life-icon-btn"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />

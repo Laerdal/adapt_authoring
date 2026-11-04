@@ -5,8 +5,8 @@ export default function CourseOverview() {
     <div className="bg-white rounded-xl border border-[#d0d0dc] p-6">
       <div className="flex items-start justify-between mb-5">
         <div>
-          <h2 className="text-base font-semibold text-[#1a1a2e]">Course Overview</h2>
-          <p className="text-xs text-[#6b6b8a] mt-0.5">Dev Next Instance · Spring 2026</p>
+          <h2 className="text-base font-semibold text-[var(--life-neutral-850)]">Course Overview</h2>
+          <p className="text-xs text-[var(--life-neutral-600)] mt-0.5">Dev Next Instance · Spring 2026</p>
         </div>
         <span className="text-xs px-2.5 py-1 bg-[#e3f2fd] text-[#005ea6] rounded-full font-medium">Active</span>
       </div>
@@ -29,38 +29,38 @@ export default function CourseOverview() {
             />
           </svg>
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-lg font-bold text-[#1a1a2e]">{overallProgress}%</span>
+            <span className="text-lg font-bold text-[var(--life-neutral-850)]">{overallProgress}%</span>
           </div>
         </div>
         <div className="space-y-2">
-          <p className="text-sm font-semibold text-[#1a1a2e]">Overall completion</p>
-          <p className="text-xs text-[#6b6b8a]">248 enrolled learners</p>
-          <p className="text-xs text-[#6b6b8a]">3 of 5 modules published</p>
+          <p className="text-sm font-semibold text-[var(--life-neutral-850)]">Overall completion</p>
+          <p className="text-xs text-[var(--life-neutral-600)]">248 enrolled learners</p>
+          <p className="text-xs text-[var(--life-neutral-600)]">3 of 5 modules published</p>
         </div>
       </div>
 
       {/* Quick stats */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-lg bg-[#f4f4f8] px-4 py-3">
-          <p className="text-xs text-[#6b6b8a] mb-1">Avg. Score</p>
-          <p className="text-xl font-bold text-[#1a1a2e]">81<span className="text-sm font-normal text-[#6b6b8a]">%</span></p>
+        <div className="rounded-lg bg-[var(--life-neutral-050)] px-4 py-3">
+          <p className="text-xs text-[var(--life-neutral-600)] mb-1">Avg. Score</p>
+          <p className="text-xl font-bold text-[var(--life-neutral-850)]">81<span className="text-sm font-normal text-[var(--life-neutral-600)]">%</span></p>
         </div>
-        <div className="rounded-lg bg-[#f4f4f8] px-4 py-3">
-          <p className="text-xs text-[#6b6b8a] mb-1">Avg. Time</p>
-          <p className="text-xl font-bold text-[#1a1a2e]">52<span className="text-sm font-normal text-[#6b6b8a]"> min</span></p>
+        <div className="rounded-lg bg-[var(--life-neutral-050)] px-4 py-3">
+          <p className="text-xs text-[var(--life-neutral-600)] mb-1">Avg. Time</p>
+          <p className="text-xl font-bold text-[var(--life-neutral-850)]">52<span className="text-sm font-normal text-[var(--life-neutral-600)]"> min</span></p>
         </div>
-        <div className="rounded-lg bg-[#f4f4f8] px-4 py-3">
-          <p className="text-xs text-[#6b6b8a] mb-1">At Risk</p>
+        <div className="rounded-lg bg-[var(--life-neutral-050)] px-4 py-3">
+          <p className="text-xs text-[var(--life-neutral-600)] mb-1">At Risk</p>
           <p className="text-xl font-bold text-[#c62828]">14</p>
         </div>
-        <div className="rounded-lg bg-[#f4f4f8] px-4 py-3">
-          <p className="text-xs text-[#6b6b8a] mb-1">Certified</p>
+        <div className="rounded-lg bg-[var(--life-neutral-050)] px-4 py-3">
+          <p className="text-xs text-[var(--life-neutral-600)] mb-1">Certified</p>
           <p className="text-xl font-bold text-[#2e7d32]">112</p>
         </div>
       </div>
 
       {/* Action */}
-      <button className="mt-5 w-full py-2.5 rounded-lg bg-[#0072ce] text-white text-sm font-medium hover:bg-[#005ea6] transition-colors">
+      <button className="life-btn life-btn--primary mt-5 w-full">
         View full report
       </button>
     </div>

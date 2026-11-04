@@ -1,6 +1,7 @@
 @import url("https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap");
 @import url("https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.5.0/css/font-awesome.min.css");
 @import "tailwindcss";
+@import "./life-components.css";
 
 /* Match the legacy JIRA feedback trigger placement in the new UI shell. */
 a#atlwdg-trigger {
@@ -479,74 +480,50 @@ html, body {
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 9px 14px;
+  min-height: 40px;
+  padding: 0 14px;
   background: none;
   border: none;
   cursor: pointer;
   text-align: left;
   color: var(--life-color-text-default);
   font-family: var(--font-family-primary);
-  font-size: 13px;
+  font-size: var(--text-p);
   transition: background 0.12s ease;
 }
-.sb-menu-item:hover,
+.sb-menu-item:hover {
+  background: var(--life-neutral-050);
+}
+.sb-menu-item:active {
+  background: var(--life-neutral-100);
+}
 .sb-menu-item:focus-visible {
-  background: var(--life-color-bg-surface-hover);
-  outline: none;
+  background: var(--life-neutral-050);
+  outline: 2px solid var(--life-primary-400);
+  outline-offset: -2px;
 }
 .sb-menu-item[aria-selected="true"] {
-  background: var(--life-color-bg-surface-primary-subtle);
+  background: var(--life-primary-050);
+  color: var(--life-primary-700);
 }
 .sb-menu-item .sb-menu-item-icon {
   color: var(--life-color-text-subtle);
   flex-shrink: 0;
 }
 
-/* Storyboard toolbar button — the tertiary/ghost bordered buttons used
-   throughout the top bar and document toolbar. */
-.sb-toolbar-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border-radius: 6px;
-  border: 1px solid var(--life-color-border-subtle);
-  background: var(--life-color-bg-surface-default);
-  color: var(--life-color-text-default);
-  font-family: var(--font-family-primary);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
-}
-.sb-toolbar-btn:hover:not(:disabled) {
-  background: var(--life-color-bg-surface-hover);
-  border-color: var(--life-color-border-default);
-}
-.sb-toolbar-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.sb-toolbar-btn-primary {
-  border: none;
-  background: var(--life-color-bg-fill-primary);
-  color: var(--life-color-text-on-primary);
-  font-weight: 600;
-}
-.sb-toolbar-btn-primary:hover:not(:disabled) {
-  background: var(--life-color-bg-fill-primary-hover);
-}
-
+/* Samaritan (AI) button — accent modifier layered on .life-btn */
 .sb-toolbar-btn-samaritan {
   border-radius: 9999px;
   border-color: color-mix(in oklab, var(--samaritan) 30%, transparent);
   background: var(--life-color-bg-surface-samaritan-subtle);
   color: var(--samaritan);
-  font-weight: 600;
+  font-weight: var(--font-weight-medium);
 }
 .sb-toolbar-btn-samaritan:hover:not(:disabled) {
   background: color-mix(in oklab, var(--samaritan) 14%, transparent);
+}
+.sb-toolbar-btn-samaritan:active:not(:disabled) {
+  background: color-mix(in oklab, var(--samaritan) 22%, transparent);
 }
 
 /* Storyboard status pill — Draft / In Review / Approved. */
@@ -608,17 +585,25 @@ html, body {
 .sb-panel-collapse-btn {
   display: grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
-  color: var(--life-color-text-subtle);
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  color: var(--life-neutral-600);
   background: none;
   border: none;
   cursor: pointer;
-  transition: background 0.12s ease;
+  transition: background 0.12s ease, color 0.12s ease;
 }
 .sb-panel-collapse-btn:hover {
-  background: var(--life-color-bg-surface-hover);
+  background: var(--life-neutral-050);
+  color: var(--life-neutral-850);
+}
+.sb-panel-collapse-btn:active {
+  background: var(--life-neutral-100);
+}
+.sb-panel-collapse-btn:focus-visible {
+  outline: 2px solid var(--life-primary-400);
+  outline-offset: 2px;
 }
 
 .sb-storyboard-focus-target {
@@ -637,7 +622,7 @@ html, body {
 .sb-card {
   background: var(--life-color-bg-surface-default);
   border: 1px solid var(--life-color-border-subtle);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   padding: 12px;
 }
 .sb-card--samaritan {

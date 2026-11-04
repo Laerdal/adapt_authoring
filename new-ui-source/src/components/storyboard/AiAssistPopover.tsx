@@ -189,7 +189,7 @@ export default function AiAssistPopover({
                 type="button"
                 disabled={loading}
                 onClick={() => void run(a.action)}
-                className="sb-toolbar-btn"
+                className="life-btn life-btn--secondary"
                 style={{ borderRadius: 9999, fontSize: 13 }}
               >
                 {a.label}
@@ -242,7 +242,7 @@ export default function AiAssistPopover({
             <RefreshCw className="h-4 w-4" />
           </button>
           <div className="ml-auto flex items-center gap-2">
-            <button type="button" onClick={onClose} className="sb-toolbar-btn">
+            <button type="button" onClick={onClose} className="life-btn life-btn--secondary">
               Dismiss
             </button>
             <button
@@ -253,7 +253,7 @@ export default function AiAssistPopover({
               }}
               disabled={!canApply}
               title="Replace the current block's content"
-              className="sb-toolbar-btn"
+              className="life-btn life-btn--secondary"
             >
               Replace
             </button>
@@ -265,7 +265,7 @@ export default function AiAssistPopover({
               }}
               disabled={!canApply}
               title="Insert the generated content"
-              className="sb-toolbar-btn sb-toolbar-btn-primary"
+              className="life-btn life-btn--primary"
             >
               Insert
             </button>

@@ -79,26 +79,26 @@ export function AddModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
       <div className="bg-white rounded-2xl shadow-2xl w-[360px] p-6">
-        <h3 className="text-base font-semibold text-gray-900 mb-4">{title}</h3>
+        <h3 className="text-base font-semibold text-[var(--life-neutral-850)] mb-4">{title}</h3>
         <div className="space-y-3">
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Title</label>
+            <label className="block text-xs font-medium text-[var(--life-neutral-600)] mb-1">Title</label>
             <input
               autoFocus
               value={t}
               onChange={e => setT(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && t.trim() && onConfirm(t.trim(), d.trim())}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="life-field"
               placeholder="Enter title…"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Description <span className="text-gray-400">(optional)</span></label>
+            <label className="block text-xs font-medium text-[var(--life-neutral-600)] mb-1">Description <span className="text-[var(--life-neutral-400)]">(optional)</span></label>
             <textarea
               value={d}
               onChange={e => setD(e.target.value)}
               rows={2}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              className="life-field"
               placeholder="Enter description…"
             />
           </div>
@@ -107,7 +107,7 @@ export function AddModal({
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+            className="life-btn life-btn--secondary"
           >
             Cancel
           </button>
@@ -115,7 +115,7 @@ export function AddModal({
             type="button"
             disabled={!t.trim()}
             onClick={() => t.trim() && onConfirm(t.trim(), d.trim())}
-            className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="life-btn life-btn--primary"
           >
             {confirmLabel}
           </button>
@@ -134,9 +134,9 @@ function AddBtn({ label, onClick }: { label: string; onClick: () => void }) {
       title={label}
       aria-label={label}
       onClick={onClick}
-      className="w-full h-full flex items-center justify-center rounded-full bg-white border-2 border-dashed border-gray-300 hover:border-blue-400 hover:bg-blue-50 transition-colors"
+      className="w-full h-full flex items-center justify-center rounded-full bg-white border-2 border-dashed border-[var(--life-neutral-200)] hover:border-[var(--life-primary-300)] hover:bg-[var(--life-primary-050)] transition-colors"
     >
-      <svg className="w-4 h-4 text-gray-400 group-hover:text-blue-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+      <svg className="w-4 h-4 text-[var(--life-neutral-400)] group-hover:text-[var(--life-primary-500)]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
       </svg>
     </button>
@@ -470,7 +470,7 @@ export default function CourseStructureMap({
             {/* ── Course card (centred) ── */}
             <foreignObject x={courseCX - CW / 2} y={0} width={CW} height={CH}>
               <div className="w-full h-full group/card">
-                <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm h-full flex flex-col relative">
+                <div className="bg-white border border-[var(--life-neutral-100)] rounded-xl overflow-hidden shadow-sm h-full flex flex-col relative">
                   <div className="flex-1 bg-[#3d5f82] flex items-center justify-center">
                     <svg className="w-9 h-9 text-white/80" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
@@ -478,14 +478,14 @@ export default function CourseStructureMap({
                   </div>
                   <div className="px-3 py-2 shrink-0 flex items-start justify-between gap-1">
                     <div className="min-w-0">
-                      <p className="text-xs font-semibold text-gray-900 truncate">{state.courseTitle}</p>
-                      <p className="text-[10px] text-gray-400 mt-0.5">Course</p>
+                      <p className="text-xs font-semibold text-[var(--life-neutral-850)] truncate">{state.courseTitle}</p>
+                      <p className="text-[10px] text-[var(--life-neutral-400)] mt-0.5">Course</p>
                     </div>
                     <button
                       type="button"
                       aria-label="Edit course title"
                       onClick={() => setEditTarget({ type: 'course' })}
-                      className="shrink-0 opacity-0 group-hover/card:opacity-100 transition-opacity p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-blue-600"
+                      className="shrink-0 opacity-0 group-hover/card:opacity-100 transition-opacity p-1 rounded hover:bg-[var(--life-neutral-050)] text-[var(--life-neutral-400)] hover:text-[var(--life-primary-500)]"
                     >
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -544,14 +544,14 @@ export default function CourseStructureMap({
                             </div>
                             <div className="px-3 py-2 shrink-0 flex items-start justify-between gap-1">
                               <div className="min-w-0">
-                                <p className="text-xs font-semibold text-gray-900 truncate">{ml.mod.title}</p>
-                                <p className="text-[10px] text-gray-400 mt-0.5">Module</p>
+                                <p className="text-xs font-semibold text-[var(--life-neutral-850)] truncate">{ml.mod.title}</p>
+                                <p className="text-[10px] text-[var(--life-neutral-400)] mt-0.5">Module</p>
                               </div>
                               <button
                                 type="button"
                                 aria-label={`Edit module ${ml.mod.title}`}
                                 onClick={() => setEditTarget({ type: 'module', moduleId: ml.mod.id })}
-                                className="shrink-0 opacity-0 group-hover/card:opacity-100 transition-opacity p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-blue-600"
+                                className="shrink-0 opacity-0 group-hover/card:opacity-100 transition-opacity p-1 rounded hover:bg-[var(--life-neutral-050)] text-[var(--life-neutral-400)] hover:text-[var(--life-primary-500)]"
                               >
                                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -598,7 +598,7 @@ export default function CourseStructureMap({
                             {/* Topic card */}
                             <foreignObject x={tl.topicX} y={TOPIC_TOP} width={CW} height={CH}>
                               <div className="w-full h-full group/card">
-                                <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm h-full flex flex-col">
+                                <div className="bg-white border border-[var(--life-neutral-100)] rounded-xl overflow-hidden shadow-sm h-full flex flex-col">
                                   <div className={`flex-1 ${c.light} flex items-center justify-center`}>
                                     <svg className={`w-8 h-8 ${c.icon} opacity-60`} fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
                                       <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
@@ -606,14 +606,14 @@ export default function CourseStructureMap({
                                   </div>
                                   <div className="px-3 py-2 shrink-0 flex items-start justify-between gap-1">
                                     <div className="min-w-0">
-                                      <p className="text-xs font-semibold text-gray-900 truncate">{tl.topic.title}</p>
-                                      <p className="text-[10px] text-gray-400 mt-0.5">Topic</p>
+                                      <p className="text-xs font-semibold text-[var(--life-neutral-850)] truncate">{tl.topic.title}</p>
+                                      <p className="text-[10px] text-[var(--life-neutral-400)] mt-0.5">Topic</p>
                                     </div>
                                     <button
                                       type="button"
                                       aria-label={`Edit topic ${tl.topic.title}`}
                                       onClick={() => setEditTarget({ type: 'topic', moduleId: ml.mod.id, topicId: tl.topic.id })}
-                                      className="shrink-0 opacity-0 group-hover/card:opacity-100 transition-opacity p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-blue-600"
+                                      className="shrink-0 opacity-0 group-hover/card:opacity-100 transition-opacity p-1 rounded hover:bg-[var(--life-neutral-050)] text-[var(--life-neutral-400)] hover:text-[var(--life-primary-500)]"
                                     >
                                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -653,7 +653,7 @@ export default function CourseStructureMap({
                                 {/* Section card */}
                                 <foreignObject x={sl.sectionX} y={SEC_TOP} width={CW} height={CH}>
                                   <div className="w-full h-full group/card">
-                                    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm h-full flex flex-col">
+                                    <div className="bg-white border border-[var(--life-neutral-100)] rounded-xl overflow-hidden shadow-sm h-full flex flex-col">
                                       <div className={`flex-1 ${c.light} flex items-center justify-center opacity-70`}>
                                         <svg className={`w-7 h-7 ${c.icon} opacity-50`} fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
                                           <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h7.5M8.25 12h7.5m-7.5 5.25h7.5" />
@@ -661,14 +661,14 @@ export default function CourseStructureMap({
                                       </div>
                                       <div className="px-3 py-2 shrink-0 flex items-start justify-between gap-1">
                                         <div className="min-w-0">
-                                          <p className="text-xs font-semibold text-gray-900 truncate">{sl.section.title}</p>
-                                          <p className="text-[10px] text-gray-400 mt-0.5">Section</p>
+                                          <p className="text-xs font-semibold text-[var(--life-neutral-850)] truncate">{sl.section.title}</p>
+                                          <p className="text-[10px] text-[var(--life-neutral-400)] mt-0.5">Section</p>
                                         </div>
                                         <button
                                           type="button"
                                           aria-label={`Edit section ${sl.section.title}`}
                                           onClick={() => setEditTarget({ type: 'section', moduleId: ml.mod.id, topicId: tl.topic.id, sectionId: sl.section.id })}
-                                          className="shrink-0 opacity-0 group-hover/card:opacity-100 transition-opacity p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-blue-600"
+                                          className="shrink-0 opacity-0 group-hover/card:opacity-100 transition-opacity p-1 rounded hover:bg-[var(--life-neutral-050)] text-[var(--life-neutral-400)] hover:text-[var(--life-primary-500)]"
                                         >
                                           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -704,7 +704,7 @@ export default function CourseStructureMap({
                                     <VLine x={bl.blockCX} y1={BLOCK_TOP - VSTEM / 2} y2={BLOCK_TOP} />
                                     <foreignObject x={bl.blockX} y={BLOCK_TOP} width={CW} height={CH}>
                                       <div className="w-full h-full group/card">
-                                        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm h-full flex flex-col">
+                                        <div className="bg-white border border-[var(--life-neutral-100)] rounded-xl overflow-hidden shadow-sm h-full flex flex-col">
                                           <div className={`flex-1 ${c.light} flex items-center justify-center opacity-60`}>
                                             <svg className={`w-6 h-6 ${c.icon} opacity-50`} fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
                                               <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z" />
@@ -712,14 +712,14 @@ export default function CourseStructureMap({
                                           </div>
                                           <div className="px-3 py-2 shrink-0 flex items-start justify-between gap-1">
                                             <div className="min-w-0">
-                                              <p className="text-xs font-semibold text-gray-900 truncate">{bl.block.title}</p>
-                                              <p className="text-[10px] text-gray-400 mt-0.5">Block</p>
+                                              <p className="text-xs font-semibold text-[var(--life-neutral-850)] truncate">{bl.block.title}</p>
+                                              <p className="text-[10px] text-[var(--life-neutral-400)] mt-0.5">Block</p>
                                             </div>
                                             <button
                                               type="button"
                                               aria-label={`Edit block ${bl.block.title}`}
                                               onClick={() => setEditTarget({ type: 'block', moduleId: ml.mod.id, topicId: tl.topic.id, sectionId: sl.section.id, blockId: bl.block.id })}
-                                              className="shrink-0 opacity-0 group-hover/card:opacity-100 transition-opacity p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-blue-600"
+                                              className="shrink-0 opacity-0 group-hover/card:opacity-100 transition-opacity p-1 rounded hover:bg-[var(--life-neutral-050)] text-[var(--life-neutral-400)] hover:text-[var(--life-primary-500)]"
                                             >
                                               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />

@@ -44,7 +44,7 @@ export function ExportStatusPopup({
       className={`fixed top-6 right-6 z-[9999] flex items-center gap-3 min-w-[380px] max-w-[440px] px-5 py-3.5 rounded-[10px] shadow-[0_10px_30px_rgba(0,0,0,0.24)] border transition-all duration-200 ${
         status === "success"
           ? "bg-[#16a34a] border-[#15803d] text-white"
-          : "bg-[#4b5563] border-[#374151] text-white"
+          : "bg-[var(--life-neutral-700)] border-[var(--life-neutral-700)] text-white"
       }`}
       role="status"
       aria-live="polite"
@@ -137,7 +137,7 @@ export default function ExportMenu({
         aria-haspopup="menu"
         aria-expanded={isOpen}
         aria-label="Export"
-        className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold bg-transparent text-[var(--life-base-black)] rounded-[8px] hover:bg-[var(--life-primary-050)] hover:text-[var(--life-primary-700)] active:bg-[var(--life-primary-100)] active:text-[var(--life-primary-800)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+        className="life-btn life-btn--ghost !px-3"
       >
         <SidebarMaskIcon file="export-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
         <span className="hidden lg:inline">Export</span>
@@ -159,7 +159,7 @@ export default function ExportMenu({
       {isOpen && (
         <div
           role="menu"
-          className="absolute right-0 top-full mt-2 w-[248px] rounded-[12px] border border-[#d1d5db] bg-white py-2 shadow-[0_10px_25px_rgba(17,24,39,0.12)] z-30"
+          className="life-menu absolute right-0 top-full mt-2 w-[248px] z-30"
         >
           {options.map((option) => (
             <button
@@ -168,7 +168,7 @@ export default function ExportMenu({
               role="menuitem"
               onClick={() => onOptionClick(option)}
               disabled={option.disabled}
-              className="block w-full px-5 py-3 text-left font-[var(--font-family-primary)] text-[16px] leading-[1.3] text-[#1f2937] hover:bg-[#f8fafc] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              className="life-menu-item"
             >
               {option.label}
             </button>

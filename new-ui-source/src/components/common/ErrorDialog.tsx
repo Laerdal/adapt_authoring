@@ -42,22 +42,22 @@ export default function ErrorDialog({
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
           </div>
-          <h2 className="font-semibold text-[#111827] text-base mb-3">{title}</h2>
-          <div className="text-sm text-[#6b7280]">{message}</div>
+          <h2 className="font-semibold text-[var(--life-neutral-850)] text-base mb-3">{title}</h2>
+          <div className="text-sm text-[var(--life-neutral-600)]">{message}</div>
 
           {debugDetails && (
             <div className="mt-5 w-full text-left">
               <button
                 type="button"
                 onClick={() => setDebugOpen((value) => !value)}
-                className="mx-auto flex items-center gap-2 text-sm font-medium text-[#6b7280] hover:text-[#374151] transition-colors"
+                className="mx-auto flex items-center gap-2 text-sm font-medium text-[var(--life-neutral-600)] hover:text-[var(--life-neutral-700)] transition-colors"
                 aria-expanded={debugOpen}
               >
                 <span aria-hidden="true" className={`inline-block transition-transform ${debugOpen ? "rotate-90" : ""}`}>▶</span>
                 Debug information
               </button>
               {debugOpen && (
-                <pre className="mt-3 max-h-40 overflow-auto rounded-lg border border-[#e5e7eb] bg-[#f9fafb] p-3 text-left text-xs leading-relaxed text-[#4b5563] whitespace-pre-wrap break-words">
+                <pre className="mt-3 max-h-40 overflow-auto rounded-lg border border-[var(--life-neutral-100)] bg-[var(--life-neutral-020)] p-3 text-left text-xs leading-relaxed text-[var(--life-neutral-700)] whitespace-pre-wrap break-words">
                   {debugDetails}
                 </pre>
               )}
@@ -65,12 +65,12 @@ export default function ErrorDialog({
           )}
         </div>
 
-        <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[#e5e7eb]">
+        <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[var(--life-neutral-100)]">
           {secondaryLabel && (
             <button
               type="button"
               onClick={onSecondary ?? onClose}
-              className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors cursor-pointer"
+              className="px-4 py-2 text-sm font-medium text-[var(--life-neutral-700)] bg-white border border-[var(--life-neutral-200)] rounded-lg hover:bg-[var(--life-neutral-020)] transition-colors cursor-pointer"
             >
               {secondaryLabel}
             </button>
@@ -78,7 +78,7 @@ export default function ErrorDialog({
           <button
             type="button"
             onClick={onPrimary ?? onClose}
-            className="px-5 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors cursor-pointer"
+            className="px-5 py-2 text-sm font-semibold text-white bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-600)] rounded-lg transition-colors cursor-pointer"
           >
             {primaryLabel}
           </button>

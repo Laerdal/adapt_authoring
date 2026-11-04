@@ -281,19 +281,12 @@ export default function ImportPreviewDialog({
         </div>
 
         <div className="flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="sb-toolbar-btn">Cancel</button>
+          <button type="button" onClick={onClose} className="life-btn life-btn--secondary">Cancel</button>
           <button
             type="button"
             onClick={() => onConfirm(mode)}
             disabled={!!blocked}
-            className={`sb-toolbar-btn ${mode === 'replace' ? '' : 'sb-toolbar-btn-primary'}`}
-            style={
-              mode === 'replace'
-                ? { background: blocked ? '#d1d5db' : '#b42318', color: '#fff', borderColor: blocked ? '#d1d5db' : '#b42318' }
-                : blocked
-                  ? { opacity: 0.5, cursor: 'not-allowed' }
-                  : undefined
-            }
+            className={`life-btn ${mode === 'replace' ? 'life-btn--danger' : 'life-btn--primary'}`}
           >
             {mode === 'replace' ? 'Replace storyboard' : mode === 'reimport' ? 'Update content' : 'Confirm import'}
           </button>
