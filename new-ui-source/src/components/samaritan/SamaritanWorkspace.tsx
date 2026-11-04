@@ -54,8 +54,13 @@ interface Props {
   // When set, approving is disabled and this is shown instead - e.g. the
   // storyboard has unsaved edits that a write to the course would collide with.
   writeBlockedReason?: string | null;
-  onExecuted?: (componentId: string) => void;
-  onStructureChanged?: () => void;
+  // May return a promise: the panel waits for the host's reload, so editing stays
+  // locked until the host shows what Samaritan wrote.
+  onExecuted?: (componentId: string) => void | Promise<void>;
+  onStructureChanged?: () => void | Promise<void>;
+  // True from the moment an approval is sent until the host has reloaded. The host
+  // locks editing and saving meanwhile, so nothing typed in that window is lost.
+  onApplyingChange?: (applying: boolean) => void;
 }
 
 type Turn =
@@ -217,7 +222,8 @@ export default function SamaritanWorkspace({
   title = "Ask Samaritan",
   writeBlockedReason,
   onExecuted,
-  onStructureChanged
+  onStructureChanged,
+  onApplyingChange
 }: Props) {
   const [openState, setOpenState] = useState(!!autoSendMessage);
   const open = openProp ?? openState;
@@ -297,8 +303,18 @@ export default function SamaritanWorkspace({
     }
   }
 
+  // A host reload that fails must not break the approval flow or leave the lock on.
+  async function reloadHost(run?: () => void | Promise<void>) {
+    try {
+      await run?.();
+    } catch {
+      /* the next manual refresh shows the current state */
+    }
+  }
+
   async function decide(actionId: string, approved: boolean) {
     setBusy(true);
+    if (approved) onApplyingChange?.(true);
     try {
       const response: ApproveResponse = await approveAction(actionId, approved);
       const passed = response.status === "executed" && response.verificationResult.passed;
@@ -311,28 +327,34 @@ export default function SamaritanWorkspace({
         // the host would otherwise keep showing (and later re-save) stale content.
         // Only focusing the new component depends on a verified success.
         const componentId = passed ? (response.executionResult as any).componentId || (response.executionResult as any).newComponentId : null;
-        if (componentId) onExecuted?.(componentId);
-        onStructureChanged?.();
+        // One reload only: the focused one when it applies (it reloads AND selects the
+        // new component), the general one otherwise. Two reloads would race, and the
+        // second would clear the selection the first just made.
+        if (componentId && onExecuted) await reloadHost(() => onExecuted(componentId));
+        else await reloadHost(onStructureChanged);
       }
     } catch (err) {
       setTurns((t) => [...t, { kind: "error", text: err instanceof Error ? err.message : "Failed to execute action" }]);
-      if (approved) onStructureChanged?.();
+      if (approved) await reloadHost(onStructureChanged);
     } finally {
+      if (approved) onApplyingChange?.(false);
       setBusy(false);
     }
   }
 
   async function decidePlan(requestId: string, approved: boolean) {
     setBusy(true);
+    if (approved) onApplyingChange?.(true);
     try {
       const response = await approvePlan(requestId, approved);
       setTurns((t) => [...t, { kind: "plan-result", response }]);
       // completed, rolled_back or partial_failure: all can leave persisted changes.
-      if (approved) onStructureChanged?.();
+      if (approved) await reloadHost(onStructureChanged);
     } catch (err) {
       setTurns((t) => [...t, { kind: "error", text: err instanceof Error ? err.message : "Failed to execute plan" }]);
-      if (approved) onStructureChanged?.();
+      if (approved) await reloadHost(onStructureChanged);
     } finally {
+      if (approved) onApplyingChange?.(false);
       setBusy(false);
     }
   }

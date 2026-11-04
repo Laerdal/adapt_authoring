@@ -377,6 +377,16 @@ export default function StoryboardWorkspace({
   // refreshFromCourse sync used when the page regains focus. The card-level AI
   // menu still supplies its own text-assist handlers via storyboardActions.
   const [samaritanOpen, setSamaritanOpen] = useState(false);
+  // While Samaritan applies an approved change the document, contents and top bar
+  // are inert (no typing, no Save) until refreshFromCourse has run, so the refresh
+  // can never replace edits and a later Save never works from a stale document.
+  const [samaritanApplying, setSamaritanApplying] = useState(false);
+  const storyboardRootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    storyboardRootRef.current?.querySelectorAll<HTMLElement & { inert?: boolean }>('[data-sb-lock]').forEach((el) => {
+      el.inert = samaritanApplying;
+    });
+  }, [samaritanApplying, showContents]);
 
   const handleSave = async () => {
     if (saveRunning) return; // a Save is already in flight — see saveRunning's declaration
@@ -686,7 +696,8 @@ export default function StoryboardWorkspace({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
+    <div ref={storyboardRootRef} aria-busy={samaritanApplying} className="flex h-full min-h-0 flex-col bg-background text-foreground">
+      <div data-sb-lock>
       <StoryboardTopBar
         status={sb.status}
         onBack={() => onBack?.()}
@@ -699,6 +710,7 @@ export default function StoryboardWorkspace({
         dirty={sb.dirty}
         saving={sb.saving || saveRunning}
       />
+      </div>
 
       {sb.error && (
         <div className="border-b border-[#fecaca] bg-[#fef2f2] px-4 py-2 text-sm text-[#991b1b]">
@@ -709,7 +721,7 @@ export default function StoryboardWorkspace({
       <div className="flex min-h-0 flex-1">
         {/* Left — Contents */}
         {showContents ? (
-          <div className="w-64 shrink-0 border-r">
+          <div data-sb-lock className="w-64 shrink-0 border-r">
             <ContentsPanel
               headings={headings}
               summary={summary}
@@ -731,7 +743,7 @@ export default function StoryboardWorkspace({
         )}
 
         {/* Center — document */}
-        <main className="flex min-w-0 flex-1 flex-col bg-background">
+        <main data-sb-lock className="flex min-w-0 flex-1 flex-col bg-background">
           <DocumentToolbar
             onInsert={insert}
             onInsertHeading={insertHeading}
@@ -808,9 +820,8 @@ export default function StoryboardWorkspace({
             writeBlockedReason={
               sb.dirty ? 'You have unsaved storyboard changes. Save first, so edits made by Samaritan do not collide with them.' : null
             }
-            onStructureChanged={() => {
-              void refreshFromCourse();
-            }}
+            onApplyingChange={setSamaritanApplying}
+            onStructureChanged={() => refreshFromCourse()}
           />
         )}
 
