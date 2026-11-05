@@ -241,6 +241,24 @@ export default function SamaritanWorkspace({
   const courseScope = useRef(false);
   const pendingReload = useRef<(() => void | Promise<void>) | null>(null);
   const [reloadFailed, setReloadFailed] = useState(false);
+  // True from the moment an approval is sent until the host has reloaded, and through
+  // a failed reload until a retry succeeds. The host is locked meanwhile, so the panel
+  // must not be closed or reset: that would hide Retry and strand the lock.
+  const [applying, setApplying] = useState(false);
+  const lockedRef = useRef(false);
+  function setLock(on: boolean) {
+    lockedRef.current = on;
+    setApplying(on);
+    onApplyingChange?.(on);
+  }
+  // Never leave the host locked if this panel goes away mid-approval.
+  useEffect(
+    () => () => {
+      if (lockedRef.current) onApplyingChange?.(false);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
 
   // Overlay mode sits directly under the host's top bars (so the launcher in
   // those bars stays clickable) rather than covering the top of the screen.
@@ -327,13 +345,13 @@ export default function SamaritanWorkspace({
     const run = pendingReload.current;
     if (!run || busy) return;
     setBusy(true);
-    if (await reloadHost(run)) onApplyingChange?.(false);
+    if (await reloadHost(run)) setLock(false);
     setBusy(false);
   }
 
   async function decide(actionId: string, approved: boolean) {
     setBusy(true);
-    if (approved) onApplyingChange?.(true);
+    if (approved) setLock(true);
     try {
       const response: ApproveResponse = await approveAction(actionId, approved);
       const passed = response.status === "executed" && response.verificationResult.passed;
@@ -356,14 +374,14 @@ export default function SamaritanWorkspace({
       setTurns((t) => [...t, { kind: "error", text: err instanceof Error ? err.message : "Failed to execute action" }]);
       if (approved) await reloadHost(onStructureChanged);
     } finally {
-      if (approved && !pendingReload.current) onApplyingChange?.(false);
+      if (approved && !pendingReload.current) setLock(false);
       setBusy(false);
     }
   }
 
   async function decidePlan(requestId: string, approved: boolean) {
     setBusy(true);
-    if (approved) onApplyingChange?.(true);
+    if (approved) setLock(true);
     try {
       const response = await approvePlan(requestId, approved);
       setTurns((t) => [...t, { kind: "plan-result", response }]);
@@ -373,12 +391,13 @@ export default function SamaritanWorkspace({
       setTurns((t) => [...t, { kind: "error", text: err instanceof Error ? err.message : "Failed to execute plan" }]);
       if (approved) await reloadHost(onStructureChanged);
     } finally {
-      if (approved && !pendingReload.current) onApplyingChange?.(false);
+      if (approved && !pendingReload.current) setLock(false);
       setBusy(false);
     }
   }
 
   function resetChat() {
+    if (applying) return;
     setTurns([]);
     setActiveGoalLabel(null);
     history.current = [];
@@ -418,8 +437,10 @@ export default function SamaritanWorkspace({
         <button
           type="button"
           onClick={() => setOpen(false)}
+          disabled={applying}
+          title={applying ? "Wait until Samaritan has finished applying changes" : undefined}
           aria-label={`Close ${title}`}
-          className="w-8 h-8 rounded-md flex items-center justify-center text-[#6b7280] hover:bg-[#f3f4f6] hover:text-[#111827] transition-colors"
+          className="w-8 h-8 rounded-md flex items-center justify-center text-[#6b7280] hover:bg-[#f3f4f6] hover:text-[#111827] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="18" y1="6" x2="6" y2="18" />
@@ -496,7 +517,12 @@ export default function SamaritanWorkspace({
               </svg>
             </span>
             <span className="text-xs text-[#1d3547] flex-1">{activeGoalLabel || "Conversation"}</span>
-            <button type="button" onClick={resetChat} className="text-xs text-[#6b7280] hover:text-[#111827]">
+            <button
+              type="button"
+              onClick={resetChat}
+              disabled={applying}
+              className="text-xs text-[#6b7280] hover:text-[#111827] disabled:opacity-40 disabled:cursor-not-allowed"
+            >
               New chat
             </button>
           </div>
