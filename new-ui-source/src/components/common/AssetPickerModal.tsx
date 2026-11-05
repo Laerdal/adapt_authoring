@@ -25,7 +25,7 @@ export default function AssetPickerModal({ onSelect, onClose, assetType, aiTutor
   const text = KIND_TEXT[resolvedAssetType];
 
   return (
-    <div className="fixed inset-0 z-[90] bg-[#f8fafc]">
+    <div className="fixed inset-0 z-[90] bg-[var(--life-neutral-020)]">
       <AssetManagementWorkspace
         pickerMode
         pickerAssetType={resolvedAssetType}

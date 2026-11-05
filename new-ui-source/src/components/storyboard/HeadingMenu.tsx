@@ -71,7 +71,7 @@ export default function HeadingMenu({ onSelect }: { onSelect: (level: number) =>
         ref={btnRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="sb-toolbar-btn"
+        className="life-btn life-btn--secondary"
         aria-haspopup="menu"
         aria-expanded={open}
       >

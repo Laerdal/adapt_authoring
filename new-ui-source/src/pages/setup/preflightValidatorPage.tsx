@@ -58,16 +58,16 @@ function Accordion({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
+    <div className="rounded-xl border border-[var(--life-neutral-100)] bg-white overflow-hidden">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left hover:bg-[#f9fafb] transition-colors"
+        className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left hover:bg-[var(--life-neutral-020)] transition-colors"
       >
         <div className="flex items-center gap-2.5">
-          <span className="text-[#2d6fa8]">{icon}</span>
-          <h3 className="text-sm font-semibold text-[#111827]">{title}</h3>
+          <span className="text-[var(--life-primary-500)]">{icon}</span>
+          <h3 className="text-sm font-semibold text-[var(--life-neutral-850)]">{title}</h3>
         </div>
         <svg
           className={`shrink-0 transition-transform duration-200 ${open ? "rotate-90" : ""}`}
@@ -76,7 +76,7 @@ function Accordion({
           <polyline points="9 18 15 12 9 6" />
         </svg>
       </button>
-      {open && <div className="px-5 pb-5 pt-1 border-t border-[#f3f4f6] flex flex-col gap-4">{children}</div>}
+      {open && <div className="px-5 pb-5 pt-1 border-t border-[var(--life-neutral-050)] flex flex-col gap-4">{children}</div>}
     </div>
   );
 }
@@ -97,14 +97,14 @@ function SubAccordion({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-lg border border-[#e5e7eb] overflow-hidden">
+    <div className="rounded-lg border border-[var(--life-neutral-100)] overflow-hidden">
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="w-full flex items-center justify-between gap-2 px-4 py-3 bg-[#f9fafb] hover:bg-[#f3f4f6] transition-colors text-left"
+        className="w-full flex items-center justify-between gap-2 px-4 py-3 bg-[var(--life-neutral-020)] hover:bg-[var(--life-neutral-050)] transition-colors text-left"
       >
-        <span className="text-sm font-semibold text-[#111827]">{title}</span>
+        <span className="text-sm font-semibold text-[var(--life-neutral-850)]">{title}</span>
         <svg
           className={`shrink-0 transition-transform duration-200 ${open ? "rotate-90" : ""}`}
           width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
@@ -131,10 +131,10 @@ function PrerequisiteRow({
   return (
     <div
       className={`flex items-center justify-between gap-3 px-3 py-2 rounded-lg border ${
-        satisfied ? "border-[var(--life-positive-100)] bg-[var(--life-positive-050)]" : "border-[#fecaca] bg-[#fef2f2]"
+        satisfied ? "border-[var(--life-positive-100)] bg-[var(--life-positive-050)]" : "border-[var(--life-critical-100)] bg-[var(--life-critical-050)]"
       }`}
     >
-      <span className={`flex items-center gap-2 text-xs font-medium ${satisfied ? "text-[var(--life-positive-500)]" : "text-[#991b1b]"}`}>
+      <span className={`flex items-center gap-2 text-xs font-medium ${satisfied ? "text-[var(--life-positive-500)]" : "text-[var(--life-critical-600)]"}`}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
           {satisfied ? (
             <polyline points="20 6 9 17 4 12" />
@@ -426,8 +426,8 @@ export function PreflightValidatorPage({
     <div className="max-w-2xl w-full flex flex-col gap-8">
       {/* Heading */}
       <div>
-        <h2 className="text-xl font-semibold text-[#111827]">Preflight Validator</h2>
-        <p className="text-sm text-[#6b7280] mt-1.5 leading-relaxed">
+        <h2 className="text-xl font-semibold text-[var(--life-neutral-850)]">Preflight Validator</h2>
+        <p className="text-sm text-[var(--life-neutral-600)] mt-1.5 leading-relaxed">
           The purpose of this preflight report is to identify and assist you in correcting potential issues in the
           course before it's published to the LMS. It facilitates course validation, accessibility checks, and
           ensures compliance with SCORM/HyperBridge standards while helping you generate a report.
@@ -442,7 +442,7 @@ export function PreflightValidatorPage({
           </svg>
         }
       >
-        <p className="text-sm text-[#374151] leading-relaxed">
+        <p className="text-sm text-[var(--life-neutral-700)] leading-relaxed">
           It is recommended to do the Course Validation and correct any findings before proceeding to the Accessibility Report or SCORM/Hyperbridge Validation.
         </p>
 
@@ -460,7 +460,7 @@ export function PreflightValidatorPage({
               "Alerts if both SPOOR and Hyperbridge extensions are included in a course",
               "Alerts when assessment completion is set as the course completion criteria, but assessment extension is not enabled for any article in the course",
             ].map((item) => (
-              <li key={item} className="flex items-start gap-2.5 text-sm text-[#6b7280]">
+              <li key={item} className="flex items-start gap-2.5 text-sm text-[var(--life-neutral-600)]">
                 <svg className="shrink-0 mt-0.5" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2d6fa8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
@@ -473,7 +473,7 @@ export function PreflightValidatorPage({
               type="button"
               onClick={() => void handleRunCourseEvaluation()}
               disabled={reportLoading}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] disabled:opacity-60 rounded-lg transition-colors"
+              className="life-btn life-btn--primary"
             >
               {reportLoading ? (
                 <Spinner />
@@ -487,7 +487,7 @@ export function PreflightValidatorPage({
           </div>
 
           {reportError && (
-            <div className="rounded-lg bg-[#fef2f2] border border-[#fecaca] px-4 py-3 text-sm text-[#991b1b]">{reportError}</div>
+            <div className="rounded-lg bg-[var(--life-critical-050)] border border-[var(--life-critical-100)] px-4 py-3 text-sm text-[var(--life-critical-600)]">{reportError}</div>
           )}
 
           {report && (
@@ -537,20 +537,20 @@ export function PreflightValidatorPage({
           open={expandedSection === "accessibility-report"}
           onToggle={() => toggleSection("accessibility-report", () => void handleExpandAccessibility())}
         >
-          <p className="text-xs text-[#6b7280] leading-relaxed">
+          <p className="text-xs text-[var(--life-neutral-600)] leading-relaxed">
             Runs the course through the AXE library from Deque to identify potential errors and warnings in compliance with WCAG A and AA standards. This includes checks for color contrast ratios, missing alternative text for images, heading structures, and keyboard navigation support.
           </p>
-          <p className="text-[11px] text-[#9ca3af]">
+          <p className="text-[11px] text-[var(--life-neutral-400)]">
             Expanding this section automatically enables the Laerdal Validator Enabler extension and CDN Deployment if they aren't already configured.
           </p>
 
           {enablingAccessibilityPrereqs && (
-            <p className="inline-flex items-center gap-1.5 text-xs text-[#6b7280]">
+            <p className="inline-flex items-center gap-1.5 text-xs text-[var(--life-neutral-600)]">
               <Spinner /> Configuring prerequisites…
             </p>
           )}
           {accessibilityPrereqError && (
-            <div className="rounded-lg bg-[#fef2f2] border border-[#fecaca] px-4 py-3 text-sm text-[#991b1b]">{accessibilityPrereqError}</div>
+            <div className="rounded-lg bg-[var(--life-critical-050)] border border-[var(--life-critical-100)] px-4 py-3 text-sm text-[var(--life-critical-600)]">{accessibilityPrereqError}</div>
           )}
 
           <div className="flex flex-col gap-2 items-start">
@@ -558,7 +558,7 @@ export function PreflightValidatorPage({
               type="button"
               onClick={() => void runValidation({ accessibility: true, scorm: false })}
               disabled={checkingPrereqs || building || enablingAccessibilityPrereqs}
-              className="self-start flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] disabled:opacity-60 rounded-lg transition-colors"
+              className="life-btn life-btn--primary"
             >
               {(checkingPrereqs || building) ? (
                 <Spinner />
@@ -569,7 +569,7 @@ export function PreflightValidatorPage({
               )}
               {checkingPrereqs ? "Checking prerequisites…" : building ? "Building…" : "Run Accessibility Validation"}
             </button>
-            <p className="text-xs text-[#9ca3af] leading-relaxed">
+            <p className="text-xs text-[var(--life-neutral-400)] leading-relaxed">
               Results and the downloadable report appear on the deployed course's Course Complete screen, opened in a new tab, once it finishes auto-completing.
             </p>
           </div>
@@ -582,7 +582,7 @@ export function PreflightValidatorPage({
           onToggle={() => toggleSection("scorm-validation", () => void handleExpandScorm())}
         >
           {scormPrereqLoading ? (
-            <p className="inline-flex items-center gap-1.5 text-xs text-[#6b7280]">
+            <p className="inline-flex items-center gap-1.5 text-xs text-[var(--life-neutral-600)]">
               <Spinner /> Checking configuration…
             </p>
           ) : (
@@ -591,8 +591,8 @@ export function PreflightValidatorPage({
                   Validation shares with Accessibility Report, checked independently
                   here so this section is self-sufficient even if the user never
                   opens Accessibility Report first. */}
-              <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-4 py-3.5 flex flex-col gap-2.5">
-                <p className="text-xs font-semibold text-[#374151] uppercase tracking-wide">Validator Enabler Configuration</p>
+              <div className="rounded-lg border border-[var(--life-neutral-100)] bg-[var(--life-neutral-020)] px-4 py-3.5 flex flex-col gap-2.5">
+                <p className="text-xs font-semibold text-[var(--life-neutral-700)] uppercase tracking-wide">Validator Enabler Configuration</p>
                 <div className="flex flex-col gap-2">
                   <PrerequisiteRow
                     label="Laerdal Validator Enabler"
@@ -602,7 +602,7 @@ export function PreflightValidatorPage({
                         type="button"
                         onClick={() => void handleEnableValidatorFromScorm()}
                         disabled={enablingValidatorFromScorm}
-                        className="inline-flex items-center gap-1.5 rounded border border-[#d1d5db] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#374151] hover:bg-[#f3f4f6] disabled:opacity-60 transition-colors"
+                        className="life-btn life-btn--secondary"
                       >
                         {enablingValidatorFromScorm && <Spinner />}
                         {enablingValidatorFromScorm ? "Enabling…" : "Enable Now"}
@@ -616,7 +616,7 @@ export function PreflightValidatorPage({
                       <button
                         type="button"
                         onClick={() => onNavigationRequest?.("cdn-deployment")}
-                        className="inline-flex items-center gap-1.5 rounded border border-[#d1d5db] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#374151] hover:bg-[#f3f4f6] transition-colors"
+                        className="life-btn life-btn--secondary"
                       >
                         Go to CDN Deployment
                       </button>
@@ -624,7 +624,7 @@ export function PreflightValidatorPage({
                   />
                 </div>
                 {scormValidatorEnableError && (
-                  <p className="text-xs text-[#991b1b]">{scormValidatorEnableError}</p>
+                  <p className="text-xs text-[var(--life-critical-600)]">{scormValidatorEnableError}</p>
                 )}
               </div>
 
@@ -635,19 +635,19 @@ export function PreflightValidatorPage({
                     "Identifies any potential bugs that may occur during LMS deployment.",
                     "Confirms if the course registers completion and if the assessment score is pushed where relevant.",
                   ].map((item) => (
-                    <li key={item} className="flex items-start gap-2 text-xs text-[#6b7280]">
-                      <span className="w-1 h-1 rounded-full bg-[#9ca3af] shrink-0 mt-1.5" />
+                    <li key={item} className="flex items-start gap-2 text-xs text-[var(--life-neutral-600)]">
+                      <span className="w-1 h-1 rounded-full bg-[var(--life-neutral-400)] shrink-0 mt-1.5" />
                       {item}
                     </li>
                   ))}
                 </ul>
               ) : (
-                <div className="rounded-lg bg-[#fef2f2] border border-[#fecaca] px-4 py-3 flex flex-col gap-2.5">
-                  <p className="text-sm font-medium text-[#991b1b]">No SPOOR/HyperBridge Configuration Found.</p>
+                <div className="rounded-lg bg-[var(--life-critical-050)] border border-[var(--life-critical-100)] px-4 py-3 flex flex-col gap-2.5">
+                  <p className="text-sm font-medium text-[var(--life-critical-600)]">No SPOOR/HyperBridge Configuration Found.</p>
                   <button
                     type="button"
                     onClick={() => onNavigationRequest?.("tracking")}
-                    className="self-start flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-white bg-[#991b1b] hover:bg-[#7f1d1d] rounded-lg transition-colors"
+                    className="self-start flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-white bg-[var(--life-critical-600)] hover:bg-[#7f1d1d] rounded-lg transition-colors"
                   >
                     Go to Tracking &amp; Analytics
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -663,7 +663,7 @@ export function PreflightValidatorPage({
                     type="button"
                     onClick={() => void runValidation({ accessibility: false, scorm: true })}
                     disabled={checkingPrereqs || building}
-                    className="self-start flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] disabled:opacity-60 rounded-lg transition-colors"
+                    className="life-btn life-btn--primary"
                   >
                     {(checkingPrereqs || building) ? (
                       <Spinner />
@@ -674,12 +674,12 @@ export function PreflightValidatorPage({
                     )}
                     {checkingPrereqs ? "Checking prerequisites…" : building ? "Building…" : "Run SCORM/HyperBridge Validation"}
                   </button>
-                  <p className="text-xs text-[#9ca3af] leading-relaxed">
+                  <p className="text-xs text-[var(--life-neutral-400)] leading-relaxed">
                     Results and the downloadable report appear on the deployed course's Course Complete screen, opened in a new tab, once it finishes auto-completing.
                   </p>
                 </div>
               ) : (
-                <p className="text-xs text-[#9ca3af] leading-relaxed">
+                <p className="text-xs text-[var(--life-neutral-400)] leading-relaxed">
                   Resolve the missing configuration above to run SCORM/HyperBridge Validation.
                 </p>
               )}
@@ -688,7 +688,7 @@ export function PreflightValidatorPage({
         </SubAccordion>
 
         {validationWarning && (
-          <div className="rounded-lg bg-[#fef2f2] border border-[#fecaca] px-4 py-3 text-sm text-[#991b1b]">{validationWarning}</div>
+          <div className="rounded-lg bg-[var(--life-critical-050)] border border-[var(--life-critical-100)] px-4 py-3 text-sm text-[var(--life-critical-600)]">{validationWarning}</div>
         )}
         {buildStatus && !validationWarning && (
           <div className="rounded-lg bg-[#eff6ff] border border-[#bfdbfe] px-4 py-3 text-sm text-[#1e40af]">{buildStatus}</div>

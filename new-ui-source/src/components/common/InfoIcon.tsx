@@ -116,7 +116,7 @@ export function InfoIcon({
               ref={tooltipRef}
               id={tooltipId}
               role="tooltip"
-              className={`pointer-events-none z-[9999] w-max max-w-[240px] rounded-[8px] bg-[#215369] px-3 py-1 text-[11px] font-medium text-[#ffffff] shadow-lg ${tooltipClassName}`}
+              className={`pointer-events-none z-[9999] w-max max-w-[240px] rounded-[8px] bg-[#215369] px-3 py-1 text-[11px] font-medium text-[var(--life-base-white)] shadow-lg ${tooltipClassName}`}
               style={tooltipStyle}
             >
               {hint}
@@ -177,7 +177,7 @@ export function InfoFieldLabel({
   const hasHint = shouldRenderFieldInfoIcon({ hint, help, description });
 
   return (
-    <div className={`relative z-10 min-w-0 text-xs font-semibold text-[#374151] ${className}`}>
+    <div className={`relative z-10 min-w-0 text-xs font-semibold text-[var(--life-neutral-700)] ${className}`}>
       <span className="leading-snug">
         {label}
         {hasHint && (

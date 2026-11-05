@@ -269,18 +269,18 @@ export default function AiAssistant({
 
       {/* Panel */}
       {open && (
-        <div className="w-[360px] max-h-[560px] bg-white rounded-2xl shadow-2xl border border-[#e5e7eb] flex flex-col overflow-hidden">
+        <div className="w-[360px] max-h-[560px] bg-white rounded-2xl shadow-2xl border border-[var(--life-neutral-100)] flex flex-col overflow-hidden">
 
           {/* Header — white background so the branded Samaritan mark reads correctly */}
           <div className="flex items-center gap-3 px-4 py-3.5 bg-white border-b border-[#eef0f4] shrink-0">
             <div className="w-9 h-9 rounded-full bg-white ring-1 ring-[#eadff7] flex items-center justify-center shrink-0">
               <SamaritanIcon className="h-6 w-6" />
             </div>
-            <span className="font-semibold text-[#1a1a1a] text-sm flex-1">AI Assistant</span>
+            <span className="font-semibold text-[var(--life-base-black)] text-sm flex-1">AI Assistant</span>
 
             {/* Help — Samaritan intro popup */}
             <button type="button" onClick={() => setHelpOpen(true)} title="About Samaritan" aria-label="About Samaritan"
-              className="p-1.5 rounded-lg text-[#666] hover:text-[#1a1a1a] hover:bg-[#f3f0fa] transition-colors">
+              className="p-1.5 rounded-lg text-[#666] hover:text-[var(--life-base-black)] hover:bg-[#f3f0fa] transition-colors">
               <svg width="15" height="15" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 16C12 16.5523 11.5523 17 11 17C10.4477 17 10 16.5523 10 16C10 15.4477 10.4477 15 11 15C11.5523 15 12 15.4477 12 16Z" fill="currentColor"/>
                 <path d="M9.5 8.5C9.5 7.67157 10.1716 7 11 7C11.8284 7 12.5 7.67157 12.5 8.5C12.5 8.90672 12.3394 9.27391 12.0761 9.54503C11.9995 9.62385 11.9122 9.71095 11.8184 9.80462C11.5072 10.1151 11.1239 10.4977 10.8189 10.8896C10.4067 11.4192 10 12.1264 10 13C10 13.5523 10.4477 14 11 14C11.5523 14 12 13.5523 12 13C12 12.769 12.1052 12.4932 12.3972 12.118C12.6184 11.8338 12.8705 11.5819 13.1583 11.2943C13.2702 11.1826 13.3877 11.0652 13.5106 10.9386C14.122 10.3093 14.5 9.44778 14.5 8.5C14.5 6.567 12.933 5 11 5C9.067 5 7.5 6.567 7.5 8.5C7.5 9.05228 7.94772 9.5 8.5 9.5C9.05229 9.5 9.5 9.05228 9.5 8.5Z" fill="currentColor"/>
@@ -291,7 +291,7 @@ export default function AiAssistant({
             {/* New chat — disabled while a reply is in flight so it can't race
                 with `send`'s pending response landing in a just-cleared chat. */}
             <button type="button" onClick={newChat} disabled={busy} title="New conversation" aria-label="New chat"
-              className="p-1.5 rounded-lg text-[#666] hover:text-[#1a1a1a] hover:bg-[#f3f0fa] transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent">
+              className="p-1.5 rounded-lg text-[#666] hover:text-[var(--life-base-black)] hover:bg-[#f3f0fa] transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
               </svg>
@@ -299,7 +299,7 @@ export default function AiAssistant({
 
             {/* Close */}
             <button type="button" onClick={() => setOpen(false)} title="Close" aria-label="Close AI assistant"
-              className="p-1.5 rounded-lg text-[#666] hover:text-[#1a1a1a] hover:bg-[#f3f0fa] transition-colors">
+              className="p-1.5 rounded-lg text-[#666] hover:text-[var(--life-base-black)] hover:bg-[#f3f0fa] transition-colors">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
               </svg>
@@ -372,7 +372,7 @@ export default function AiAssistant({
 
           {/* Quick-start chips */}
           {showChips && (
-            <div className="px-4 pb-3 pt-3 flex flex-col gap-2 border-t border-[#f3f4f6] shrink-0">
+            <div className="px-4 pb-3 pt-3 flex flex-col gap-2 border-t border-[var(--life-neutral-050)] shrink-0">
               {suggestions.map((s) => (
                 <button
                   key={s}
@@ -387,7 +387,7 @@ export default function AiAssistant({
           )}
 
           {/* Input */}
-          <div className="px-4 pt-3 pb-3 border-t border-[#e5e7eb] shrink-0">
+          <div className="px-4 pt-3 pb-3 border-t border-[var(--life-neutral-100)] shrink-0">
             <div className="flex items-end gap-2">
               <textarea
                 ref={inputRef}
@@ -397,7 +397,7 @@ export default function AiAssistant({
                 rows={1}
                 disabled={busy}
                 placeholder="Ask me anything about the authoring tool…"
-                className="flex-1 resize-none text-sm px-3 py-2.5 rounded-xl border border-[#e5e7eb] focus:outline-none focus:ring-2 focus:ring-[#6b4fa8] focus:border-transparent text-[#374151] placeholder-[#9ca3af] bg-[#fafafa] disabled:opacity-60"
+                className="flex-1 resize-none text-sm px-3 py-2.5 rounded-xl border border-[var(--life-neutral-100)] focus:outline-none focus:ring-2 focus:ring-[#6b4fa8] focus:border-transparent text-[var(--life-neutral-700)] placeholder-[var(--life-neutral-400)] bg-[var(--life-neutral-020)] disabled:opacity-60"
               />
               <button
                 type="button"
@@ -411,7 +411,7 @@ export default function AiAssistant({
                 </svg>
               </button>
             </div>
-            <p className="text-[10px] text-[#9ca3af] text-center mt-2">AI-generated. Verify important steps in the tool.</p>
+            <p className="text-[10px] text-[var(--life-neutral-400)] text-center mt-2">AI-generated. Verify important steps in the tool.</p>
           </div>
         </div>
       )}
@@ -453,10 +453,10 @@ export default function AiAssistant({
             </button>
             <div className="flex flex-col items-center px-6 pt-8 pb-6">
               <SamaritanIcon className="h-24 w-24" />
-              <h3 className="mt-4 text-center text-lg font-semibold text-[#1a1a1a]">
+              <h3 className="mt-4 text-center text-lg font-semibold text-[var(--life-base-black)]">
                 Introducing Samaritan&trade; &mdash; Responsible AI across Laerdal products.
               </h3>
-              <p className="mt-4 text-sm leading-relaxed text-[#374151] text-center">
+              <p className="mt-4 text-sm leading-relaxed text-[var(--life-neutral-700)] text-center">
                 Samaritan enhances clarity, efficiency, and intelligence in our product portfolio,
                 ensuring that our AI solutions align with our mission and are trustworthy, fair,
                 compliant, and sustainable. Samaritan seamlessly integrates intelligence through

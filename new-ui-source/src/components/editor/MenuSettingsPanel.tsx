@@ -77,15 +77,15 @@ export default function MenuSettingsPanel({ data, onUpdate, onClose }: MenuSetti
   const [lockTypeOpen, setLockTypeOpen] = useState(false);
 
   return (
-    <aside className="w-80 h-full bg-white border-l border-[#e5e7eb] flex flex-col shrink-0">
+    <aside className="w-80 h-full bg-white border-l border-[var(--life-neutral-100)] flex flex-col shrink-0">
       {/* Panel label */}
-      <div className="px-4 h-10 flex items-center border-b border-[#e5e7eb] shrink-0">
-        <span className="text-xs font-semibold text-[#6b7280] tracking-wide uppercase">Settings Panel</span>
+      <div className="px-4 h-10 flex items-center border-b border-[var(--life-neutral-100)] shrink-0">
+        <span className="text-xs font-semibold text-[var(--life-neutral-600)] tracking-wide uppercase">Settings Panel</span>
         <button
           type="button"
           aria-label="Close settings panel"
           onClick={onClose}
-          className="ml-auto w-6 h-6 flex items-center justify-center rounded text-[#9ca3af] hover:text-[#374151] hover:bg-[#f3f4f6] transition-colors"
+          className="life-icon-btn life-icon-btn--xs"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -94,13 +94,13 @@ export default function MenuSettingsPanel({ data, onUpdate, onClose }: MenuSetti
       </div>
 
       {/* Section header */}
-      <div className="px-4 py-3 flex items-center justify-between border-b border-[#e5e7eb] shrink-0">
-        <span className="text-sm font-semibold text-[#111827]">Edit MenuPage</span>
+      <div className="px-4 py-3 flex items-center justify-between border-b border-[var(--life-neutral-100)] shrink-0">
+        <span className="text-sm font-semibold text-[var(--life-neutral-850)]">Edit MenuPage</span>
         <button
           type="button"
           aria-label="Close edit panel"
           onClick={onClose}
-          className="w-6 h-6 flex items-center justify-center rounded text-[#9ca3af] hover:text-[#374151] hover:bg-[#f3f4f6] transition-colors"
+          className="life-icon-btn life-icon-btn--xs"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -110,47 +110,47 @@ export default function MenuSettingsPanel({ data, onUpdate, onClose }: MenuSetti
 
       {/* Scrollable fields */}
       <div className="flex-1 overflow-y-auto">
-        <div className="flex flex-col divide-y divide-[#f3f4f6]">
+        <div className="flex flex-col divide-y divide-[var(--life-neutral-050)]">
 
           {/* Display Title */}
           <section className="px-4 py-4 flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-[#374151] flex items-center gap-1">
+            <label className="text-xs font-semibold text-[var(--life-neutral-700)] flex items-center gap-1">
               Display Title
-              <span className="text-[#dc2626]">*</span>
+              <span className="text-[var(--life-critical-600)]">*</span>
             </label>
             <input
               type="text"
               value={data.title}
               onChange={(e) => onUpdate({ title: e.target.value })}
               placeholder="Menu Page"
-              className="w-full text-sm text-[#374151] border border-[#d1d5db] rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent placeholder-[#9ca3af]"
+              className="life-field"
             />
           </section>
 
           {/* Subtitle */}
           <section className="px-4 py-4 flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-[#374151]">Subtitle</label>
+            <label className="text-xs font-semibold text-[var(--life-neutral-700)]">Subtitle</label>
             <input
               type="text"
               value={data.subtitle}
               onChange={(e) => onUpdate({ subtitle: e.target.value })}
               placeholder="Course navigation menu"
-              className="w-full text-sm text-[#374151] border border-[#d1d5db] rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent placeholder-[#9ca3af]"
+              className="life-field"
             />
           </section>
 
           {/* Page Body */}
           <section className="px-4 py-4 flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-[#374151]">Page Body</label>
-            <div className="border border-[#d1d5db] rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-[#2d6fa8] focus-within:border-transparent">
+            <label className="text-xs font-semibold text-[var(--life-neutral-700)]">Page Body</label>
+            <div className="border border-[var(--life-neutral-200)] rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-[var(--life-primary-500)] focus-within:border-transparent">
               {/* Toolbar */}
-              <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-[#e5e7eb] bg-[#f9fafb]">
+              <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-[var(--life-neutral-100)] bg-[var(--life-neutral-020)]">
                 {TOOLBAR_ACTIONS.map((action, i) => (
                   <button
                     key={action.label}
                     type="button"
                     aria-label={action.label}
-                    className={`w-7 h-7 flex items-center justify-center rounded text-[#374151] hover:bg-[#e5e7eb] transition-colors ${
+                    className={`w-7 h-7 flex items-center justify-center rounded text-[var(--life-neutral-700)] hover:bg-[var(--life-neutral-100)] transition-colors ${
                       i < TOOLBAR_ACTIONS.length - 1 &&
                       (action.label === "Italic" || action.label === "Numbered list" || action.label === "Link")
                         ? "mr-1"
@@ -167,31 +167,31 @@ export default function MenuSettingsPanel({ data, onUpdate, onClose }: MenuSetti
                 value={data.body}
                 onChange={(e) => onUpdate({ body: e.target.value })}
                 placeholder="Configure your course menu settings"
-                className="w-full text-sm text-[#374151] px-3 py-2.5 resize-none focus:outline-none placeholder-[#9ca3af] bg-white"
+                className="w-full text-sm text-[var(--life-neutral-700)] px-3 py-2.5 resize-none focus:outline-none placeholder-[var(--life-neutral-400)] bg-white"
               />
             </div>
           </section>
 
           {/* Menu Style */}
           <section className="px-4 py-4 flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-[#374151]">Menu Style</label>
+            <label className="text-xs font-semibold text-[var(--life-neutral-700)]">Menu Style</label>
             <div className="relative">
               <button
                 type="button"
                 onClick={() => { setMenuStyleOpen((o) => !o); setLockTypeOpen(false); }}
-                className="w-full flex items-center justify-between px-3 py-2.5 border border-[#d1d5db] rounded-lg bg-white text-sm text-[#374151] hover:border-[#9ca3af] transition-colors"
+                className="life-btn life-btn--secondary"
               >
                 <span>{data.menuStyle}</span>
                 <svg
                   width="16" height="16" viewBox="0 0 24 24" fill="none"
                   stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                  className={`transition-transform text-[#6b7280] ${menuStyleOpen ? "rotate-180" : ""}`}
+                  className={`transition-transform text-[var(--life-neutral-600)] ${menuStyleOpen ? "rotate-180" : ""}`}
                 >
                   <path d="M6 9l6 6 6-6" />
                 </svg>
               </button>
               {menuStyleOpen && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#e5e7eb] rounded-lg shadow-lg z-20 py-1 overflow-hidden">
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[var(--life-neutral-100)] rounded-lg shadow-lg z-20 py-1 overflow-hidden">
                   {MENU_STYLES.map((style) => (
                     <button
                       key={style}
@@ -199,8 +199,8 @@ export default function MenuSettingsPanel({ data, onUpdate, onClose }: MenuSetti
                       onClick={() => { onUpdate({ menuStyle: style as MenuPageData["menuStyle"] }); setMenuStyleOpen(false); }}
                       className={`w-full text-left px-3 py-2.5 text-sm flex items-center justify-between transition-colors ${
                         data.menuStyle === style
-                          ? "bg-[#dbeeff] text-[#2d6fa8] font-medium"
-                          : "text-[#374151] hover:bg-[#f9fafb]"
+                          ? "bg-[var(--life-primary-100)] text-[var(--life-primary-500)] font-medium"
+                          : "text-[var(--life-neutral-700)] hover:bg-[var(--life-neutral-020)]"
                       }`}
                     >
                       {style}
@@ -218,26 +218,26 @@ export default function MenuSettingsPanel({ data, onUpdate, onClose }: MenuSetti
 
           {/* Menu Lock Type */}
           <section className="px-4 py-4 flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-[#374151]">Menu Lock Type</label>
+            <label className="text-xs font-semibold text-[var(--life-neutral-700)]">Menu Lock Type</label>
             <div className="relative">
               <button
                 type="button"
                 onClick={() => { setLockTypeOpen((o) => !o); setMenuStyleOpen(false); }}
-                className="w-full flex items-center justify-between px-3 py-2.5 border border-[#d1d5db] rounded-lg bg-white text-sm text-[#374151] hover:border-[#9ca3af] transition-colors"
+                className="life-btn life-btn--secondary"
               >
-                <span className={data.menuLockType ? "text-[#374151]" : "text-[#9ca3af]"}>
+                <span className={data.menuLockType ? "text-[var(--life-neutral-700)]" : "text-[var(--life-neutral-400)]"}>
                   {data.menuLockType || "Select lock type"}
                 </span>
                 <svg
                   width="16" height="16" viewBox="0 0 24 24" fill="none"
                   stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                  className={`transition-transform text-[#6b7280] ${lockTypeOpen ? "rotate-180" : ""}`}
+                  className={`transition-transform text-[var(--life-neutral-600)] ${lockTypeOpen ? "rotate-180" : ""}`}
                 >
                   <path d="M6 9l6 6 6-6" />
                 </svg>
               </button>
               {lockTypeOpen && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#e5e7eb] rounded-lg shadow-lg z-20 py-1 overflow-hidden">
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[var(--life-neutral-100)] rounded-lg shadow-lg z-20 py-1 overflow-hidden">
                   {LOCK_TYPES.map((type) => (
                     <button
                       key={type}
@@ -245,8 +245,8 @@ export default function MenuSettingsPanel({ data, onUpdate, onClose }: MenuSetti
                       onClick={() => { onUpdate({ menuLockType: type }); setLockTypeOpen(false); }}
                       className={`w-full text-left px-3 py-2.5 text-sm flex items-center justify-between transition-colors ${
                         data.menuLockType === type
-                          ? "bg-[#dbeeff] text-[#2d6fa8] font-medium"
-                          : "text-[#374151] hover:bg-[#f9fafb]"
+                          ? "bg-[var(--life-primary-100)] text-[var(--life-primary-500)] font-medium"
+                          : "text-[var(--life-neutral-700)] hover:bg-[var(--life-neutral-020)]"
                       }`}
                     >
                       {type}
@@ -264,9 +264,9 @@ export default function MenuSettingsPanel({ data, onUpdate, onClose }: MenuSetti
 
           {/* Text Alignment */}
           <section className="px-4 py-4 flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-[#374151]">Text Alignment</label>
-            <p className="text-xs text-[#9ca3af] -mt-0.5">Title Alignment</p>
-            <div className="flex rounded-lg border border-[#d1d5db] overflow-hidden">
+            <label className="text-xs font-semibold text-[var(--life-neutral-700)]">Text Alignment</label>
+            <p className="text-xs text-[var(--life-neutral-400)] -mt-0.5">Title Alignment</p>
+            <div className="flex rounded-lg border border-[var(--life-neutral-200)] overflow-hidden">
               {(["left", "center", "right"] as TextAlign[]).map((align) => (
                 <button
                   key={align}
@@ -275,9 +275,9 @@ export default function MenuSettingsPanel({ data, onUpdate, onClose }: MenuSetti
                   onClick={() => onUpdate({ textAlign: align })}
                   className={`flex-1 flex items-center justify-center py-2.5 transition-colors ${
                     data.textAlign === align
-                      ? "bg-[#2d6fa8] text-white"
-                      : "bg-white text-[#6b7280] hover:bg-[#f3f4f6]"
-                  } ${align !== "left" ? "border-l border-[#d1d5db]" : ""}`}
+                      ? "bg-[var(--life-primary-500)] text-white"
+                      : "bg-white text-[var(--life-neutral-600)] hover:bg-[var(--life-neutral-050)]"
+                  } ${align !== "left" ? "border-l border-[var(--life-neutral-200)]" : ""}`}
                 >
                   {align === "left" && (
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

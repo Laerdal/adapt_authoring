@@ -79,7 +79,7 @@ export default function AssetSelectionField({
     <div className={compact ? "flex flex-col gap-1.5" : "flex flex-col gap-2"}>
       {showLabel ? (
         <div className="text-[12px] text-[var(--life-base-black)]">
-          {label}{required && <span className="ml-0.5 text-[#dc2626]">*</span>}
+          {label}{required && <span className="ml-0.5 text-[var(--life-critical-600)]">*</span>}
         </div>
       ) : null}
       {previewUrl ? (

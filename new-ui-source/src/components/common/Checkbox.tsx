@@ -11,7 +11,7 @@ export function CheckboxIndicator({ checked, className }: { checked: boolean; cl
       className={
         className ??
         `w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors ${
-          checked ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)]" : "border-[#d1d5db] bg-white"
+          checked ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)]" : "border-[var(--life-neutral-200)] bg-white"
         }`
       }
     >
@@ -43,7 +43,7 @@ export default function Checkbox({
     <label
       className={
         className ??
-        `flex items-start gap-3 py-2 px-2 rounded-lg cursor-pointer group ${disabled ? "opacity-40 pointer-events-none" : "hover:bg-[#f9fafb]"}`
+        `flex items-start gap-3 py-2 px-2 rounded-lg cursor-pointer group ${disabled ? "opacity-40 pointer-events-none" : "hover:bg-[var(--life-neutral-020)]"}`
       }
     >
       <input
@@ -56,7 +56,7 @@ export default function Checkbox({
       />
       <span
         aria-hidden="true"
-        className="mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd] peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--life-primary-500)] peer-focus-visible:ring-offset-1"
+        className="mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[var(--life-neutral-200)] bg-white group-hover:border-[var(--life-primary-300)] peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--life-primary-500)] peer-focus-visible:ring-offset-1"
       >
         {checked && (
           <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
@@ -64,7 +64,7 @@ export default function Checkbox({
           </svg>
         )}
       </span>
-      {label && <span className="text-sm text-[#374151] leading-snug">{label}</span>}
+      {label && <span className="text-sm text-[var(--life-neutral-700)] leading-snug">{label}</span>}
     </label>
   );
 }

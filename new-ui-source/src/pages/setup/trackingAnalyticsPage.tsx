@@ -32,16 +32,15 @@ function CheckboxRow({
   hint?: string;
 }) {
   return (
-    <label className="flex items-start gap-3 py-2 px-2 rounded-lg cursor-pointer select-none group hover:bg-[#f9fafb]">
+    <label className="flex items-start gap-3 py-2 px-2 rounded-lg cursor-pointer select-none group hover:bg-[var(--life-neutral-020)]">
       <input
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
         aria-label={label}
-        className="sr-only peer"
+        className="life-check mt-0.5"
       />
-      <CheckboxIndicator checked={checked} className="mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
-      <span className="text-sm text-[#374151] leading-snug">{label}{hint ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}</span>
+      <span className="text-sm text-[var(--life-neutral-700)] leading-snug">{label}{hint ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}</span>
     </label>
   );
 }
@@ -61,21 +60,18 @@ function SelectField({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <InfoFieldLabel label={label} hint={hint} className="text-[#374151]" />
+      <InfoFieldLabel label={label} hint={hint} className="text-[var(--life-neutral-700)]" />
       <div className="relative">
         <select
           value={value}
           onChange={(e) => onChange(e.target.value)}
           aria-label={label}
-          className="w-full border border-[#e5e7eb] rounded-lg px-3 py-2 text-sm text-[#111827] bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent pr-8"
+          className="life-field"
         >
           {options.map((option) => (
             <option key={option.value} value={option.value}>{option.label}</option>
           ))}
         </select>
-        <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
       </div>
     </div>
   );
@@ -100,7 +96,7 @@ function TextField({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <InfoFieldLabel label={label} hint={hint} className="text-[#374151]" />
+      <InfoFieldLabel label={label} hint={hint} className="text-[var(--life-neutral-700)]" />
       <input
         aria-label={label}
         aria-invalid={!!error}
@@ -108,22 +104,22 @@ function TextField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className={`w-full px-3 py-2 text-sm rounded-lg border bg-white text-[#111827] focus:outline-none focus:ring-2 focus:border-transparent transition-colors ${
-          error ? "border-[#ef4444] focus:ring-[#ef4444]" : "border-[#e5e7eb] focus:ring-[#2d6fa8]"
+        className={`w-full px-3 py-2 text-sm rounded-lg border bg-white text-[var(--life-neutral-850)] focus:outline-none focus:ring-2 focus:border-transparent transition-colors ${
+          error ? "border-[var(--life-critical-500)] focus:ring-[var(--life-critical-500)]" : "border-[var(--life-neutral-100)] focus:ring-[var(--life-primary-500)]"
         }`}
       />
-      {error && <span className="text-xs text-[#dc2626]">{error}</span>}
+      {error && <span className="text-xs text-[var(--life-critical-600)]">{error}</span>}
     </div>
   );
 }
 
 function SectionLabel({ children, hint }: { children: ReactNode; hint?: string }) {
-  return <p className="text-xs font-semibold uppercase tracking-wider text-[#9ca3af] mb-2 mt-1 inline-flex items-center gap-1.5">{children}{hint ? <InfoIcon label={typeof children === "string" ? children : "section"} hint={hint} /> : null}</p>;
+  return <p className="text-xs font-semibold uppercase tracking-wider text-[var(--life-neutral-400)] mb-2 mt-1 inline-flex items-center gap-1.5">{children}{hint ? <InfoIcon label={typeof children === "string" ? children : "section"} hint={hint} /> : null}</p>;
 }
 
 function SubSectionLabel({ children }: { children: ReactNode }) {
   return (
-    <p className="text-xs font-semibold text-[#6b7280] mb-2 flex items-center gap-1.5">
+    <p className="text-xs font-semibold text-[var(--life-neutral-600)] mb-2 flex items-center gap-1.5">
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
         <polyline points="9 18 15 12 9 6" />
       </svg>
@@ -148,12 +144,12 @@ function AccordionCard({
   children: ReactNode;
 }) {
   return (
-    <div className="border border-[#e5e7eb] rounded-xl overflow-hidden bg-white">
+    <div className="border border-[var(--life-neutral-100)] rounded-xl overflow-hidden bg-white">
       <button
         type="button"
         aria-expanded={open}
         onClick={onToggle}
-        className="group w-full px-5 py-4 flex items-center justify-between gap-3 text-left bg-white text-[#111827] hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] transition-colors"
+        className="life-accordion-trigger group !px-5 !min-h-[64px]"
       >
         <div className="flex items-center gap-2.5">
           <span className="text-current">{icon}</span>
@@ -173,7 +169,7 @@ function AccordionCard({
           <polyline points={open ? "6 9 12 15 18 9" : "9 6 15 12 9 18"} />
         </svg>
       </button>
-      {open && <div className="px-[22px] py-[20px] border-t border-[#f3f4f6] space-y-4">{children}</div>}
+      {open && <div className="px-[22px] py-[20px] border-t border-[var(--life-neutral-050)] space-y-4">{children}</div>}
     </div>
   );
 }
@@ -199,14 +195,14 @@ function PluginRadio({
       aria-checked={selected}
       onClick={onSelect}
       className={`w-full flex items-start gap-3 py-2.5 px-3 rounded-lg border text-left transition-colors ${
-        selected ? "border-[#2d6fa8] bg-[#f0f7ff]" : "border-[#e5e7eb] hover:border-[#93c5fd] hover:bg-[#f9fafb]"
+        selected ? "border-[var(--life-primary-500)] bg-[var(--life-primary-020)]" : "border-[var(--life-neutral-100)] hover:border-[var(--life-primary-300)] hover:bg-[var(--life-neutral-020)]"
       }`}
     >
-      <span className={`mt-0.5 w-4 h-4 rounded-full shrink-0 border-2 flex items-center justify-center ${selected ? "border-[#2d6fa8]" : "border-[#d1d5db]"}`}>
-        {selected && <span className="w-2 h-2 rounded-full bg-[#2d6fa8]" />}
+      <span className={`mt-0.5 w-4 h-4 rounded-full shrink-0 border-2 flex items-center justify-center ${selected ? "border-[var(--life-primary-500)]" : "border-[var(--life-neutral-500)]"}`}>
+        {selected && <span className="w-2 h-2 rounded-full bg-[var(--life-primary-500)]" />}
       </span>
       <span>
-        <span className="block text-sm font-semibold text-[#111827]">{label}{hint ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}</span>
+        <span className="block text-sm font-semibold text-[var(--life-neutral-850)]">{label}{hint ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}</span>
       </span>
     </button>
   );
@@ -827,12 +823,12 @@ function DeploymentModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onCancel}>
       <div className="bg-white rounded-xl shadow-xl w-full max-w-sm mx-4 p-6" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-base font-semibold text-[#111827] mb-4">
+        <h3 className="text-base font-semibold text-[var(--life-neutral-850)] mb-4">
           {type === "standard" ? "Add Standard entry" : "Add ECL entry"}
         </h3>
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <span className="text-xs font-semibold text-[#374151]">Deployment URL</span>
+            <span className="text-xs font-semibold text-[var(--life-neutral-700)]">Deployment URL</span>
             <input
               type="text"
               value={deploymentURL}
@@ -843,20 +839,20 @@ function DeploymentModal({
               }}
               placeholder="https://..."
               aria-invalid={!!deploymentUrlError}
-              className={`w-full px-3 py-2 text-sm rounded-lg border bg-white text-[#111827] focus:outline-none focus:ring-2 focus:border-transparent ${
-                deploymentUrlError ? "border-[#ef4444] focus:ring-[#ef4444]" : "border-[#e5e7eb] focus:ring-[#2d6fa8]"
+              className={`w-full px-3 py-2 text-sm rounded-lg border bg-white text-[var(--life-neutral-850)] focus:outline-none focus:ring-2 focus:border-transparent ${
+                deploymentUrlError ? "border-[var(--life-critical-500)] focus:ring-[var(--life-critical-500)]" : "border-[var(--life-neutral-100)] focus:ring-[var(--life-primary-500)]"
               }`}
             />
-            {deploymentUrlError && <span className="text-xs text-[#dc2626]">{deploymentUrlError}</span>}
+            {deploymentUrlError && <span className="text-xs text-[var(--life-critical-600)]">{deploymentUrlError}</span>}
           </div>
           {type === "standard" && (
             <div className="flex flex-col gap-1.5">
-              <span className="text-xs font-semibold text-[#374151]">Region</span>
+              <span className="text-xs font-semibold text-[var(--life-neutral-700)]">Region</span>
               <div className="relative">
                 <select
                   value={region}
                   onChange={(e) => setRegion(e.target.value)}
-                  className="w-full border border-[#e5e7eb] rounded-lg px-3 py-2 text-sm text-[#111827] bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent pr-8"
+                  className="life-field"
                 >
                   <option value="US">US</option>
                   <option value="EU">EU</option>
@@ -867,12 +863,12 @@ function DeploymentModal({
             </div>
           )}
           <div className="flex flex-col gap-1.5">
-            <span className="text-xs font-semibold text-[#374151]">Course data</span>
+            <span className="text-xs font-semibold text-[var(--life-neutral-700)]">Course data</span>
             <div className="relative">
               <select
                 value={environment}
                 onChange={(e) => setEnvironment(e.target.value)}
-                className="w-full border border-[#e5e7eb] rounded-lg px-3 py-2 text-sm text-[#111827] bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent pr-8"
+                className="life-field"
               >
                 <option value="PRODUCTION">PRODUCTION</option>
                 <option value="TESTING">TESTING</option>
@@ -885,7 +881,7 @@ function DeploymentModal({
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors"
+            className="life-btn life-btn--secondary"
           >
             Cancel
           </button>
@@ -904,7 +900,7 @@ function DeploymentModal({
                 onConfirm({ deploymentURL: deploymentURL.trim(), environment });
               }
             }}
-            className="px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245a8a] rounded-lg transition-colors"
+            className="life-btn life-btn--primary"
           >
             OK
           </button>
@@ -931,29 +927,29 @@ function DeploymentListField({
 }) {
   return (
     <div className="flex flex-col gap-2">
-      <span className="text-xs font-semibold uppercase tracking-wider text-[#9ca3af]">{label}</span>
+      <span className="text-xs font-semibold uppercase tracking-wider text-[var(--life-neutral-400)]">{label}</span>
       {items.length > 0 && (
         <div className="flex flex-col gap-2">
           {items.map((item, index) => (
-            <div key={index} className="border border-[#e5e7eb] rounded-lg px-3 py-2.5 bg-[#f9fafb] relative pr-8">
+            <div key={index} className="border border-[var(--life-neutral-100)] rounded-lg px-3 py-2.5 bg-[var(--life-neutral-020)] relative pr-8">
               <button
                 type="button"
                 onClick={() => onRemove(index)}
                 aria-label="Remove entry"
-                className="absolute top-2 right-2 text-[#9ca3af] hover:text-[#ef4444] transition-colors p-0.5"
+                className="absolute top-2 right-2 text-[var(--life-neutral-400)] hover:text-[var(--life-critical-500)] transition-colors p-0.5"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
               </button>
-              <p className="text-xs text-[#374151]">
+              <p className="text-xs text-[var(--life-neutral-700)]">
                 <span className="font-semibold">Deployment URL:</span>{" "}
-                <span className="break-all">{item.deploymentURL || <span className="text-[#9ca3af] italic">empty</span>}</span>
+                <span className="break-all">{item.deploymentURL || <span className="text-[var(--life-neutral-400)] italic">empty</span>}</span>
               </p>
               {type === "standard" && "region" in item && (
-                <p className="text-xs text-[#374151] mt-0.5"><span className="font-semibold">Region:</span> {item.region}</p>
+                <p className="text-xs text-[var(--life-neutral-700)] mt-0.5"><span className="font-semibold">Region:</span> {item.region}</p>
               )}
-              <p className="text-xs text-[#374151] mt-0.5"><span className="font-semibold">Course data:</span> {item.environment}</p>
+              <p className="text-xs text-[var(--life-neutral-700)] mt-0.5"><span className="font-semibold">Course data:</span> {item.environment}</p>
             </div>
           ))}
         </div>
@@ -961,14 +957,14 @@ function DeploymentListField({
       <button
         type="button"
         onClick={onAdd}
-        className="self-start inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245a8a] rounded-lg transition-colors"
+        className="life-btn life-btn--primary"
       >
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
         </svg>
         Add
       </button>
-      {error && <span className="text-xs text-[#dc2626]">{error}</span>}
+      {error && <span className="text-xs text-[var(--life-critical-600)]">{error}</span>}
     </div>
   );
 }
@@ -1229,11 +1225,11 @@ export function TrackingAnalyticsPage({
   return (
     <>
       <SaveStatusToast toast={saveSuccess ? { type: "success", message: "Changes saved successfully" } : null} onDismiss={() => setSaveSuccess(false)} />
-      <div className="flex flex-col h-full w-full bg-[#f7f9fb]">
-        <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-center gap-4">
+      <div className="flex flex-col h-full w-full bg-[var(--life-neutral-020)]">
+        <div className="shrink-0 px-6 py-5 bg-white border-b border-[var(--life-neutral-100)] flex items-center gap-4">
           <div>
-            <h2 className="text-xl font-bold text-[#111827]">Tracking &amp; Analytics</h2>
-            <p className="text-sm text-[#6b7280] mt-0.5">Configure LMS tracking standards and analytics integrations for this course.</p>
+            <h2 className="text-xl font-bold text-[var(--life-neutral-850)]">Tracking &amp; Analytics</h2>
+            <p className="text-sm text-[var(--life-neutral-600)] mt-0.5">Configure LMS tracking standards and analytics integrations for this course.</p>
           </div>
           <div className="ml-auto">
             <SaveChangesButton dirty={hasChanges} saving={isSaving} disabled={!courseId} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
@@ -1258,7 +1254,7 @@ export function TrackingAnalyticsPage({
           {trackingPlugin === "scorm" && (
             <div className="mt-4 flex flex-col gap-4">
               <SectionLabel hint={getSchemaHint(spoorConfigSchema)}>{getSchemaLabel(spoorConfigSchema, "SCORM (SPOOR) Settings")}</SectionLabel>
-              <div className="ml-4 pl-3 border-l-2 border-[#e5e7eb]">
+              <div className="ml-4 pl-3 border-l-2 border-[var(--life-neutral-100)]">
                 <SubSectionLabel>Tracking</SubSectionLabel>
                 <CheckboxRow checked={scorm.shouldStoreResponses} onChange={(v) => setScorm((prev) => ({ ...prev, shouldStoreResponses: v }))} label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_tracking", "_shouldStoreResponses"), "Store question state")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_tracking", "_shouldStoreResponses"))} />
                 <CheckboxRow checked={scorm.shouldStoreAttempts} onChange={(v) => setScorm((prev) => ({ ...prev, shouldStoreAttempts: v }))} label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_tracking", "_shouldStoreAttempts"), "Store question attempt states")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_tracking", "_shouldStoreAttempts"))} />
@@ -1267,7 +1263,7 @@ export function TrackingAnalyticsPage({
                 <CheckboxRow checked={scorm.shouldCompress} onChange={(v) => setScorm((prev) => ({ ...prev, shouldCompress: v }))} label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_tracking", "_shouldCompress"), "Should compress data")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_tracking", "_shouldCompress"))} />
               </div>
 
-              <div className="ml-4 pl-3 border-l-2 border-[#e5e7eb] flex flex-col gap-3">
+              <div className="ml-4 pl-3 border-l-2 border-[var(--life-neutral-100)] flex flex-col gap-3">
                 <SubSectionLabel>Reporting</SubSectionLabel>
                 <SelectField
                   label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_reporting", "_onTrackingCriteriaMet"), "Tracking success status")}
@@ -1345,7 +1341,7 @@ export function TrackingAnalyticsPage({
               <TextField label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_maxCharLimitOverride"), "Override value for maximum character limit on fill-in type answers")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_maxCharLimitOverride"))} type="number" value={scorm.fillInCharacterLimit} onChange={(value) => setScorm((prev) => ({ ...prev, fillInCharacterLimit: value }))} />
 
               <SectionLabel hint={getSchemaHint(getSchemaNode(spoorSchema, "_advancedSettings", "_connectionTest"))}>Connection Test</SectionLabel>
-              <div className="ml-4 pl-3 border-l-2 border-[#e5e7eb] flex flex-col gap-3">
+              <div className="ml-4 pl-3 border-l-2 border-[var(--life-neutral-100)] flex flex-col gap-3">
                 <CheckboxRow checked={scorm.connectionTestEnabled} onChange={(v) => setScorm((prev) => ({ ...prev, connectionTestEnabled: v }))} label={getSchemaLabel(getSchemaNode(spoorSchema, "_advancedSettings", "_connectionTest", "_isEnabled"), "Is Enabled")} hint={getSchemaHint(getSchemaNode(spoorSchema, "_advancedSettings", "_connectionTest", "_isEnabled"))} />
                 <CheckboxRow checked={scorm.connectionTestOnSetValue} onChange={(v) => setScorm((prev) => ({ ...prev, connectionTestOnSetValue: v }))} label={getSchemaLabel(getSchemaNode(spoorSchema, "_advancedSettings", "_connectionTest", "_testOnSetValue"), "Test on set value")} hint={getSchemaHint(getSchemaNode(spoorSchema, "_advancedSettings", "_connectionTest", "_testOnSetValue"))} />
                 <TextField label={getSchemaLabel(getSchemaNode(spoorSchema, "_advancedSettings", "_connectionTest", "_silentRetryLimit"), "Silent Retry Limit")} hint={getSchemaHint(getSchemaNode(spoorSchema, "_advancedSettings", "_connectionTest", "_silentRetryLimit"))} type="number" value={scorm.silentRetryLimit} onChange={(value) => setScorm((prev) => ({ ...prev, silentRetryLimit: value }))} />
@@ -1385,28 +1381,28 @@ export function TrackingAnalyticsPage({
               <CheckboxRow checked={xapi.shouldUseRegistration} onChange={(v) => setXapi((prev) => ({ ...prev, shouldUseRegistration: v }))} label={getSchemaLabel(getSchemaNode(xapiConfigSchema, "_shouldUseRegistration"), "Use registration")} hint={getSchemaHint(getSchemaNode(xapiConfigSchema, "_shouldUseRegistration"))} />
 
               <SectionLabel>Core Events</SectionLabel>
-              <div className="ml-4 pl-3 border-l-2 border-[#e5e7eb] flex flex-col gap-3">
+              <div className="ml-4 pl-3 border-l-2 border-[var(--life-neutral-100)] flex flex-col gap-3">
                 <SubSectionLabel>Adapt</SubSectionLabel>
-                <div className="ml-4 pl-3 border-l-2 border-[#f3f4f6] flex flex-col gap-3">
+                <div className="ml-4 pl-3 border-l-2 border-[var(--life-neutral-050)] flex flex-col gap-3">
                   <CheckboxRow checked={xapi.adaptRouterMenu} onChange={(v) => setXapi((prev) => ({ ...prev, adaptRouterMenu: v }))} label="router:menu" />
                   <CheckboxRow checked={xapi.adaptRouterPage} onChange={(v) => setXapi((prev) => ({ ...prev, adaptRouterPage: v }))} label="router:page" />
                   <CheckboxRow checked={xapi.adaptRecordInteraction} onChange={(v) => setXapi((prev) => ({ ...prev, adaptRecordInteraction: v }))} label="questionView:recordInteraction" />
                   <CheckboxRow checked={xapi.adaptAssessComplete} onChange={(v) => setXapi((prev) => ({ ...prev, adaptAssessComplete: v }))} label="assessments:complete" />
                 </div>
                 <SubSectionLabel>contentObjects</SubSectionLabel>
-                <div className="ml-4 pl-3 border-l-2 border-[#f3f4f6] flex flex-col gap-3">
+                <div className="ml-4 pl-3 border-l-2 border-[var(--life-neutral-050)] flex flex-col gap-3">
                   <CheckboxRow checked={xapi.contentObjectIsComplete} onChange={(v) => setXapi((prev) => ({ ...prev, contentObjectIsComplete: v }))} label="change:_isComplete" />
                 </div>
                 <SubSectionLabel>articles</SubSectionLabel>
-                <div className="ml-4 pl-3 border-l-2 border-[#f3f4f6] flex flex-col gap-3">
+                <div className="ml-4 pl-3 border-l-2 border-[var(--life-neutral-050)] flex flex-col gap-3">
                   <CheckboxRow checked={xapi.articleIsComplete} onChange={(v) => setXapi((prev) => ({ ...prev, articleIsComplete: v }))} label="change:_isComplete" />
                 </div>
                 <SubSectionLabel>blocks</SubSectionLabel>
-                <div className="ml-4 pl-3 border-l-2 border-[#f3f4f6] flex flex-col gap-3">
+                <div className="ml-4 pl-3 border-l-2 border-[var(--life-neutral-050)] flex flex-col gap-3">
                   <CheckboxRow checked={xapi.blockIsComplete} onChange={(v) => setXapi((prev) => ({ ...prev, blockIsComplete: v }))} label="change:_isComplete" />
                 </div>
                 <SubSectionLabel>components</SubSectionLabel>
-                <div className="ml-4 pl-3 border-l-2 border-[#f3f4f6] flex flex-col gap-3">
+                <div className="ml-4 pl-3 border-l-2 border-[var(--life-neutral-050)] flex flex-col gap-3">
                   <CheckboxRow checked={xapi.componentIsComplete} onChange={(v) => setXapi((prev) => ({ ...prev, componentIsComplete: v }))} label="change:_isComplete" />
                 </div>
               </div>
@@ -1427,14 +1423,14 @@ export function TrackingAnalyticsPage({
           {trackingPlugin === "hyperbridge" && (
             <div className="mt-4 flex flex-col gap-4">
               <SectionLabel hint={getSchemaHint(hyperConfigSchema)}>{getSchemaLabel(hyperConfigSchema, "HyperBridge Settings")}</SectionLabel>
-              <div className="ml-4 pl-3 border-l-2 border-[#e5e7eb] flex flex-col gap-3">
+              <div className="ml-4 pl-3 border-l-2 border-[var(--life-neutral-100)] flex flex-col gap-3">
                 <SubSectionLabel>Tracking</SubSectionLabel>
                 <CheckboxRow checked={hyper.shouldStoreResponses} onChange={(v) => setHyper((prev) => ({ ...prev, shouldStoreResponses: v }))} label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_tracking", "_shouldStoreResponses"), "Store question state")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_tracking", "_shouldStoreResponses"))} />
                 <CheckboxRow checked={hyper.shouldStoreAttempts} onChange={(v) => setHyper((prev) => ({ ...prev, shouldStoreAttempts: v }))} label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_tracking", "_shouldStoreAttempts"), "Store question attempt states")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_tracking", "_shouldStoreAttempts"))} />
                 <CheckboxRow checked={hyper.shouldCompress} onChange={(v) => setHyper((prev) => ({ ...prev, shouldCompress: v }))} label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_tracking", "_shouldCompress"), "Should compress data")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_tracking", "_shouldCompress"))} />
               </div>
 
-              <div className="ml-4 pl-3 border-l-2 border-[#e5e7eb] flex flex-col gap-3">
+              <div className="ml-4 pl-3 border-l-2 border-[var(--life-neutral-100)] flex flex-col gap-3">
                 <SubSectionLabel>Reporting</SubSectionLabel>
                 <SelectField
                   label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_reporting", "_onTrackingCriteriaMet"), "Tracking success status")}
@@ -1505,7 +1501,7 @@ export function TrackingAnalyticsPage({
               <TextField label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_maxCharLimitOverride"), "Override value for maximum character limit on fill-in type answers")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_maxCharLimitOverride"))} type="number" value={hyper.fillInCharacterLimit} onChange={(value) => setHyper((prev) => ({ ...prev, fillInCharacterLimit: value }))} />
 
               <SectionLabel hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_connectionTest"))}>Connection Test</SectionLabel>
-              <div className="ml-4 pl-3 border-l-2 border-[#e5e7eb] flex flex-col gap-3">
+              <div className="ml-4 pl-3 border-l-2 border-[var(--life-neutral-100)] flex flex-col gap-3">
                 <CheckboxRow checked={hyper.connectionTestEnabled} onChange={(v) => setHyper((prev) => ({ ...prev, connectionTestEnabled: v }))} label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_connectionTest", "_isEnabled"), "Is Enabled")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_connectionTest", "_isEnabled"))} />
                 <CheckboxRow checked={hyper.connectionTestOnSetValue} onChange={(v) => setHyper((prev) => ({ ...prev, connectionTestOnSetValue: v }))} label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_connectionTest", "_testOnSetValue"), "Test on set value")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_connectionTest", "_testOnSetValue"))} />
                 <TextField label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_connectionTest", "_silentRetryLimit"), "Silent Retry Limit")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_connectionTest", "_silentRetryLimit"))} type="number" value={hyper.silentRetryLimit} onChange={(value) => setHyper((prev) => ({ ...prev, silentRetryLimit: value }))} />

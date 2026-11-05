@@ -268,7 +268,7 @@ export default function ImageCropper({ src, aspectRatio, onApply, onCancel }: Im
       {/* Frame */}
       <div
         ref={frameRef}
-        className="relative overflow-hidden rounded-xl select-none border border-[#d1d5db] bg-[#1a1a1a]"
+        className="relative overflow-hidden rounded-xl select-none border border-[var(--life-neutral-200)] bg-[var(--life-base-black)]"
         style={{ width: FRAME_W, height: FRAME_H, maxWidth: "100%", touchAction: "none", cursor }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMoveForCursor}
@@ -382,7 +382,7 @@ export default function ImageCropper({ src, aspectRatio, onApply, onCancel }: Im
       </div>
 
       {/* Size readout + reset */}
-      <div className="flex items-center justify-between text-xs text-[#6b7280]">
+      <div className="flex items-center justify-between text-xs text-[var(--life-neutral-600)]">
         <span>
           {imgSize.w > 0
             ? `${Math.round(crop.w / imgScale)} × ${Math.round(crop.h / imgScale)} px`
@@ -391,7 +391,7 @@ export default function ImageCropper({ src, aspectRatio, onApply, onCancel }: Im
         <button
           type="button"
           onClick={reset}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#e5e7eb] bg-white hover:bg-[#f3f4f6] text-[#374151] text-xs font-medium transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--life-neutral-100)] bg-white hover:bg-[var(--life-neutral-050)] text-[var(--life-neutral-700)] text-xs font-medium transition-colors"
         >
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" />
@@ -405,14 +405,14 @@ export default function ImageCropper({ src, aspectRatio, onApply, onCancel }: Im
         <button
           type="button"
           onClick={onCancel}
-          className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors"
+          className="px-4 py-2 text-sm font-medium text-[var(--life-neutral-700)] bg-white border border-[var(--life-neutral-200)] rounded-lg hover:bg-[var(--life-neutral-020)] transition-colors"
         >
           Cancel
         </button>
         <button
           type="button"
           onClick={apply}
-          className="px-4 py-2 text-sm font-medium text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors"
+          className="px-4 py-2 text-sm font-medium text-white bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-600)] rounded-lg transition-colors"
         >
           Apply Crop
         </button>

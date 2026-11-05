@@ -6,6 +6,7 @@ import TagOverflowList from "@/components/common/TagOverflowList";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import ErrorDialog from "@/components/common/ErrorDialog";
 import { stripHtmlToText } from "@/utils/format";
+import { lifeButtonClass } from "@/components/common/Button";
 
 interface CourseCardProps {
   id: number;
@@ -122,14 +123,15 @@ export default function CourseCard({
 
   /* Shared 3-dot menu dropdown */
   const MoreMenu = () => (
-    <div ref={menuRef} className="absolute z-30 bg-white border border-[#e5e7eb] rounded-xl shadow-xl py-1 w-52"
-      style={view === "grid" ? { top: "calc(100% + 4px)", right: 0 } : { top: "calc(100% + 4px)", right: 0 }}
+    <div ref={menuRef} role="menu" className="life-menu absolute z-30 w-52"
+      style={{ top: "calc(100% + 4px)", right: 0 }}
     >
       {/* Duplicate Course */}
       <button
         type="button"
+        role="menuitem"
         onClick={() => handleMenuAction(onCopy)}
-        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-[#374151] hover:bg-[#f9fafb] transition-colors"
+        className="life-menu-item"
       >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
           <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
@@ -141,8 +143,9 @@ export default function CourseCard({
       {/* Copy ID */}
       <button
         type="button"
+        role="menuitem"
         onClick={() => handleMenuAction(onCopyId)}
-        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-[#374151] hover:bg-[#f9fafb] transition-colors"
+        className="life-menu-item"
       >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
           <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
@@ -150,8 +153,6 @@ export default function CourseCard({
         </svg>
         Copy ID to Clipboard
       </button>
-
-      <div className="border-t border-[#f3f4f6] my-1" />
     </div>
   );
 
@@ -162,6 +163,8 @@ export default function CourseCard({
         type="button"
         onClick={(e) => { e.preventDefault(); setMenuOpen((o) => !o); }}
         aria-label="Course options"
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
         title="Course options"
         className={className}
       >
@@ -182,7 +185,7 @@ export default function CourseCard({
 
       {view === "grid" ? (
         /* ── GRID CARD ── */
-        <div className="bg-white rounded-xl border border-[#e5e7eb] overflow-visible flex flex-col shadow-sm hover:shadow-md transition-shadow group">
+        <div className="life-card overflow-visible group">
           {/* Thumbnail */}
           <div className="h-44 flex items-center justify-center relative rounded-t-xl overflow-hidden" style={thumbnailStyle}>
             {!imageUrl && <span className="w-12 h-12">{placeholderIcon}</span>}
@@ -192,7 +195,7 @@ export default function CourseCard({
               onClick={openModal}
               aria-label="Edit course details"
               title="Edit course details"
-              className="p-1.5 rounded-lg bg-white/90 hover:bg-white text-[#2d6fa8] shadow-sm"
+              className="life-icon-btn life-icon-btn--sm life-icon-btn--outlined text-[var(--life-primary-600)] shadow-sm"
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -211,7 +214,7 @@ export default function CourseCard({
               }}
               aria-label="Delete course"
               title="Delete course"
-              className="p-1.5 rounded-lg bg-white/90 hover:bg-white text-[#ef4444] shadow-sm"
+              className="life-icon-btn life-icon-btn--sm life-icon-btn--outlined life-icon-btn--critical text-[var(--life-critical-500)] shadow-sm"
             >
               <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round">
                 {/* delete-icon.svg */}
@@ -228,15 +231,17 @@ export default function CourseCard({
           {/* Body */}
           <div className="px-4 pt-3 pb-4 flex flex-col flex-1 gap-2">
             <div className="flex items-start justify-between gap-2">
-              <h3 title={title} className="font-bold text-[#111827] text-sm leading-snug line-clamp-2 flex-1">{title}</h3>
+              <h3 title={title} className="font-bold text-[var(--life-neutral-850)] text-sm leading-snug line-clamp-2 flex-1">{title}</h3>
               {/* 3-dot menu — grid */}
               <div className="relative shrink-0 -mt-0.5">
                 <button
                   type="button"
                   onClick={(e) => { e.preventDefault(); setMenuOpen((o) => !o); }}
                   aria-label="Course options"
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpen}
                   title="Course options"
-                  className="p-1.5 rounded-lg text-[#6b7280] hover:text-[#374151] hover:bg-[#f3f4f6] transition-colors"
+                  className="life-icon-btn life-icon-btn--sm"
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                     <circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" />
@@ -245,16 +250,16 @@ export default function CourseCard({
                 {menuOpen && <MoreMenu />}
               </div>
             </div>
-            <p title={displayDescription} className="text-xs text-[#6b7280] leading-relaxed line-clamp-2 flex-1">{displayDescription}</p>
+            <p title={displayDescription} className="text-xs text-[var(--life-neutral-600)] leading-relaxed line-clamp-2 flex-1">{displayDescription}</p>
             <TagOverflowList tags={tags} />
-            <div className="flex items-center gap-1.5 text-xs text-[#9ca3af]">
+            <div className="flex items-center gap-1.5 text-xs text-[var(--life-neutral-400)]">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
               </svg>
               Saved {savedDate}
             </div>
             {showAuthor && authorName && (
-              <div className="flex items-center gap-1.5 text-xs text-[#6b7280]">
+              <div className="flex items-center gap-1.5 text-xs text-[var(--life-neutral-600)]">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M20 21a8 8 0 0 0-16 0" />
                   <circle cx="12" cy="7" r="4" />
@@ -264,7 +269,7 @@ export default function CourseCard({
             )}
             <Link
               to={viewHref}
-              className="mt-1 w-full py-2.5 rounded-lg bg-[#2d6fa8] hover:bg-[#245c8f] text-white text-sm font-medium transition-colors text-center"
+              className={lifeButtonClass("primary", "md", "mt-1 w-full")}
             >
               Open Course
             </Link>
@@ -272,7 +277,7 @@ export default function CourseCard({
         </div>
       ) : (
         /* ── LIST ROW ── */
-        <div className="bg-white rounded-xl border border-[#e5e7eb] flex items-center gap-4 px-4 py-3 shadow-sm hover:shadow-md hover:border-[#d1d5db] transition-all group">
+        <div className="bg-white rounded-xl border border-[var(--life-neutral-100)] flex items-center gap-4 px-4 py-3 shadow-sm hover:shadow-md hover:border-[var(--life-neutral-200)] transition-all group">
           {/* Thumbnail */}
           <div className="w-16 h-16 rounded-lg flex items-center justify-center shrink-0 relative overflow-hidden" style={thumbnailStyle}>
             {!imageUrl && <span className="w-7 h-7 block">{placeholderIcon}</span>}
@@ -280,17 +285,17 @@ export default function CourseCard({
 
           {/* Main content */}
           <div className="flex-1 min-w-0">
-            <h3 title={title} className="font-semibold text-[#111827] text-sm leading-snug truncate">{title}</h3>
-            <p title={displayDescription} className="text-xs text-[#6b7280] mt-0.5 line-clamp-1 leading-relaxed">{displayDescription}</p>
+            <h3 title={title} className="font-semibold text-[var(--life-neutral-850)] text-sm leading-snug truncate">{title}</h3>
+            <p title={displayDescription} className="text-xs text-[var(--life-neutral-600)] mt-0.5 line-clamp-1 leading-relaxed">{displayDescription}</p>
             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-              <div className="flex items-center gap-1 text-xs text-[#9ca3af]">
+              <div className="flex items-center gap-1 text-xs text-[var(--life-neutral-400)]">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
                 </svg>
                 Saved {savedDate}
               </div>
               {showAuthor && authorName && (
-                <div className="flex items-center gap-1 text-xs text-[#6b7280]">
+                <div className="flex items-center gap-1 text-xs text-[var(--life-neutral-600)]">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M20 21a8 8 0 0 0-16 0" />
                     <circle cx="12" cy="7" r="4" />
@@ -309,7 +314,7 @@ export default function CourseCard({
               onClick={openModal}
               aria-label="Edit course details"
               title="Edit course details"
-              className="p-2 rounded-lg border border-[#e5e7eb] bg-white hover:bg-[#f3f4f6] text-[#6b7280] hover:text-[#2d6fa8] transition-colors"
+              className="life-icon-btn life-icon-btn--outlined"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -329,7 +334,7 @@ export default function CourseCard({
               }}
               aria-label="Delete course"
               title="Delete course"
-              className="p-2 rounded-lg border border-[#e5e7eb] bg-white hover:bg-[#fef2f2] text-[#6b7280] hover:text-[#ef4444] transition-colors"
+              className="life-icon-btn life-icon-btn--outlined life-icon-btn--critical"
             >
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round">
                 {/* delete-icon.svg */}
@@ -342,11 +347,11 @@ export default function CourseCard({
             </button>
 
             {/* 3-dot — list */}
-            <MoreButton className="p-2 rounded-lg border border-[#e5e7eb] bg-white hover:bg-[#f3f4f6] text-[#6b7280] hover:text-[#374151] transition-colors" />
+            <MoreButton className="life-icon-btn life-icon-btn--outlined" />
 
             <Link
               to={viewHref}
-              className="px-4 py-2 rounded-lg bg-[#2d6fa8] hover:bg-[#245c8f] text-white text-xs font-semibold transition-colors whitespace-nowrap"
+              className={lifeButtonClass("primary")}
             >
               View Course
             </Link>
@@ -366,12 +371,12 @@ export default function CourseCard({
           }}
         >
           <div className={`bg-white rounded-2xl shadow-xl flex flex-col min-h-0 ${cropSrc ? "w-full max-w-xl max-h-[calc(100vh-2rem)] overflow-y-auto" : "w-full max-w-md max-h-[calc(100vh-2rem)] overflow-hidden"}`}>
-            <div className="flex items-center justify-between px-5 py-4 border-b border-[#e5e7eb] shrink-0">
-              <h2 className="font-semibold text-[#111827] text-base">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--life-neutral-100)] shrink-0">
+              <h2 className="font-semibold text-[var(--life-neutral-850)] text-base">
                 {cropSrc ? "Crop & Adjust Image" : "Edit Course Details"}
               </h2>
               {!cropSrc && (
-                <button type="button" onClick={() => setModalOpen(false)} className="p-1.5 rounded-lg hover:bg-[#f3f4f6] text-[#6b7280] transition-colors" aria-label="Close">
+                <button type="button" onClick={() => setModalOpen(false)} className="p-1.5 rounded-lg hover:bg-[var(--life-neutral-050)] text-[var(--life-neutral-600)] transition-colors" aria-label="Close">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                   </svg>
@@ -393,24 +398,24 @@ export default function CourseCard({
             <>
             <div className="px-5 py-5 flex flex-col gap-4 overflow-y-auto min-h-0">
               <div>
-                <label className="block text-sm font-medium text-[#374151] mb-2">Cover Image</label>
+                <label className="block text-sm font-medium text-[var(--life-neutral-700)] mb-2">Cover Image</label>
                 {/* Preview + actions row when image exists */}
                 {editImage ? (
                   <div className="flex flex-col gap-2">
-                    <div className="h-36 rounded-xl relative overflow-hidden border border-[#e5e7eb]"
+                    <div className="h-36 rounded-xl relative overflow-hidden border border-[var(--life-neutral-100)]"
                       style={{ backgroundImage: `url(${editImage})`, backgroundSize: "cover", backgroundPosition: "center" }}>
                       <div className="absolute inset-0 bg-black/0 hover:bg-black/25 transition-colors" />
                     </div>
                     <div className="flex items-center gap-2">
                       <button type="button" onClick={() => setAssetPickerOpen(true)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#374151] border border-[#d1d5db] rounded-lg hover:bg-[#f3f4f6] transition-colors">
+                        className="life-btn life-btn--secondary">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" />
                         </svg>
                         Change
                       </button>
                       <button type="button" onClick={handleRemoveImage}
-                        className="ml-auto text-xs text-[#ef4444] hover:text-[#dc2626] font-medium transition-colors">
+                        className="ml-auto text-xs text-[var(--life-critical-500)] hover:text-[var(--life-critical-600)] font-medium transition-colors">
                         Remove image
                       </button>
                     </div>
@@ -418,7 +423,7 @@ export default function CourseCard({
                 ) : (
                   <button
                     type="button"
-                    className="h-36 w-full rounded-xl flex flex-col items-center justify-center border-2 border-dashed border-[#d1d5db] hover:border-[#2d6fa8] transition-colors cursor-pointer relative overflow-hidden"
+                    className="h-36 w-full rounded-xl flex flex-col items-center justify-center border-2 border-dashed border-[var(--life-neutral-200)] hover:border-[var(--life-primary-500)] transition-colors cursor-pointer relative overflow-hidden"
                     style={{ background: "linear-gradient(135deg, #2d6fa8 0%, #3498a0 60%, #4db0b8 100%)" }}
                     onClick={() => setAssetPickerOpen(true)}
                     aria-label="Select cover image from asset library"
@@ -433,37 +438,37 @@ export default function CourseCard({
               </div>
 
               <div>
-                <label htmlFor={`course-title-${id}`} className="block text-sm font-medium text-[#374151] mb-1.5">Course Title</label>
+                <label htmlFor={`course-title-${id}`} className="block text-sm font-medium text-[var(--life-neutral-700)] mb-1.5">Course Title</label>
                 <input type="text" id={`course-title-${id}`} value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
                   aria-invalid={!trimmedTitle}
                   aria-describedby={!trimmedTitle ? `course-title-error-${id}` : undefined}
-                  className={`w-full px-3 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent text-[#111827] ${!trimmedTitle ? "border-[#ef4444] focus:ring-[#ef4444]" : "border-[#d1d5db] focus:ring-[#2d6fa8]"}`}
+                  className="life-field"
                   placeholder="Enter course title" />
                 {!trimmedTitle && (
-                  <p id={`course-title-error-${id}`} className="mt-1 text-xs text-[#ef4444]">Course title is required.</p>
+                  <p id={`course-title-error-${id}`} className="mt-1 text-xs text-[var(--life-critical-500)]">Course title is required.</p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
+                <label className="block text-sm font-medium text-[var(--life-neutral-700)] mb-1.5">Description</label>
                 <textarea value={editDesc} onChange={(e) => setEditDesc(e.target.value)} rows={3}
-                  className="w-full px-3 py-2.5 text-sm border border-[#d1d5db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent text-[#111827] resize-none"
+                  className="life-field"
                   placeholder="Enter course description" />
               </div>
 
               {/* Tags */}
               <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1.5">Tags</label>
+                <label className="block text-sm font-medium text-[var(--life-neutral-700)] mb-1.5">Tags</label>
                 {editTags.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mb-2">
                     {editTags.map((tag) => (
-                      <span key={tag} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-[#dbeeff] text-[#1e4d73]">
+                      <span key={tag} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-[var(--life-primary-100)] text-[var(--life-primary-800)]">
                         {tag}
                         <button
                           type="button"
                           onClick={() => removeTag(tag)}
                           aria-label={`Remove tag ${tag}`}
-                          className="text-[#1e4d73]/60 hover:text-[#1e4d73] transition-colors"
+                          className="text-[var(--life-primary-800)]/60 hover:text-[var(--life-primary-800)] transition-colors"
                         >
                           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                             <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -484,13 +489,13 @@ export default function CourseCard({
                     }}
                     onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTag(); } }}
                     placeholder="Add a tag and press Enter"
-                    className="flex-1 px-3 py-2 text-sm border border-[#d1d5db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent text-[#111827]"
+                    className="life-field flex-1"
                   />
                   <button
                     type="button"
                     onClick={addTag}
                     disabled={!tagInput.trim()}
-                    className="px-3 py-2 text-sm font-medium text-white bg-[#2d6fa8] hover:bg-[#245c8f] disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors"
+                    className={lifeButtonClass("primary")}
                   >
                     Add
                   </button>
@@ -498,11 +503,11 @@ export default function CourseCard({
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2.5 px-5 py-4 border-t border-[#e5e7eb] shrink-0">
-              <button type="button" onClick={() => setModalOpen(false)} className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors">
+            <div className="flex items-center justify-end gap-2.5 px-5 py-4 border-t border-[var(--life-neutral-100)] shrink-0">
+              <button type="button" onClick={() => setModalOpen(false)} className={lifeButtonClass("secondary")}>
                 Cancel
               </button>
-              <button type="button" onClick={handleSave} disabled={!trimmedTitle} className="px-4 py-2 text-sm font-medium text-white bg-[#2d6fa8] hover:bg-[#245c8f] disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors">
+              <button type="button" onClick={handleSave} disabled={!trimmedTitle} className={lifeButtonClass("primary")}>
                 Save Changes
               </button>
             </div>

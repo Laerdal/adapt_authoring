@@ -717,7 +717,7 @@ export default function StoryboardWorkspace({
       </div>
 
       {sb.error && (
-        <div className="border-b border-[#fecaca] bg-[#fef2f2] px-4 py-2 text-sm text-[#991b1b]">
+        <div className="border-b border-[var(--life-critical-100)] bg-[var(--life-critical-050)] px-4 py-2 text-sm text-[var(--life-critical-600)]">
           {sb.error}
         </div>
       )}

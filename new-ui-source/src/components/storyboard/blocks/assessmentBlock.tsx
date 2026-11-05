@@ -53,7 +53,7 @@ const FOOTER: Record<AssessmentKind, string> = {
 };
 
 const inputCls =
-  'w-full rounded border border-border bg-background px-2 py-1 text-sm text-foreground outline-none focus:border-primary';
+  'life-field';
 const labelCls = 'mb-0.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground';
 const stop = (e: React.KeyboardEvent) => e.stopPropagation();
 
@@ -161,7 +161,7 @@ function OptionImagePicker({ value, onChange }: { value: McqOption; onChange: (p
               <button
                 type="button"
                 onClick={() => onChange({ image: '', imageUrl: '', imageAssetId: undefined })}
-                className="inline-flex items-center gap-1 rounded border border-red-500 px-2 py-0.5 text-xs text-red-600 hover:bg-red-50"
+                className="inline-flex items-center gap-1 rounded border border-[var(--life-critical-500)] px-2 py-0.5 text-xs text-[var(--life-critical-600)] hover:bg-[var(--life-critical-050)]"
               >
                 <Trash2 className="h-3 w-3" /> Remove
               </button>
@@ -206,7 +206,7 @@ function OptionsForm({ data, graphic, update }: { data: AssessmentData; graphic:
           <div className="mb-1 flex items-center justify-between gap-2">
             <label className="flex items-center gap-1.5 text-xs font-medium text-foreground cursor-pointer group">
               <input type="checkbox" checked={opt.correct} onChange={(e) => patch(i, { correct: e.target.checked })} aria-label="Correct" className="sr-only peer" />
-              <CheckboxIndicator checked={opt.correct} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
+              <CheckboxIndicator checked={opt.correct} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[var(--life-neutral-200)] bg-white group-hover:border-[var(--life-primary-300)]" />
               Correct
               <span className="ml-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 Option {i + 1}/{options.length}
@@ -284,7 +284,7 @@ function MatchingForm({ data, update }: { data: AssessmentData; update: (n: Asse
                     aria-label="Correct matching choice"
                     className="sr-only peer"
                   />
-                  <CheckboxIndicator checked={option.correct} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
+                  <CheckboxIndicator checked={option.correct} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[var(--life-neutral-200)] bg-white group-hover:border-[var(--life-primary-300)]" />
                   Correct
                 </label>
                 <input
@@ -373,7 +373,7 @@ function ChecklistForm({ data, update }: { data: AssessmentData; update: (n: Ass
           <div className="mb-1 flex items-center justify-between gap-2">
             <label className="flex items-center gap-1.5 text-xs font-medium text-foreground cursor-pointer group">
               <input type="checkbox" checked={opt.correct} onChange={(e) => patch(i, { correct: e.target.checked })} aria-label="Correct" className="sr-only peer" />
-              <CheckboxIndicator checked={opt.correct} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
+              <CheckboxIndicator checked={opt.correct} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[var(--life-neutral-200)] bg-white group-hover:border-[var(--life-primary-300)]" />
               Correct
               <span className="ml-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 Item {i + 1}/{options.length}
@@ -432,7 +432,7 @@ function Body({ kind, data, update }: { kind: AssessmentKind; data: AssessmentDa
               aria-label="Shuffle items"
               className="sr-only peer"
             />
-            <CheckboxIndicator checked={!!data.shuffle} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
+            <CheckboxIndicator checked={!!data.shuffle} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[var(--life-neutral-200)] bg-white group-hover:border-[var(--life-primary-300)]" />
             Shuffle items in Preview
           </label>
         </div>
@@ -672,7 +672,7 @@ export const assessmentBlock = createReactBlockSpec(
             {issues.length > 0 && (
               <div className="mt-2 space-y-1 text-xs">
                 {issues.map((issue, i) => (
-                  <div key={i} className="inline-flex items-start gap-1 text-[#991b1b]">
+                  <div key={i} className="inline-flex items-start gap-1 text-[var(--life-critical-600)]">
                     <AlertTriangle className="mt-0.5 h-3 w-3 flex-shrink-0" />
                     <span>{issue}</span>
                   </div>
@@ -772,9 +772,9 @@ export const assessmentBlock = createReactBlockSpec(
           {/* Footer + readiness */}
           <div className="mt-2">
             {issues.length > 0 && (
-              <div className="mt-2 space-y-1 rounded-md border border-[#fee2e2] bg-[#fef2f2] p-2">
+              <div className="mt-2 space-y-1 rounded-md border border-[var(--life-critical-100)] bg-[var(--life-critical-050)] p-2">
                 {issues.map((issue, i) => (
-                  <div key={i} className="inline-flex items-start gap-1 text-xs text-[#991b1b]">
+                  <div key={i} className="inline-flex items-start gap-1 text-xs text-[var(--life-critical-600)]">
                     <AlertTriangle className="mt-0.5 h-3 w-3 flex-shrink-0" />
                     <span>{issue}</span>
                   </div>

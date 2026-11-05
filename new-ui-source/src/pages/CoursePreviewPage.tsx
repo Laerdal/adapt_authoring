@@ -434,7 +434,7 @@ export default function CoursePreviewPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-[#f8fafc] overflow-hidden">
+    <div className="flex flex-col h-screen bg-[var(--life-neutral-020)] overflow-hidden">
       <CommonCourseTopBarRow
         courseTitle={courseTitle}
         loginName={user?.username || user?.email || "Not signed in"}
@@ -449,9 +449,9 @@ export default function CoursePreviewPage() {
         previewMode="button"
       />
 
-      <div className="h-[56px] bg-white border-b border-[#d8dde6] flex items-center px-4 md:px-6 shrink-0">
+      <div className="h-[56px] bg-white border-b border-[var(--life-neutral-200)] flex items-center px-4 md:px-6 shrink-0">
         <div className="ml-auto flex items-center gap-3">
-          <div className="h-9 inline-flex items-center gap-1 p-[2px] rounded-[8px] border border-[#d8dde6] bg-[#f3f6f9]">
+          <div className="h-9 inline-flex items-center gap-1 p-[2px] rounded-[8px] border border-[var(--life-neutral-200)] bg-[#f3f6f9]">
             {(["desktop", "tablet", "mobile"] as const).map((mode) => {
               const active = mode === deviceMode;
               return (
@@ -462,7 +462,7 @@ export default function CoursePreviewPage() {
                   disabled={quickEditEnabled}
                   aria-label={`Switch to ${mode} preview`}
                   title={quickEditEnabled ? "Preview size is locked during Quick Edit" : `Switch to ${mode} preview`}
-                  className={`${deviceButtonBase} ${active ? "bg-[var(--life-primary-500)] text-white" : "text-[#1f2937] hover:bg-white active:bg-[var(--life-primary-100)]"} disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent`}
+                  className={`${deviceButtonBase} ${active ? "bg-[var(--life-primary-500)] text-white" : "text-[var(--life-neutral-850)] hover:bg-white active:bg-[var(--life-primary-100)]"} disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent`}
                 >
                   <MaskIcon file={`${mode}-icon.svg`} className="block w-4 h-4 shrink-0 bg-current" />
                 </button>
@@ -482,7 +482,7 @@ export default function CoursePreviewPage() {
                     ? "Edit text on this page"
                     : "Open a course page to edit text"
               }
-              className="h-9 px-4 rounded-[8px] border border-[#d8dde6] bg-white text-[#111827] text-[13px] font-bold hover:bg-[var(--life-neutral-020)] hover:border-[#c4cfda] active:bg-[var(--life-neutral-100)] transition-colors cursor-pointer inline-flex items-center disabled:bg-[#e5e7eb] disabled:text-[#9ca3af] disabled:cursor-not-allowed disabled:hover:bg-[#e5e7eb] disabled:hover:border-[#d8dde6]"
+              className="h-9 px-4 rounded-[8px] border border-[var(--life-neutral-200)] bg-white text-[var(--life-neutral-850)] text-[13px] font-bold hover:bg-[var(--life-neutral-020)] hover:border-[#c4cfda] active:bg-[var(--life-neutral-100)] transition-colors cursor-pointer inline-flex items-center disabled:bg-[var(--life-neutral-100)] disabled:text-[var(--life-neutral-400)] disabled:cursor-not-allowed disabled:hover:bg-[var(--life-neutral-100)] disabled:hover:border-[var(--life-neutral-200)]"
             >
               Quick Edit
             </button>
@@ -492,14 +492,14 @@ export default function CoursePreviewPage() {
                 type="button"
                 onClick={saveQuickEdit}
                 disabled={!quickEditDirty || quickEditSaving}
-                className="h-9 px-4 rounded-[8px] bg-[var(--life-primary-500)] text-white text-[13px] font-bold hover:bg-[var(--life-primary-700)] transition-colors cursor-pointer inline-flex items-center disabled:bg-[#e5e7eb] disabled:text-[#9ca3af] disabled:cursor-not-allowed"
+                className="h-9 px-4 rounded-[8px] bg-[var(--life-primary-500)] text-white text-[13px] font-bold hover:bg-[var(--life-primary-700)] transition-colors cursor-pointer inline-flex items-center disabled:bg-[var(--life-neutral-100)] disabled:text-[var(--life-neutral-400)] disabled:cursor-not-allowed"
               >
                 {quickEditSaving ? "Saving..." : "Save"}
               </button>
               <button
                 type="button"
                 onClick={finishQuickEdit}
-                className="h-9 px-4 rounded-[8px] border border-[#d8dde6] bg-white text-[#374151] text-[13px] font-bold hover:bg-[var(--life-neutral-020)] hover:border-[#c4cfda] transition-colors cursor-pointer inline-flex items-center"
+                className="h-9 px-4 rounded-[8px] border border-[var(--life-neutral-200)] bg-white text-[var(--life-neutral-700)] text-[13px] font-bold hover:bg-[var(--life-neutral-020)] hover:border-[#c4cfda] transition-colors cursor-pointer inline-flex items-center"
               >
                  Exit Editing
               </button>
@@ -537,7 +537,7 @@ export default function CoursePreviewPage() {
           //      mis-communicate a transient state.
           //   3. (implicit)     — once both flip ready, `previewUrl` is built and the
           //      iframe branch below renders instead.
-          <div className="h-full flex flex-col items-center justify-center gap-3 text-sm text-[#6b7280]">
+          <div className="h-full flex flex-col items-center justify-center gap-3 text-sm text-[var(--life-neutral-600)]">
             <span>
               {(!id || !user?._tenantId || previewState === "error")
                 ? "Preview is unavailable for this course."
@@ -583,7 +583,7 @@ export default function CoursePreviewPage() {
               }}
               aria-label="Open fullscreen preview"
               title={quickEditEnabled ? "Fullscreen is disabled during Quick Edit" : "Open fullscreen"}
-              className="absolute right-0 top-0 z-10 -translate-y-[32%] translate-x-[10%] p-1.5 rounded-lg border border-[#e5e7eb] bg-white text-[#6b7280] shadow-sm hover:text-[#2d6fa8] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:text-[#6b7280]"
+              className="absolute right-0 top-0 z-10 -translate-y-[32%] translate-x-[10%] p-1.5 rounded-lg border border-[var(--life-neutral-100)] bg-white text-[var(--life-neutral-600)] shadow-sm hover:text-[var(--life-primary-500)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:text-[var(--life-neutral-600)]"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" />
@@ -617,7 +617,7 @@ export default function CoursePreviewPage() {
             }}
             aria-label="Close fullscreen preview"
             title="Close fullscreen"
-            className="absolute right-0 top-0 z-10 p-1 rounded-md border border-[#e5e7eb] bg-white/95 text-[#4b5563] shadow-md hover:bg-white hover:text-[#111827] transition-colors cursor-pointer"
+            className="absolute right-0 top-0 z-10 p-1 rounded-md border border-[var(--life-neutral-100)] bg-white/95 text-[var(--life-neutral-700)] shadow-md hover:bg-white hover:text-[var(--life-neutral-850)] transition-colors cursor-pointer"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />

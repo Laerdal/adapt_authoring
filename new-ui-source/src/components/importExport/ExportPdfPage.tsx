@@ -13,11 +13,11 @@ import {
 } from "../../helpers/importExportHelper";
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#9ca3af]">{children}</div>;
+  return <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--life-neutral-400)]">{children}</div>;
 }
 
 function Divider() {
-  return <div className="h-px bg-[#e5e7eb]" />;
+  return <div className="h-px bg-[var(--life-neutral-100)]" />;
 }
 
 function CheckboxRow({
@@ -38,8 +38,8 @@ function CheckboxRow({
         aria-label={label}
         className="peer absolute left-0 top-1 h-4 w-4 opacity-0"
       />
-      <CheckboxIndicator checked={checked} className="mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
-      <span className="text-sm text-[#374151] leading-snug group-hover:text-[#111827] transition-colors">{label}</span>
+      <CheckboxIndicator checked={checked} className="mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[var(--life-neutral-200)] bg-white group-hover:border-[var(--life-primary-300)]" />
+      <span className="text-sm text-[var(--life-neutral-700)] leading-snug group-hover:text-[var(--life-neutral-850)] transition-colors">{label}</span>
     </label>
   );
 }
@@ -59,13 +59,13 @@ function TextField({
 }) {
   return (
     <label className="flex flex-col gap-1.5">
-      <span className="text-xs font-semibold text-[#6b7280]">{label}</span>
+      <span className="text-xs font-semibold text-[var(--life-neutral-600)]">{label}</span>
       <input
         type={type}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="w-full rounded-lg border border-[#e5e7eb] bg-white px-3 py-2.5 text-sm text-[#111827] placeholder:text-[#9ca3af] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent transition-colors"
+        className="life-field"
       />
     </label>
   );
@@ -84,13 +84,13 @@ function TextAreaField({
 }) {
   return (
     <label className="flex flex-col gap-1.5">
-      <span className="text-xs font-semibold text-[#6b7280]">{label}</span>
+      <span className="text-xs font-semibold text-[var(--life-neutral-600)]">{label}</span>
       <textarea
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         rows={3}
-        className="w-full rounded-lg border border-[#e5e7eb] bg-white px-3 py-2.5 text-sm text-[#111827] placeholder:text-[#9ca3af] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent transition-colors resize-y"
+        className="life-field"
       />
     </label>
   );
@@ -109,21 +109,18 @@ function SelectField({
 }) {
   return (
     <label className="flex flex-col gap-1.5">
-      <span className="text-xs font-semibold text-[#6b7280]">{label}</span>
+      <span className="text-xs font-semibold text-[var(--life-neutral-600)]">{label}</span>
       <div className="relative">
         <select
           value={value}
           onChange={(event) => onChange(event.target.value)}
           aria-label={label}
-          className="w-full appearance-none rounded-lg border border-[#e5e7eb] bg-white px-3 py-2.5 pr-8 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent transition-colors"
+          className="life-field"
         >
           {options.map((option) => (
             <option key={option} value={option}>{option}</option>
           ))}
         </select>
-        <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
       </div>
     </label>
   );
@@ -136,8 +133,8 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (checked: b
       role="switch"
       aria-checked={checked}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border-2 transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2d6fa8] ${
-        checked ? "bg-[#2d6fa8] border-[#2d6fa8]" : "bg-[#e5e7eb] border-[#e5e7eb]"
+      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border-2 transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--life-primary-500)] ${
+        checked ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)]" : "bg-[var(--life-neutral-100)] border-[var(--life-neutral-100)]"
       }`}
     >
       <span
@@ -213,8 +210,8 @@ function AssetPicker({
 
   return (
     <div className="flex flex-col gap-3">
-      <span className="text-xs font-semibold text-[#374151]">{label}</span>
-      <div className="inline-flex self-start overflow-hidden rounded-lg border border-[#d1d5db] bg-white">
+      <span className="text-xs font-semibold text-[var(--life-neutral-700)]">{label}</span>
+      <div className="inline-flex self-start overflow-hidden rounded-lg border border-[var(--life-neutral-200)] bg-white">
         <button
           type="button"
           onClick={() => {
@@ -222,7 +219,7 @@ function AssetPicker({
             onChooseLibrary();
           }}
           className={`px-4 py-2 text-[13px] font-semibold transition-colors ${
-            source === "library" ? "bg-[#2d6fa8] text-white" : "bg-white text-[#374151] hover:bg-[#f8fafc]"
+            source === "library" ? "bg-[var(--life-primary-500)] text-white" : "bg-white text-[var(--life-neutral-700)] hover:bg-[var(--life-neutral-020)]"
           }`}
           aria-pressed={source === "library"}
         >
@@ -231,8 +228,8 @@ function AssetPicker({
         <button
           type="button"
           onClick={() => onSourceChange("url")}
-          className={`border-l border-[#d1d5db] px-4 py-2 text-[13px] font-semibold transition-colors ${
-            source === "url" ? "bg-[#2d6fa8] text-white" : "bg-white text-[#374151] hover:bg-[#f8fafc]"
+          className={`border-l border-[var(--life-neutral-200)] px-4 py-2 text-[13px] font-semibold transition-colors ${
+            source === "url" ? "bg-[var(--life-primary-500)] text-white" : "bg-white text-[var(--life-neutral-700)] hover:bg-[var(--life-neutral-020)]"
           }`}
           aria-pressed={source === "url"}
         >
@@ -312,7 +309,7 @@ function AssetPicker({
             value={url}
             onChange={(event) => onUrlChange(event.target.value)}
             placeholder="https://example.com/image.png"
-            className="w-full rounded-lg border border-[#e5e7eb] bg-white px-3 py-2.5 text-sm text-[#111827] placeholder:text-[#9ca3af] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent transition-colors"
+            className="life-field"
           />
           {url.trim() && !urlPreviewFailed && (
             <div className="relative h-36 w-full overflow-hidden rounded-lg">
@@ -325,7 +322,7 @@ function AssetPicker({
             </div>
           )}
           {url.trim() && urlPreviewFailed && (
-            <p className="text-xs text-[#b91c1c]">Unable to load image from this URL.</p>
+            <p className="text-xs text-[var(--life-critical-600)]">Unable to load image from this URL.</p>
           )}
         </div>
       )}
@@ -556,11 +553,11 @@ export default function ExportPdfPage({
   return (
     <div className="flex w-full max-w-[672px] flex-col gap-7">
       <div className="flex flex-col gap-1">
-        <h1 className="text-[20px] font-bold text-[#111827]">Export as PDF</h1>
+        <h1 className="text-[20px] font-bold text-[var(--life-neutral-850)]">Export as PDF</h1>
       </div>
 
       {loading ? (
-        <section className="rounded-lg border border-[#e5e7eb] bg-white px-4 py-4 text-sm text-[#6b7280]">
+        <section className="rounded-lg border border-[var(--life-neutral-100)] bg-white px-4 py-4 text-sm text-[var(--life-neutral-600)]">
           Loading saved PDF settings...
         </section>
       ) : (
@@ -651,10 +648,10 @@ export default function ExportPdfPage({
           <div className="flex flex-col gap-4">
             <label className="flex items-center gap-3 cursor-pointer select-none">
               <Toggle checked={cfg.passwordEnabled} onChange={(value) => setField("passwordEnabled", value)} />
-              <span className="text-sm text-[#374151]">Enable Password Protection</span>
+              <span className="text-sm text-[var(--life-neutral-700)]">Enable Password Protection</span>
             </label>
             {cfg.passwordEnabled && (
-              <div className="grid grid-cols-1 gap-4 border-l-2 border-[#e5e7eb] pl-4 md:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 border-l-2 border-[var(--life-neutral-100)] pl-4 md:grid-cols-2">
                 <TextField
                   label="User Password"
                   type="password"
@@ -713,7 +710,7 @@ export default function ExportPdfPage({
             type="button"
             disabled={saving || exporting || loading}
             onClick={() => void handleExportAsPdf()}
-            className="inline-flex h-11 items-center gap-2 rounded-lg bg-[#2d6fa8] px-6 text-sm font-bold text-white transition-colors hover:bg-[#245c8f]"
+            className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--life-primary-500)] px-6 text-sm font-bold text-white transition-colors hover:bg-[var(--life-primary-600)]"
           >
             <DownloadIcon />
             {exporting ? "Exporting..." : "Export as PDF"}
@@ -726,7 +723,7 @@ export default function ExportPdfPage({
 
       {dirty && !showConfirmModal && (
         <div data-unsaved-changes-bar="true" className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-4 py-3 rounded-xl bg-white border border-[var(--life-warning-100)] shadow-lg">
-          <span className="flex items-center gap-2 text-sm text-[#374151]">
+          <span className="flex items-center gap-2 text-sm text-[var(--life-neutral-700)]">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-warning-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
               <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
               <line x1="12" y1="9" x2="12" y2="13" />
@@ -739,7 +736,7 @@ export default function ExportPdfPage({
               type="button"
               onClick={handleCancel}
               disabled={saving}
-              className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] disabled:opacity-50 transition-colors"
+              className="px-4 py-2 text-sm font-medium text-[var(--life-neutral-700)] bg-white border border-[var(--life-neutral-200)] rounded-lg hover:bg-[var(--life-neutral-020)] disabled:opacity-50 transition-colors"
             >
               Cancel
             </button>
@@ -764,7 +761,7 @@ export default function ExportPdfPage({
         <div className="fixed top-4 right-4 z-[60] pointer-events-none">
           <div className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium border pointer-events-auto min-w-[260px] max-w-sm ${
             toast.type === "error"
-              ? "bg-[#fef2f2] border-[#fecaca] text-[#b91c1c]"
+              ? "bg-[var(--life-critical-050)] border-[var(--life-critical-100)] text-[var(--life-critical-600)]"
               : "bg-[var(--life-positive-050)] border-[var(--life-positive-100)] text-[var(--life-positive-500)]"
           }`}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={toast.type === "error" ? "#b91c1c" : "var(--life-positive-500)"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">

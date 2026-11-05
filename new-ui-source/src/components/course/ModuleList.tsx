@@ -61,7 +61,7 @@ export default function ModuleList() {
   return (
     <div className="bg-white rounded-xl border border-[#d0d0dc] overflow-hidden">
       <div className="px-6 py-4 border-b border-[#e8e8f0] flex items-center justify-between">
-        <h2 className="text-base font-semibold text-[#1a1a2e]">Course Modules</h2>
+        <h2 className="text-base font-semibold text-[var(--life-neutral-850)]">Course Modules</h2>
         <button className="text-sm text-[#0072ce] font-medium hover:text-[#005ea6] transition-colors">
           Manage modules
         </button>
@@ -69,21 +69,21 @@ export default function ModuleList() {
 
       <div className="divide-y divide-[#e8e8f0]">
         {modules.map((mod) => (
-          <div key={mod.id} className="px-6 py-4 flex items-center gap-4 hover:bg-[#fafafa] transition-colors">
+          <div key={mod.id} className="px-6 py-4 flex items-center gap-4 hover:bg-[var(--life-neutral-020)] transition-colors">
             {/* Order number */}
-            <div className="w-7 h-7 rounded-full bg-[#f4f4f8] flex items-center justify-center text-xs font-semibold text-[#6b6b8a] shrink-0">
+            <div className="w-7 h-7 rounded-full bg-[var(--life-neutral-050)] flex items-center justify-center text-xs font-semibold text-[var(--life-neutral-600)] shrink-0">
               {mod.id}
             </div>
 
             {/* Info */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
-                <p className="text-sm font-medium text-[#1a1a2e] truncate">{mod.title}</p>
+                <p className="text-sm font-medium text-[var(--life-neutral-850)] truncate">{mod.title}</p>
                 <span
                   className={`shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${
                     mod.status === "published"
                       ? "bg-[#e8f5e9] text-[#2e7d32]"
-                      : "bg-[#f4f4f8] text-[#6b6b8a]"
+                      : "bg-[var(--life-neutral-050)] text-[var(--life-neutral-600)]"
                   }`}
                 >
                   {mod.status}
@@ -105,14 +105,14 @@ export default function ModuleList() {
             {/* Progress */}
             <div className="w-32 shrink-0">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-xs text-[#6b6b8a]">Completion</span>
-                <span className="text-xs font-semibold text-[#1a1a2e]">{mod.completionRate}%</span>
+                <span className="text-xs text-[var(--life-neutral-600)]">Completion</span>
+                <span className="text-xs font-semibold text-[var(--life-neutral-850)]">{mod.completionRate}%</span>
               </div>
               <ProgressBar value={mod.completionRate} />
             </div>
 
             {/* Actions */}
-            <button className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-[#8e8ea0] hover:bg-[#f4f4f8] hover:text-[#1a1a2e] transition-colors">
+            <button className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-[#8e8ea0] hover:bg-[var(--life-neutral-050)] hover:text-[var(--life-neutral-850)] transition-colors">
               <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
               </svg>

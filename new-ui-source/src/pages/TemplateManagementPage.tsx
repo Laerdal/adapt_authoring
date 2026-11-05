@@ -5,6 +5,8 @@ import { usePageLoader } from '@/hooks'
 import AiAssistant from '@/components/common/AiAssistant'
 import ConfirmDialog from '@/components/common/ConfirmDialog'
 import ShareTemplateDialog from '@/components/common/ShareTemplateDialog'
+import Paginator from '@/components/common/Paginator'
+import { lifeButtonClass } from '@/components/common/Button'
 
 type TemplateType = 'Topic' | 'Section' | 'Content Group' | 'Component'
 
@@ -44,10 +46,10 @@ function formatTimestamp(date: Date): string {
 }
 
 const TYPE_COLORS: Record<TemplateType, { bg: string; text: string }> = {
-  Topic:         { bg: 'bg-[#dbeeff]', text: 'text-[#2d6fa8]' },
-  Section:       { bg: 'bg-[#dcfce7]', text: 'text-[#16a34a]' },
-  'Content Group': { bg: 'bg-[#fef9c3]', text: 'text-[#a16207]' },
-  Component:     { bg: 'bg-[#f3e8ff]', text: 'text-[#7e22ce]' },
+  Topic:         { bg: 'bg-[var(--life-primary-100)]', text: 'text-[var(--life-primary-700)]' },
+  Section:       { bg: 'bg-[var(--life-positive-050)]', text: 'text-[var(--life-positive-500)]' },
+  'Content Group': { bg: 'bg-[var(--life-warning-050)]', text: 'text-[var(--life-warning-500)]' },
+  Component:     { bg: 'bg-[var(--life-color-bg-surface-samaritan-subtle)]', text: 'text-[var(--samaritan)]' },
 }
 
 export default function TemplateManagementPage() {
@@ -173,23 +175,21 @@ export default function TemplateManagementPage() {
         {/* Header */}
         <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-[#111827] leading-tight">Template Management</h1>
-            <p className="text-sm text-[#6b7280] mt-1">Browse and manage reusable content templates</p>
+            <h1 className="text-2xl md:text-3xl font-bold text-[var(--life-neutral-850)] leading-tight">Template Management</h1>
+            <p className="text-sm text-[var(--life-neutral-600)] mt-1">Browse and manage reusable content templates</p>
           </div>
         </div>
 
         {/* Ownership scope toggle — My vs Shared with me */}
-        <div className="flex items-center gap-1 bg-[#f3f4f6] rounded-lg p-1 mb-4 w-fit">
+        <div role="tablist" aria-label="Template ownership" className="life-tabs mb-4">
           {SCOPE_OPTIONS.map((opt) => (
             <button
               key={opt.value}
               type="button"
+              role="tab"
+              aria-selected={scope === opt.value}
               onClick={() => handleScope(opt.value)}
-              className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${
-                scope === opt.value
-                  ? 'bg-white text-[#2d6fa8] shadow-sm'
-                  : 'text-[#6b7280] hover:text-[#374151]'
-              }`}
+              className="life-tab"
             >
               {opt.label}
             </button>
@@ -201,7 +201,7 @@ export default function TemplateManagementPage() {
           {/* Search */}
           <div className="relative w-full sm:flex-1 sm:max-w-xs">
             <svg
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9ca3af]"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--life-neutral-400)]"
               width="16" height="16" fill="none" viewBox="0 0 24 24"
               stroke="currentColor" strokeWidth={2}
             >
@@ -212,22 +212,20 @@ export default function TemplateManagementPage() {
               value={search}
               onChange={(e) => handleSearch(e.target.value)}
               placeholder="Search by name…"
-              className="w-full pl-9 pr-4 py-2.5 text-sm bg-white border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent placeholder-[#9ca3af] text-[#111827]"
+              className="life-field pl-9 pr-4"
             />
           </div>
 
           {/* Filter tabs */}
-          <div className="flex items-center gap-1 bg-[#f3f4f6] rounded-lg p-1">
+          <div role="tablist" aria-label="Template type" className="life-tabs">
             {FILTER_OPTIONS.map((opt) => (
               <button
                 key={opt}
                 type="button"
+                role="tab"
+                aria-selected={filter === opt}
                 onClick={() => handleFilter(opt)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
-                  filter === opt
-                    ? 'bg-white text-[#2d6fa8] shadow-sm'
-                    : 'text-[#6b7280] hover:text-[#374151]'
-                }`}
+                className="life-tab"
               >
                 {opt}
               </button>
@@ -236,25 +234,25 @@ export default function TemplateManagementPage() {
         </div>
 
         {/* Table */}
-        <div className="bg-white border border-[#e5e7eb] rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+        <div className="life-table-wrap">
+          <div className="overflow-x-auto life-scroll">
+            <table className="life-table">
               <thead>
-                <tr className="bg-[#f9fafb] border-b border-[#e5e7eb]">
-                  <th className="text-left px-4 py-3 font-medium text-[#6b7280] w-[28%]">Template Title</th>
-                  <th className="text-left px-4 py-3 font-medium text-[#6b7280] w-[12%]">Type</th>
-                  <th className="text-left px-4 py-3 font-medium text-[#6b7280]">Description</th>
-                  <th className="text-left px-4 py-3 font-medium text-[#6b7280] w-[18%] whitespace-nowrap">Time Stamp</th>
+                <tr>
+                  <th scope="col" className="w-[28%]">Template Title</th>
+                  <th scope="col" className="w-[12%]">Type</th>
+                  <th scope="col">Description</th>
+                  <th scope="col" className="w-[18%]">Time Stamp</th>
                   {scope === 'shared' && (
-                    <th className="text-left px-4 py-3 font-medium text-[#6b7280] w-[15%] whitespace-nowrap">Author</th>
+                    <th scope="col" className="w-[15%]">Author</th>
                   )}
-                  <th className="text-right px-4 py-3 font-medium text-[#6b7280] w-[10%]">Actions</th>
+                  <th scope="col" className="w-[10%] !text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {paginated.length === 0 ? (
                   <tr>
-                    <td colSpan={scope === 'shared' ? 6 : 5} className="py-16 text-center text-[#9ca3af]">
+                    <td colSpan={scope === 'shared' ? 6 : 5} className="life-table-empty">
                       <svg className="mx-auto mb-3" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
                       </svg>
@@ -265,22 +263,19 @@ export default function TemplateManagementPage() {
                   paginated.map((t, i) => {
                     const colors = TYPE_COLORS[t.type]
                     return (
-                      <tr
-                        key={t.id}
-                        className={`border-b border-[#f3f4f6] hover:bg-[#fafafa] transition-colors ${i === paginated.length - 1 ? 'border-b-0' : ''}`}
-                      >
-                        <td className="px-4 py-3 font-medium text-[#111827]">{t.name}</td>
-                        <td className="px-4 py-3">
+                      <tr key={t.id}>
+                        <td className="font-medium">{t.name}</td>
+                        <td>
                           <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${colors.bg} ${colors.text}`}>
                             {t.type}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-[#6b7280] max-w-xs truncate" title={t.description}>{t.description}</td>
-                        <td className="px-4 py-3 text-[#6b7280] whitespace-nowrap font-mono text-xs">{formatTimestamp(t.timestamp)}</td>
+                        <td className="text-[var(--life-neutral-600)] max-w-xs truncate" title={t.description}>{t.description}</td>
+                        <td className="text-[var(--life-neutral-600)] whitespace-nowrap text-xs">{formatTimestamp(t.timestamp)}</td>
                         {scope === 'shared' && (
-                          <td className="px-4 py-3 text-[#6b7280] whitespace-nowrap">{t.author || '—'}</td>
+                          <td className="text-[var(--life-neutral-600)] whitespace-nowrap">{t.author || '—'}</td>
                         )}
-                        <td className="px-4 py-3">
+                        <td>
                           <div className="flex items-center justify-end gap-1">
                             <button
                               type="button"
@@ -288,7 +283,7 @@ export default function TemplateManagementPage() {
                               disabled={!t.backendId}
                               title="Share"
                               aria-label={`Share ${t.name}`}
-                              className="p-1.5 rounded-lg text-[#6b7280] hover:bg-[#dbeeff] hover:text-[#2d6fa8] disabled:opacity-40 transition-colors"
+                              className="life-icon-btn life-icon-btn--sm"
                             >
                               <Share2 size={15} />
                             </button>
@@ -296,7 +291,8 @@ export default function TemplateManagementPage() {
                               type="button"
                               onClick={() => openEdit(t)}
                               title="Edit"
-                              className="p-1.5 rounded-lg text-[#6b7280] hover:bg-[#dbeeff] hover:text-[#2d6fa8] transition-colors"
+                              aria-label={`Edit ${t.name}`}
+                              className="life-icon-btn life-icon-btn--sm"
                             >
                               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
@@ -307,7 +303,8 @@ export default function TemplateManagementPage() {
                               type="button"
                               onClick={() => setDeleteTarget(t)}
                               title="Delete"
-                              className="p-1.5 rounded-lg text-[#6b7280] hover:bg-[#fee2e2] hover:text-[#dc2626] transition-colors"
+                              aria-label={`Delete ${t.name}`}
+                              className="life-icon-btn life-icon-btn--sm life-icon-btn--critical"
                             >
                               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <polyline points="3 6 5 6 21 6" />
@@ -326,104 +323,15 @@ export default function TemplateManagementPage() {
             </table>
           </div>
 
-          {/* Table footer */}
-          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t border-[#e5e7eb] bg-[#f9fafb]">
-            {/* Row count + page size */}
-            <div className="flex items-center gap-2 text-sm text-[#6b7280]">
-              <span>
-                {filtered.length === 0
-                  ? '0 results'
-                  : `${(safePage - 1) * pageSize + 1}–${Math.min(safePage * pageSize, filtered.length)} of ${filtered.length} template${filtered.length !== 1 ? 's' : ''}`}
-              </span>
-              <span className="text-[#d1d5db]">|</span>
-              <span>Rows per page:</span>
-              <select
-                value={pageSize}
-                onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1) }}
-                className="text-sm border border-[#e5e7eb] rounded-md px-2 py-1 bg-white text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8]"
-              >
-                {PAGE_SIZE_OPTIONS.map((n) => (
-                  <option key={n} value={n}>{n}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Pagination */}
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => setPage(1)}
-                disabled={safePage === 1}
-                className="p-1.5 rounded-lg text-[#6b7280] hover:bg-[#e5e7eb] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                title="First page"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="11 17 6 12 11 7" /><polyline points="18 17 13 12 18 7" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={safePage === 1}
-                className="p-1.5 rounded-lg text-[#6b7280] hover:bg-[#e5e7eb] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                title="Previous page"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="15 18 9 12 15 6" />
-                </svg>
-              </button>
-
-              {/* Page numbers */}
-              {Array.from({ length: totalPages }, (_, i) => i + 1)
-                .filter((n) => n === 1 || n === totalPages || Math.abs(n - safePage) <= 1)
-                .reduce<(number | '...')[]>((acc, n, idx, arr) => {
-                  if (idx > 0 && n - (arr[idx - 1] as number) > 1) acc.push('...')
-                  acc.push(n)
-                  return acc
-                }, [])
-                .map((n, i) =>
-                  n === '...' ? (
-                    <span key={`ellipsis-${i}`} className="px-1 text-[#9ca3af] text-sm">…</span>
-                  ) : (
-                    <button
-                      key={n}
-                      type="button"
-                      onClick={() => setPage(n as number)}
-                      className={`min-w-[30px] h-[30px] rounded-lg text-sm font-medium transition-colors ${
-                        safePage === n
-                          ? 'bg-[#2d6fa8] text-white'
-                          : 'text-[#374151] hover:bg-[#e5e7eb]'
-                      }`}
-                    >
-                      {n}
-                    </button>
-                  )
-                )}
-
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={safePage === totalPages}
-                className="p-1.5 rounded-lg text-[#6b7280] hover:bg-[#e5e7eb] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                title="Next page"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="9 18 15 12 9 6" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                onClick={() => setPage(totalPages)}
-                disabled={safePage === totalPages}
-                className="p-1.5 rounded-lg text-[#6b7280] hover:bg-[#e5e7eb] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                title="Last page"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="13 17 18 12 13 7" /><polyline points="6 17 11 12 6 7" />
-                </svg>
-              </button>
-            </div>
-          </div>
+          <Paginator
+            page={safePage}
+            pageSize={pageSize}
+            totalItems={filtered.length}
+            pageSizeOptions={PAGE_SIZE_OPTIONS}
+            itemLabel="template"
+            onPageChange={setPage}
+            onPageSizeChange={(n) => { setPageSize(n); setPage(1) }}
+          />
         </div>
       </div>
 
@@ -437,16 +345,16 @@ export default function TemplateManagementPage() {
           onClick={(e) => { if (e.target === e.currentTarget) setEditTarget(null) }}
         >
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[#e5e7eb]">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--life-neutral-100)]">
               <div>
-                <h2 className="font-semibold text-[#111827] text-base">Edit Template Details</h2>
-                <p className="text-xs text-[#6b7280] mt-0.5">Update the title and description</p>
+                <h2 className="font-semibold text-[var(--life-neutral-850)] text-base">Edit Template Details</h2>
+                <p className="text-xs text-[var(--life-neutral-600)] mt-0.5">Update the title and description</p>
               </div>
               <button
                 type="button"
                 onClick={() => setEditTarget(null)}
                 aria-label="Close"
-                className="p-1.5 rounded-lg hover:bg-[#f3f4f6] text-[#6b7280] transition-colors"
+                className="life-icon-btn life-icon-btn--sm"
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -456,33 +364,33 @@ export default function TemplateManagementPage() {
 
             <div className="px-6 py-5 flex flex-col gap-5">
               <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1.5">
-                  Template Title <span className="text-[#ef4444]">*</span>
+                <label className="life-label">
+                  Template Title <span className="text-[var(--life-critical-500)]">*</span>
                 </label>
                 <input
                   type="text"
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
                   autoFocus
-                  className="w-full px-3 py-2.5 text-sm border border-[#d1d5db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent text-[#111827] placeholder-[#9ca3af]"
+                  className="life-field"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
+                <label className="life-label">Description</label>
                 <textarea
                   value={editDesc}
                   onChange={(e) => setEditDesc(e.target.value)}
                   rows={3}
-                  className="w-full px-3 py-2.5 text-sm border border-[#d1d5db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent text-[#111827] resize-none"
+                  className="life-field"
                 />
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[#e5e7eb]">
+            <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[var(--life-neutral-100)]">
               <button
                 type="button"
                 onClick={() => setEditTarget(null)}
-                className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors"
+                className={lifeButtonClass('secondary')}
               >
                 Cancel
               </button>
@@ -490,7 +398,7 @@ export default function TemplateManagementPage() {
                 type="button"
                 onClick={saveEdit}
                 disabled={!editName.trim()}
-                className="px-5 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors"
+                className={lifeButtonClass('primary')}
               >
                 Save
               </button>

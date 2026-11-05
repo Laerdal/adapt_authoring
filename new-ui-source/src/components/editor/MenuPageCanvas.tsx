@@ -89,7 +89,7 @@ export default function MenuPageCanvas({
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onUpdate({ logoUrl: null }); }}
-                className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-white border border-[#e5e7eb] text-[#9ca3af] hover:text-[#374151] hidden group-hover:flex items-center justify-center shadow-sm"
+                className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-white border border-[var(--life-neutral-100)] text-[var(--life-neutral-400)] hover:text-[var(--life-neutral-700)] hidden group-hover:flex items-center justify-center shadow-sm"
                 aria-label="Remove logo"
               >
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -129,7 +129,7 @@ export default function MenuPageCanvas({
           value={data.title}
           onChange={(e) => onUpdate({ title: e.target.value })}
           placeholder="Menu Page"
-          className={`menu-canvas-title ${alignInputClass[data.textAlign]} w-full bg-transparent border-none outline-none text-4xl font-bold placeholder-[#9ca3af] focus:ring-0 cursor-text leading-tight`}
+          className={`menu-canvas-title ${alignInputClass[data.textAlign]} w-full bg-transparent border-none outline-none text-4xl font-bold placeholder-[var(--life-neutral-400)] focus:ring-0 cursor-text leading-tight`}
           aria-label="Menu title"
         />
 
@@ -139,7 +139,7 @@ export default function MenuPageCanvas({
           value={data.subtitle}
           onChange={(e) => onUpdate({ subtitle: e.target.value })}
           placeholder="Course navigation menu"
-          className={`menu-canvas-subtitle ${alignInputClass[data.textAlign]} w-full bg-transparent border-none outline-none text-lg placeholder-[#9ca3af] focus:ring-0 cursor-text -mt-3`}
+          className={`menu-canvas-subtitle ${alignInputClass[data.textAlign]} w-full bg-transparent border-none outline-none text-lg placeholder-[var(--life-neutral-400)] focus:ring-0 cursor-text -mt-3`}
           aria-label="Menu subtitle"
         />
 

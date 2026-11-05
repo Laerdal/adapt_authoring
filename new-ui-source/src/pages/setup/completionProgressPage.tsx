@@ -241,13 +241,13 @@ function CpCheckbox({
   hint?: string;
 }) {
   return (
-    <label className="flex items-start gap-3 py-2 px-2 rounded-lg cursor-pointer hover:bg-[#f9fafb] group">
+    <label className="flex items-start gap-3 py-2 px-2 rounded-lg cursor-pointer hover:bg-[var(--life-neutral-020)] group">
       <div
         onClick={() => onChange(!checked)}
         className={`mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors cursor-pointer ${
           checked
             ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)]"
-            : "border-[#d1d5db] bg-white group-hover:border-[#93c5fd]"
+            : "border-[var(--life-neutral-200)] bg-white group-hover:border-[var(--life-primary-300)]"
         }`}
       >
         {checked && (
@@ -256,7 +256,7 @@ function CpCheckbox({
           </svg>
         )}
       </div>
-      <span className="text-sm text-[#374151] leading-snug">{label}{hint ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}</span>
+      <span className="text-sm text-[var(--life-neutral-700)] leading-snug">{label}{hint ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}</span>
     </label>
   );
 }
@@ -275,7 +275,7 @@ function CpSelect<T extends string>({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <InfoFieldLabel label={label} hint={hint} description={hint} className="text-[#374151]" />
+      <InfoFieldLabel label={label} hint={hint} description={hint} className="text-[var(--life-neutral-700)]" />
       {hint && <p className="text-[11px] text-[var(--life-neutral-300)] leading-snug">{hint}</p>}
       <div className="relative">
         <select
@@ -283,19 +283,12 @@ function CpSelect<T extends string>({
           onChange={(e) => onChange(e.target.value as T)}
           title={label}
           aria-label={label}
-          className="w-full border border-[#e5e7eb] rounded-lg px-3 py-2.5 text-sm text-[var(--life-base-black)] bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] focus:border-transparent pr-8"
+          className="life-field"
         >
           {options.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
-        <svg
-          className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
-          width="14" height="14" viewBox="0 0 24 24" fill="none"
-          stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-        >
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
       </div>
     </div>
   );
@@ -317,14 +310,14 @@ function CpTextInput({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <InfoFieldLabel label={label} hint={hint} description={hint} className="text-[#374151]" />
+      <InfoFieldLabel label={label} hint={hint} description={hint} className="text-[var(--life-neutral-700)]" />
       {hint && <p className="text-[11px] text-[var(--life-neutral-300)] leading-snug">{hint}</p>}
       <input
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full px-3 py-2 text-sm rounded-lg border border-[#e5e7eb] bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] focus:border-transparent transition-colors"
+        className="life-field"
       />
     </div>
   );
@@ -348,18 +341,8 @@ function CpToggle({
         role="switch"
         aria-checked={checked}
         onClick={() => onChange(!checked)}
-        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border-2 transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--life-primary-500)] ${
-          checked
-            ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)]"
-            : "bg-[#e5e7eb] border-[#e5e7eb]"
-        }`}
-      >
-        <span
-          className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-150 ${
-            checked ? "translate-x-5" : "translate-x-0.5"
-          }`}
+        className="life-switch"
         />
-      </button>
     </label>
   );
 }
@@ -379,19 +362,19 @@ function CpRadioGroup<T extends string>({
         return (
           <label
             key={opt.value}
-            className="flex items-center gap-3 py-2 px-2 rounded-lg cursor-pointer hover:bg-[#f9fafb] transition-colors group"
+            className="flex items-center gap-3 py-2 px-2 rounded-lg cursor-pointer hover:bg-[var(--life-neutral-020)] transition-colors group"
           >
             <div
               onClick={() => onChange(opt.value)}
               className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors cursor-pointer ${
                 sel
                   ? "border-[var(--life-primary-500)]"
-                  : "border-[#d1d5db] bg-white group-hover:border-[var(--life-primary-300)]"
+                  : "border-[var(--life-neutral-200)] bg-white group-hover:border-[var(--life-primary-300)]"
               }`}
             >
               {sel && <div className="w-2 h-2 rounded-full bg-[var(--life-primary-500)]" />}
             </div>
-            <span className="text-sm text-[#374151]">{opt.label}</span>
+            <span className="text-sm text-[var(--life-neutral-700)]">{opt.label}</span>
           </label>
         );
       })}
@@ -421,14 +404,14 @@ function CpCheckboxMulti<T extends string>({
         return (
           <label
             key={opt.value}
-            className="flex items-start gap-3 py-2 px-2 rounded-lg cursor-pointer hover:bg-[#f9fafb] transition-colors group"
+            className="flex items-start gap-3 py-2 px-2 rounded-lg cursor-pointer hover:bg-[var(--life-neutral-020)] transition-colors group"
           >
             <div
               onClick={() => toggle(opt.value)}
               className={`mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors cursor-pointer ${
                 checked
                   ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)]"
-                  : "border-[#d1d5db] bg-white group-hover:border-[#93c5fd]"
+                  : "border-[var(--life-neutral-200)] bg-white group-hover:border-[var(--life-primary-300)]"
               }`}
             >
               {checked && (
@@ -437,7 +420,7 @@ function CpCheckboxMulti<T extends string>({
                 </svg>
               )}
             </div>
-            <span className="text-sm text-[#374151] leading-snug">{opt.label}{opt.hint ? <InfoIcon label={opt.label} hint={opt.hint} className="ml-1 inline-flex align-middle" /> : null}</span>
+            <span className="text-sm text-[var(--life-neutral-700)] leading-snug">{opt.label}{opt.hint ? <InfoIcon label={opt.label} hint={opt.hint} className="ml-1 inline-flex align-middle" /> : null}</span>
           </label>
         );
       })}
@@ -470,16 +453,16 @@ function CpAccordion({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
+    <div className="rounded-xl border border-[var(--life-neutral-100)] bg-white overflow-hidden">
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="group w-full flex items-center justify-between gap-3 px-5 py-4 text-left bg-white text-[#111827] transition-colors hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] disabled:bg-[#f7f7f7] disabled:text-[#b7b7b7]"
+        className="life-accordion-trigger group !px-5 !min-h-[64px]"
       >
         <div className="min-w-0">
           <h3 className="text-sm font-bold text-current flex items-center gap-1.5">{title}{hint ? <InfoIcon label={title} hint={hint} /> : null}</h3>
-          {subtitle && <p className="text-xs text-[#6b7280] mt-0.5 leading-snug group-hover:text-[#0f5f75]">{subtitle}</p>}
+          {subtitle && <p className="text-xs text-[var(--life-neutral-600)] mt-0.5 leading-snug">{subtitle}</p>}
         </div>
         <svg
           className="shrink-0 ml-auto text-current"
@@ -490,7 +473,7 @@ function CpAccordion({
         </svg>
       </button>
       {open && (
-        <div className="px-5 pb-5 pt-1 border-t border-[#f3f4f6] flex flex-col gap-4">
+        <div className="px-5 pb-5 pt-1 border-t border-[var(--life-neutral-050)] flex flex-col gap-4">
           {children}
         </div>
       )}
@@ -509,12 +492,12 @@ function CpInnerCard({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
-      <div className="px-4 py-3.5 border-b border-[#f3f4f6] bg-[#f9fafb]">
+    <div className="rounded-xl border border-[var(--life-neutral-100)] bg-white overflow-hidden">
+      <div className="px-4 py-3.5 border-b border-[var(--life-neutral-050)] bg-[var(--life-neutral-020)]">
         {headerSlot ?? (
           <>
-            {title && <p className="text-xs font-semibold text-[#374151]">{title}</p>}
-            {subtitle && <p className="text-xs text-[#9ca3af] mt-0.5 leading-snug">{subtitle}</p>}
+            {title && <p className="text-xs font-semibold text-[var(--life-neutral-700)]">{title}</p>}
+            {subtitle && <p className="text-xs text-[var(--life-neutral-400)] mt-0.5 leading-snug">{subtitle}</p>}
           </>
         )}
       </div>
@@ -560,8 +543,8 @@ function CompletionRulesContent({
         />
       </CpInnerCard>
 
-      <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
-        <div className="px-4 py-3.5 border-b border-[#f3f4f6] bg-[#f9fafb]">
+      <div className="rounded-xl border border-[var(--life-neutral-100)] bg-white overflow-hidden">
+        <div className="px-4 py-3.5 border-b border-[var(--life-neutral-050)] bg-[var(--life-neutral-020)]">
           <CpToggle
             label={getSchemaLabel(getSchemaNode(assessmentSchema, "_isEnabled"), "Enable Assessment Completion")}
             checked={cfg.assessmentCompletionEnabled}
@@ -598,8 +581,8 @@ function CompletionRulesContent({
         )}
       </div>
 
-      <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
-        <div className="px-4 py-3.5 border-b border-[#f3f4f6] bg-[#f9fafb]">
+      <div className="rounded-xl border border-[var(--life-neutral-100)] bg-white overflow-hidden">
+        <div className="px-4 py-3.5 border-b border-[var(--life-neutral-050)] bg-[var(--life-neutral-020)]">
           <CpToggle
             label={getSchemaLabel(getSchemaNode(adaptiveContentSchema, "_isEnabled"), "Enable Adaptive Content")}
             checked={cfg.adaptiveContentEnabled}
@@ -645,8 +628,8 @@ function CompletionFeedbackContent({
 }) {
   return (
     <>
-      <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
-        <div className="px-4 py-3.5 border-b border-[#f3f4f6] bg-[#f9fafb]">
+      <div className="rounded-xl border border-[var(--life-neutral-100)] bg-white overflow-hidden">
+        <div className="px-4 py-3.5 border-b border-[var(--life-neutral-050)] bg-[var(--life-neutral-020)]">
           <CpToggle
             label={getSchemaLabel(getSchemaNode(completionNotifierSchema, "_isEnabled"), "Enable Completion Notifier")}
             checked={cfg.completionNotifierEnabled}
@@ -699,8 +682,8 @@ function ResumeBookmarkingContent({
 
   return (
     <>
-      <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
-        <div className="px-4 py-3.5 border-b border-[#f3f4f6] bg-[#f9fafb]">
+      <div className="rounded-xl border border-[var(--life-neutral-100)] bg-white overflow-hidden">
+        <div className="px-4 py-3.5 border-b border-[var(--life-neutral-050)] bg-[var(--life-neutral-020)]">
           <CpToggle label={getSchemaLabel(getSchemaNode(effectiveBookmarkingSchema, "_isEnabled"), "Enable Bookmarking")} checked={cfg.bookmarkingEnabled} onChange={(v) => set("bookmarkingEnabled", v)} />
         </div>
         {cfg.bookmarkingEnabled && (
@@ -732,7 +715,7 @@ function ResumeBookmarkingContent({
               <CpInfoNote>The furthest option pairs well with sequential navigation, ensuring learners always progress forward.</CpInfoNote>
             )}
 
-            <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] p-3 flex flex-col gap-3">
+            <div className="rounded-lg border border-[var(--life-neutral-100)] bg-[var(--life-neutral-020)] p-3 flex flex-col gap-3">
               <CpCheckbox
                 label={getSchemaLabel(getSchemaNode(effectiveBookmarkingSchema, "_showPrompt"), "Show prompt")}
                 hint={getSchemaHint(getSchemaNode(effectiveBookmarkingSchema, "_showPrompt"))}
@@ -813,7 +796,7 @@ function ProgressBarStylePicker({
   return (
     <div className="flex flex-col gap-2.5">
       <div className="flex items-center gap-1.5">
-        <InfoFieldLabel label="Progress Bar Style" hint={hint} className="text-[#374151]" />
+        <InfoFieldLabel label="Progress Bar Style" hint={hint} className="text-[var(--life-neutral-700)]" />
       </div>
       <div className="grid grid-cols-2 gap-3">
         {options.map((opt) => {
@@ -826,37 +809,37 @@ function ProgressBarStylePicker({
               className={`flex flex-col gap-3 rounded-xl border-2 p-3 text-left transition-all ${
                 selected
                   ? "border-[var(--life-base-black)] bg-white shadow-sm"
-                  : "border-[#e5e7eb] bg-white hover:border-[#d1d5db]"
+                  : "border-[var(--life-neutral-100)] bg-white hover:border-[var(--life-neutral-200)]"
               }`}
             >
               {/* Nav bar mockup */}
-              <div className="w-full rounded-lg border border-[#e5e7eb] bg-[#f9fafb] overflow-hidden">
+              <div className="w-full rounded-lg border border-[var(--life-neutral-100)] bg-[var(--life-neutral-020)] overflow-hidden">
                 {/* Nav row */}
                 <div className="flex items-center justify-between px-2.5 py-1.5">
-                  <div className="flex items-center gap-1 text-[10px] text-[#6b7280]">
+                  <div className="flex items-center gap-1 text-[10px] text-[var(--life-neutral-600)]">
                     <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <polyline points="15 18 9 12 15 6" />
                     </svg>
                     <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                       <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
                     </svg>
-                    <span className="font-medium text-[#374151]">Home / Case 1</span>
+                    <span className="font-medium text-[var(--life-neutral-700)]">Home / Case 1</span>
                   </div>
                   {opt.value === "compact" ? (
                     /* Compact: pill indicator top-right */
                     <div className="flex items-center gap-1.5">
-                      <div className="h-2 w-8 rounded-full bg-[#e5e7eb] overflow-hidden">
+                      <div className="h-2 w-8 rounded-full bg-[var(--life-neutral-100)] overflow-hidden">
                         <div className="h-full w-3/5 rounded-full bg-[var(--life-primary-500)]" />
                       </div>
-                      <span className="text-[9px] font-semibold text-[#6b7280]">v0.0.2</span>
+                      <span className="text-[9px] font-semibold text-[var(--life-neutral-600)]">v0.0.2</span>
                     </div>
                   ) : (
-                    <span className="text-[9px] font-semibold text-[#6b7280]">v0.0.2</span>
+                    <span className="text-[9px] font-semibold text-[var(--life-neutral-600)]">v0.0.2</span>
                   )}
                 </div>
                 {opt.value === "continuous" && (
                   /* Continuous: full-width bar below nav */
-                  <div className="h-1.5 w-full bg-[#e5e7eb]">
+                  <div className="h-1.5 w-full bg-[var(--life-neutral-100)]">
                     <div className="h-full w-3/5 bg-[var(--life-primary-500)]" />
                   </div>
                 )}
@@ -866,13 +849,13 @@ function ProgressBarStylePicker({
                 <div className={`mt-0.5 w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center shrink-0 ${
                   selected
                     ? "border-[var(--life-primary-500)]"
-                    : "border-[#d1d5db]"
+                    : "border-[var(--life-neutral-200)]"
                 }`}>
                   {selected && <div className="w-2 h-2 rounded-full bg-[var(--life-primary-500)]" />}
                 </div>
                 <div>
-                  <p className="text-xs font-semibold text-[#111827]">{opt.label}</p>
-                  <p className="text-[11px] text-[#6b7280] mt-0.5 leading-snug">{opt.description}</p>
+                  <p className="text-xs font-semibold text-[var(--life-neutral-850)]">{opt.label}</p>
+                  <p className="text-[11px] text-[var(--life-neutral-600)] mt-0.5 leading-snug">{opt.description}</p>
                 </div>
               </div>
             </button>
@@ -945,8 +928,8 @@ function ProgressIndicatorsContent({
           options={progressIndicatorOptions}
         />
       </CpInnerCard>
-      <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
-        <div className="px-4 py-3.5 border-b border-[#f3f4f6] bg-[#f9fafb]">
+      <div className="rounded-xl border border-[var(--life-neutral-100)] bg-white overflow-hidden">
+        <div className="px-4 py-3.5 border-b border-[var(--life-neutral-050)] bg-[var(--life-neutral-020)]">
           <CpToggle
             label={getSchemaLabel(getSchemaNode(progressionSchema, "_isEnabled"), "Enable Progression Indicator")}
             checked={cfg.progressIndicatorEnabled}
@@ -1011,8 +994,8 @@ function TimeEstimateContent({
 }) {
   return (
     <>
-      <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
-        <div className="px-4 py-3.5 border-b border-[#f3f4f6] bg-[#f9fafb]">
+      <div className="rounded-xl border border-[var(--life-neutral-100)] bg-white overflow-hidden">
+        <div className="px-4 py-3.5 border-b border-[var(--life-neutral-050)] bg-[var(--life-neutral-020)]">
           <CpToggle label={getSchemaLabel(getSchemaNode(estimatedTimeSchema, "_isEnabled"), "Enable Time Estimate")} checked={cfg.timeEnabled} onChange={(v) => set("timeEnabled", v)} />
         </div>
         {cfg.timeEnabled && (
@@ -1378,11 +1361,11 @@ export function CompletionProgressPage({
     if (target) onNavigationRequest?.(target);
   }
   return (
-    <div className="flex flex-col h-full w-full bg-[#f7f9fb]">
-      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-center gap-4">
+    <div className="flex flex-col h-full w-full bg-[var(--life-neutral-020)]">
+      <div className="shrink-0 px-6 py-5 bg-white border-b border-[var(--life-neutral-100)] flex items-center gap-4">
         <div>
           <h2 className="text-xl font-bold text-[var(--life-base-black)]">Completion &amp; Progress</h2>
-          <p className="text-sm text-[#6b7280] mt-0.5">
+          <p className="text-sm text-[var(--life-neutral-600)] mt-0.5">
             Configure how course and topic completion is tracked and displayed to learners.
           </p>
         </div>

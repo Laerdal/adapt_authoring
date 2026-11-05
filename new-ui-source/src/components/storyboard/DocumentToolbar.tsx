@@ -34,7 +34,7 @@ export default function DocumentToolbar({
             type="button"
             onClick={onEnrichAI}
             aria-pressed={enrichOpen}
-            className="sb-toolbar-btn sb-toolbar-btn-samaritan"
+            className="life-btn life-btn--secondary sb-toolbar-btn-samaritan"
           >
             <SamaritanIcon className="h-3.5 w-3.5" /> Enrich with AI
           </button>
