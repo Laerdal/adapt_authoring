@@ -4,7 +4,8 @@
 // this app's own design tokens - DAMS's own "Build with AI" flow behind this
 // picker is a client-side mock with no real generation; ours instead opens
 // BuildWithAiWizard, which is wired to the real Samaritan backend.
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { useDialogFocus } from "../common/useDialogFocus";
 
 interface Props {
   onClose: () => void;
@@ -50,6 +51,8 @@ function Card({
 }
 
 export default function BuildMethodPickerModal({ onClose, onBuildFromScratch, onBuildWithAI }: Props) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, onClose);
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
@@ -57,10 +60,18 @@ export default function BuildMethodPickerModal({ onClose, onBuildFromScratch, on
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg flex flex-col overflow-visible" onClick={(e) => e.stopPropagation()}>
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="build-method-title"
+        tabIndex={-1}
+        className="bg-white rounded-2xl shadow-xl w-full max-w-lg flex flex-col overflow-visible focus:outline-none"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#e5e7eb]">
           <div>
-            <h2 className="font-semibold text-[#111827] text-base">Create New Course</h2>
+            <h2 id="build-method-title" className="font-semibold text-[#111827] text-base">Create New Course</h2>
             <p className="text-xs text-[#6b7280] mt-0.5">How would you like to build your course?</p>
           </div>
           <button

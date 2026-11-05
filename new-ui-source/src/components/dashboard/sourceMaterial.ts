@@ -7,6 +7,9 @@
 import { importStoryboardDocument, type ImportFormat } from "@/api/adaptAuthoring";
 
 export interface SourceFile {
+  // Identifies one attachment, so a late response is matched to ITS entry and never
+  // to another file that happens to share the name.
+  id?: string;
   name: string;
   status: "reading" | "ready" | "error";
   text: string;

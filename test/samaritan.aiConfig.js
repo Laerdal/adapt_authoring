@@ -5,17 +5,17 @@ var config = require('../plugins/services/samaritan/ai/config');
 var ENV_KEYS = ['SAMARITAN_AI_API_KEY', 'SAMARITAN_AI_ENDPOINT', 'SAMARITAN_AI_DEPLOYMENT', 'SAMARITAN_AI_APIVERSION'];
 var savedEnv = {};
 
-beforeEach(function() {
-  ENV_KEYS.forEach(function(k) { savedEnv[k] = process.env[k]; delete process.env[k]; });
-});
-afterEach(function() {
-  ENV_KEYS.forEach(function(k) {
-    if (savedEnv[k] === undefined) delete process.env[k];
-    else process.env[k] = savedEnv[k];
-  });
-});
-
 describe('samaritan ai config (decoupled from storyboard/ckEditor)', function() {
+  beforeEach(function() {
+    ENV_KEYS.forEach(function(k) { savedEnv[k] = process.env[k]; delete process.env[k]; });
+  });
+  afterEach(function() {
+    ENV_KEYS.forEach(function(k) {
+      if (savedEnv[k] === undefined) delete process.env[k];
+      else process.env[k] = savedEnv[k];
+    });
+  });
+
   it('should report not configured when no key/endpoint are set anywhere', function() {
     config.isConfigured().should.equal(false);
   });

@@ -31,6 +31,7 @@ import {
   type SamaritanAction,
   type ConversationTurn
 } from "@/api/samaritan";
+import { actionDetail } from "./actionDetail";
 
 interface Props {
   courseId: string;
@@ -397,7 +398,7 @@ export default function SamaritanWorkspace({
   }
 
   function resetChat() {
-    if (applying) return;
+    if (applying || busy) return;
     setTurns([]);
     setActiveGoalLabel(null);
     history.current = [];
@@ -520,7 +521,7 @@ export default function SamaritanWorkspace({
             <button
               type="button"
               onClick={resetChat}
-              disabled={applying}
+              disabled={applying || busy}
               className="text-xs text-[#6b7280] hover:text-[#111827] disabled:opacity-40 disabled:cursor-not-allowed"
             >
               New chat
@@ -567,6 +568,9 @@ export default function SamaritanWorkspace({
                   <div className="border rounded p-2 bg-gray-50">
                     <p className="font-medium">{describeChanges(turn.plan)}</p>
                     <p className="text-xs text-gray-600 mb-2">{turn.plan.reason}</p>
+                    {actionDetail(turn.plan) && (
+                      <pre className="text-xs whitespace-pre-wrap font-sans bg-white border border-[#e5e7eb] rounded p-2 mb-2 max-h-48 overflow-y-auto">{actionDetail(turn.plan)}</pre>
+                    )}
                     <p className="text-xs mb-2">Risk: <strong>{turn.risk}</strong></p>
                     <div className="flex gap-2">
                       <button className="px-2 py-1 bg-green-600 text-white rounded text-xs" disabled={busy || reloadFailed || !!writeBlockedReason} onClick={() => decide(turn.actionId, true)}>Approve</button>
@@ -585,7 +589,16 @@ export default function SamaritanWorkspace({
                     )}
                     <ul className="text-xs my-1 max-h-40 overflow-y-auto">
                       {turn.actions.map((a) => (
-                        <li key={a.actionId}>- {describePlanAction(a)}</li>
+                        <li key={a.actionId}>
+                          {actionDetail(a) ? (
+                            <details>
+                              <summary className="cursor-pointer">- {describePlanAction(a)}</summary>
+                              <pre className="text-xs whitespace-pre-wrap font-sans bg-white border border-[#e5e7eb] rounded p-2 my-1 max-h-40 overflow-y-auto">{actionDetail(a)}</pre>
+                            </details>
+                          ) : (
+                            <>- {describePlanAction(a)}</>
+                          )}
+                        </li>
                       ))}
                     </ul>
                     <p className="text-xs mb-2">Risk: <strong>{turn.risk}</strong></p>

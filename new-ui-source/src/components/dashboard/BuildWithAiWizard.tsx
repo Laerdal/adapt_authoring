@@ -10,6 +10,8 @@ import { useRef, useState } from "react";
 import { createCourse, createTopic, updateCourse } from "@/api/adaptAuthoring";
 import { apiClient } from "@/api/client";
 import { ACCEPTED_SOURCE_TYPES, composeSourceText, readSourceFile, type SourceFile } from "./sourceMaterial";
+import { useDialogFocus } from "../common/useDialogFocus";
+import { actionDetail } from "../samaritan/actionDetail";
 import { proposeRequest, approvePlan, type SamaritanAction, type ApprovePlanResponse } from "@/api/samaritan";
 
 interface Props {
@@ -38,11 +40,12 @@ function RadioPills<T extends string>({
   cols?: number;
 }) {
   return (
-    <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+    <div role="group" className="grid gap-2" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
       {options.map((opt) => (
         <button
           key={opt.value}
           type="button"
+          aria-pressed={value === opt.value}
           onClick={() => onChange(opt.value)}
           className={`flex items-center gap-2 px-3 py-2 rounded-full border text-xs font-medium transition-colors ${
             value === opt.value ? "border-[#2d6fa8] bg-[#eaf3fa] text-[#2d6fa8]" : "border-[#d1d5db] text-[#374151] hover:bg-[#f9fafb]"
@@ -68,6 +71,21 @@ function SettingCard({ label, hint, children }: { label: string; hint?: string; 
   );
 }
 
+// The full text, question and answer options an action will write, so the author
+// reviews real content and not just titles before approving.
+function ActionReviewItem({ action }: { action: SamaritanAction }) {
+  const detail = actionDetail(action);
+  if (!detail) return <li>&bull; {describeChange(action)}</li>;
+  return (
+    <li>
+      <details>
+        <summary className="cursor-pointer">&bull; {describeChange(action)}</summary>
+        <pre className="mt-1 mb-2 ml-4 whitespace-pre-wrap font-sans text-[11px] text-[#4b5563] bg-[#f9fafb] border border-[#e5e7eb] rounded p-2 max-h-40 overflow-y-auto">{detail}</pre>
+      </details>
+    </li>
+  );
+}
+
 function describeChange(plan: SamaritanAction): string {
   if (plan.actionType === "ADD_COMPONENT") return `Add a ${(plan.parameters as any)._component} component`;
   if (plan.actionType === "CREATE_PAGE") return `Add page "${(plan.parameters as any).title}"`;
@@ -82,10 +100,16 @@ export default function BuildWithAiWizard({ onClose, onComplete, defaultTheme, d
 
   const [description, setDescription] = useState("");
   const [title, setTitle] = useState("");
+  // The latest title as typed. A suggestion that arrives after the author typed their
+  // own title must not replace it, and state captured before the request is stale.
+  const titleRef = useRef("");
   const [objectives, setObjectives] = useState<string[]>([]);
   const [sources, setSources] = useState<SourceFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const sourceSeq = useRef(0);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef);
   const topicIdRef = useRef<string | null>(null);
   // The title the saved course and root topic currently carry.
   const savedTitleRef = useRef<string>("");
@@ -104,15 +128,21 @@ export default function BuildWithAiWizard({ onClose, onComplete, defaultTheme, d
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   async function ensureCourse(): Promise<string> {
-    if (courseIdRef.current) return courseIdRef.current;
-    const created = await createCourse(
-      { title: title.trim() || "Untitled Course", description, theme: defaultTheme, menuStyle: defaultMenu },
-      { skipDefaultSeed: true }
-    );
-    topicIdRef.current = await createTopic(created.id, created.id, title.trim() || "Untitled Course", 1);
-    courseIdRef.current = created.id;
-    savedTitleRef.current = title.trim() || "Untitled Course";
-    return created.id;
+    const courseTitle = title.trim() || "Untitled Course";
+    if (!courseIdRef.current) {
+      const created = await createCourse(
+        { title: courseTitle, description, theme: defaultTheme, menuStyle: defaultMenu },
+        { skipDefaultSeed: true }
+      );
+      // Remembered immediately: if the topic below fails, a retry must reuse this
+      // course instead of creating a second one and orphaning the first.
+      courseIdRef.current = created.id;
+      savedTitleRef.current = courseTitle;
+    }
+    if (!topicIdRef.current) {
+      topicIdRef.current = await createTopic(courseIdRef.current, courseIdRef.current, savedTitleRef.current, 1);
+    }
+    return courseIdRef.current;
   }
 
   // Source files are read server-side (the storyboard's own Word/PDF/PowerPoint
@@ -120,16 +150,14 @@ export default function BuildWithAiWizard({ onClose, onComplete, defaultTheme, d
   async function addFiles(fileList: FileList | File[]) {
     const files = Array.from(fileList);
     if (!files.length) return;
-    setSources((prev) => [...prev, ...files.map((f) => ({ name: f.name, status: "reading" as const, text: "" }))]);
+    const entries = files.map((f) => ({ id: `src-${++sourceSeq.current}`, name: f.name, status: "reading" as const, text: "" }));
+    setSources((prev) => [...prev, ...entries]);
     const results = await Promise.all(files.map((f) => readSourceFile(f)));
-    setSources((prev) => {
-      const next = [...prev];
-      results.forEach((r) => {
-        const i = next.findIndex((x) => x.name === r.name && x.status === "reading");
-        if (i >= 0) next[i] = r;
-      });
-      return next;
-    });
+    // Each response goes to ITS entry. Matching by file name would hand a late
+    // response to a different attachment that reuses the name (remove, re-add).
+    // An entry the author removed meanwhile no longer exists, so its response is dropped.
+    const byId = new Map(entries.map((entry, i) => [entry.id, { ...results[i], id: entry.id }]));
+    setSources((prev) => prev.map((x) => (x.id && byId.has(x.id) && x.status === "reading" ? byId.get(x.id)! : x)));
   }
 
   function sourceBlock(): string {
@@ -158,7 +186,8 @@ export default function BuildWithAiWizard({ onClose, onComplete, defaultTheme, d
   // A blank title is filled from Samaritan's suggestion and shown to the author.
   async function applySuggestedTitle(courseId: string, suggested?: string) {
     const next = suggested?.trim();
-    if (!next || title.trim()) return;
+    if (!next || titleRef.current.trim()) return;
+    titleRef.current = next;
     setTitle(next);
     await syncTitle(courseId, next);
   }
@@ -268,10 +297,10 @@ export default function BuildWithAiWizard({ onClose, onComplete, defaultTheme, d
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-white flex flex-col">
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="build-ai-title" tabIndex={-1} className="fixed inset-0 z-50 bg-white flex flex-col focus:outline-none">
       <div className="flex items-center justify-between px-6 py-4 border-b border-[#e5e7eb] shrink-0">
         <div className="flex items-center gap-3">
-          <span className="text-sm font-semibold text-[#111827]">Build with AI</span>
+          <span id="build-ai-title" className="text-sm font-semibold text-[#111827]">Build with AI</span>
           <div className="flex items-center gap-2">
             {STEPS.map((label, i) => (
               <div key={label} className="flex items-center gap-2">
@@ -333,7 +362,7 @@ export default function BuildWithAiWizard({ onClose, onComplete, defaultTheme, d
                   <ul className="flex flex-wrap gap-2 px-5 pb-3">
                     {sources.map((f, i) => (
                       <li
-                        key={`${f.name}-${i}`}
+                        key={f.id ?? `${f.name}-${i}`}
                         title={f.error}
                         className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs ${
                           f.status === "error" ? "border-[#fecaca] bg-[#fef2f2] text-[#991b1b]" : "border-[#d1d5db] bg-[#f9fafb] text-[#374151]"
@@ -344,7 +373,7 @@ export default function BuildWithAiWizard({ onClose, onComplete, defaultTheme, d
                         <button
                           type="button"
                           aria-label={`Remove ${f.name}`}
-                          onClick={() => setSources((prev) => prev.filter((_, j) => j !== i))}
+                          onClick={() => setSources((prev) => prev.filter((x) => x !== f))}
                           className="text-[#6b7280] hover:text-[#111827]"
                         >
                           &times;
@@ -395,9 +424,13 @@ export default function BuildWithAiWizard({ onClose, onComplete, defaultTheme, d
                 <input
                   type="text"
                   value={title}
-                  onChange={(e) => setTitle(e.target.value)}
+                  disabled={busy}
+                  onChange={(e) => {
+                    titleRef.current = e.target.value;
+                    setTitle(e.target.value);
+                  }}
                   placeholder="e.g. Airway Management for Nursing Students"
-                  className="w-full px-4 py-3 text-sm border border-[#d1d5db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent"
+                  className="w-full px-4 py-3 text-sm border border-[#d1d5db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent disabled:opacity-60"
                 />
                 <p className="text-xs text-[#6b7280] mt-1.5">Leave blank and AI will suggest a title from your description.</p>
               </div>
@@ -559,7 +592,7 @@ export default function BuildWithAiWizard({ onClose, onComplete, defaultTheme, d
                     <p className="text-sm font-semibold text-[#111827] mb-2">{reviewActions.length} actions &middot; Risk: {reviewRisk}</p>
                     <ul className="text-xs text-[#374151] max-h-64 overflow-y-auto flex flex-col gap-1">
                       {reviewActions.map((a) => (
-                        <li key={a.actionId}>&bull; {describeChange(a)}</li>
+                        <ActionReviewItem key={a.actionId} action={a} />
                       ))}
                     </ul>
                   </div>
