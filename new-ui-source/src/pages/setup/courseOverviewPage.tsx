@@ -558,7 +558,7 @@ export function CourseOverviewPage({
     border: "1px solid var(--life-neutral-400)", // #949494 — matches Figma
     borderRadius: 8,
     padding: "10px 14px",
-    height: 44,
+    height: 40,
     width: "100%",
     outline: "none",
     transition: "border-color 0.15s",
@@ -592,7 +592,7 @@ export function CourseOverviewPage({
     return (
       <div style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 4, flexWrap: "nowrap" }}>
         {showInfoIcon ? (
-          <InfoFieldLabel label={displayLabel} hint={hint} className="text-[#374151] !mb-0" />
+          <InfoFieldLabel label={displayLabel} hint={hint} className="text-[var(--life-neutral-700)] !mb-0" />
         ) : (
           <span style={{ ...labelStyle, marginBottom: 0, lineHeight: 1.2 }}>{displayLabel}</span>
         )}
@@ -603,7 +603,7 @@ export function CourseOverviewPage({
 
   return (
     <div
-      className="flex flex-col h-full w-full bg-[#f7f9fb]"
+      className="flex flex-col h-full w-full bg-[var(--life-neutral-020)]"
       dir="ltr"
       style={{
         fontFamily: '"Lato", sans-serif',
@@ -615,12 +615,12 @@ export function CourseOverviewPage({
       <SaveStatusToast toast={saveSuccess && !isDirty ? { type: "success", message: "Changes saved successfully" } : null} onDismiss={() => setSaveSuccess(false)} />
 
       {/* ── Header ───────────────────────────────────────────────── */}
-      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-center gap-4">
+      <div className="shrink-0 px-6 py-5 bg-white border-b border-[var(--life-neutral-100)] flex items-center gap-4">
         <div>
           <h2 className="text-xl font-bold text-[var(--life-base-black)] m-0">
             Course Overview
           </h2>
-          <p className="text-sm text-[#6b7280] mt-0.5 mb-0">
+          <p className="text-sm text-[var(--life-neutral-600)] mt-0.5 mb-0">
             Click any field to review and edit its content inline.
           </p>
         </div>
@@ -649,9 +649,9 @@ export function CourseOverviewPage({
             onChange={(e) => { setFormTitle(e.target.value); markDirty(); }}
             placeholder="Title to be displayed in the course main menu"
             disabled={loading}
-            style={inputBase}
-            onFocus={focusIn}
-            onBlur={focusOut}
+            aria-required="true"
+            aria-invalid={!formTitle.trim()}
+            className="life-field"
           />
         </div>
 
@@ -663,9 +663,7 @@ export function CourseOverviewPage({
             onChange={(e) => { setFormSubtitle(e.target.value); markDirty(); }}
             placeholder="Subtitle to be displayed in the course main menu"
             disabled={loading}
-            style={inputBase}
-            onFocus={focusIn}
-            onBlur={focusOut}
+            className="life-field"
           />
         </div>
 
@@ -700,9 +698,7 @@ export function CourseOverviewPage({
             onChange={(e) => { setFormDesc(e.target.value); markDirty(); }}
             placeholder="Provide description to be added to the course manifest metadata"
             disabled={loading}
-            style={textareaBase}
-            onFocus={focusIn}
-            onBlur={focusOut}
+            className="life-field"
           />
         </div>
 
@@ -817,9 +813,7 @@ export function CourseOverviewPage({
               onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddTag(); } }}
               placeholder="Add tags to your course and press Enter"
               disabled={loading}
-              style={{ ...inputBase, flex: 1 }}
-              onFocus={focusIn}
-              onBlur={focusOut}
+              className="life-field flex-1"
             />
           </div>
           {tags.length > 0 && (
@@ -849,25 +843,19 @@ export function CourseOverviewPage({
         {/* Default Language */}
         <div>
           {renderFieldLabel("Default Language", ["_defaultLanguage"], { schemaRoot: configSchema })}
-          <div style={{ position: "relative" }}>
-            <select
-              value={selectedLanguageOption}
-              onChange={(e) => handleLanguageSelectionChange(e.target.value)}
-              style={{ ...inputBase, appearance: "none", WebkitAppearance: "none", paddingRight: 36, cursor: "pointer", color: selectedLanguageOption ? "var(--life-base-black)" : "var(--life-neutral-400)" } as React.CSSProperties}
-              onFocus={focusIn}
-              onBlur={focusOut}
-            >
-              <option value="">Select language</option>
-              {LANGUAGES.map((lang) => (
-                <option key={lang.iso} value={lang.iso}>
-                  {lang.iso === "other" ? lang.label : `${lang.iso.toUpperCase()} — ${lang.label}`}
-                </option>
-              ))}
-            </select>
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "var(--life-neutral-400)" }}>
-              <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </div>
+          <select
+            value={selectedLanguageOption}
+            onChange={(e) => handleLanguageSelectionChange(e.target.value)}
+            aria-label="Default language"
+            className={`life-field ${selectedLanguageOption ? "" : "text-[var(--life-neutral-500)]"}`}
+          >
+            <option value="">Select language</option>
+            {LANGUAGES.map((lang) => (
+              <option key={lang.iso} value={lang.iso}>
+                {lang.iso === "other" ? lang.label : `${lang.iso.toUpperCase()} — ${lang.label}`}
+              </option>
+            ))}
+          </select>
           {selectedLanguageOption === "other" && (
             <div style={{ marginTop: 10 }}>
               <input
@@ -881,9 +869,7 @@ export function CourseOverviewPage({
                   markDirty();
                 }}
                 placeholder="Enter the default language"
-                style={inputBase}
-                onFocus={focusIn}
-                onBlur={focusOut}
+                className="life-field"
               />
             </div>
           )}
@@ -915,7 +901,7 @@ export function CourseOverviewPage({
                 value={mode}
                 checked={shareMode === mode}
                 onChange={() => setShareMode(mode)}
-                style={{ accentColor: "var(--life-primary-500)", width: 16, height: 16, cursor: "pointer", flexShrink: 0 }}
+                className="life-radio"
               />
               <span style={{ fontFamily: '"Lato", sans-serif', fontSize: 14, color: "var(--life-base-black)" }}>
                 {mode === "all" ? "Share with All" : "Share with"}
@@ -953,7 +939,7 @@ export function CourseOverviewPage({
                 }}
                 style={{
                   ...inputBase,
-                  minHeight: 44,
+                  minHeight: 40,
                   height: "auto",
                   padding: "7px 10px",
                   display: "flex",
@@ -1129,7 +1115,7 @@ export function CourseOverviewPage({
                 type="button"
                 onClick={handleOpenCourseStructure}
                 disabled={loading || saving || !courseId}
-                className="inline-flex items-center gap-2 rounded-lg bg-[var(--life-primary-500)] px-4 py-2 text-sm font-bold text-[var(--life-base-white)] transition-colors hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] disabled:cursor-not-allowed disabled:opacity-50"
+                className="life-btn life-btn--primary"
               >
                 <span>Open Course Structure</span>
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none">

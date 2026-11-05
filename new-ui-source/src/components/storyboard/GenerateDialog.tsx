@@ -189,19 +189,19 @@ export default function GenerateDialog({
           style={{ borderTop: '1px solid var(--life-color-border-subtle)' }}
         >
           {result ? (
-            <button type="button" onClick={onDone ?? onClose} className="sb-toolbar-btn sb-toolbar-btn-primary">
+            <button type="button" onClick={onDone ?? onClose} className="life-btn life-btn--primary">
               Done
             </button>
           ) : (
             <>
-              <button type="button" onClick={onClose} disabled={running} className="sb-toolbar-btn">
+              <button type="button" onClick={onClose} disabled={running} className="life-btn life-btn--secondary">
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={onConfirm}
                 disabled={!plan || blocked || running}
-                className="sb-toolbar-btn sb-toolbar-btn-primary"
+                className="life-btn life-btn--primary"
               >
                 {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowRight className="h-3.5 w-3.5" />}
                 {running ? 'Generating…' : 'Generate'}

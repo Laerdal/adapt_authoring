@@ -257,21 +257,15 @@ export default function CommentPopover({
               }}
               placeholder="Comment... use @ to mention"
               rows={2}
-              className="mb-2 w-full resize-y p-2.5 outline-none"
-              style={{
-                borderRadius: 'var(--radius)',
-                background: 'var(--life-color-bg-surface-subtle)',
-                border: '1px solid var(--life-color-border-subtle)',
-                fontSize: 13,
-                color: 'var(--life-color-text-default)',
-              }}
+              aria-label="Comment"
+              className="life-field mb-2"
             />
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setBody((b) => `${b}@`)}
                 title="Mention someone"
-                className="sb-toolbar-btn"
+                className="life-btn life-btn--secondary"
               >
                 <AtSign className="h-3.5 w-3.5" /> Mention
               </button>
@@ -279,7 +273,7 @@ export default function CommentPopover({
                 type="button"
                 onClick={() => void post()}
                 disabled={!body.trim() || busy}
-                className="ml-auto sb-toolbar-btn sb-toolbar-btn-primary"
+                className="ml-auto life-btn life-btn--primary"
               >
                 Post
               </button>

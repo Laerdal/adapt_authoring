@@ -9,14 +9,14 @@ function AssetOrUrlPicker({ label, value, onChange }: { label: string; value: st
   const [tab, setTab] = useState<"asset" | "url">("asset");
   return (
     <div className="flex flex-col gap-2">
-      <span className="text-xs font-semibold text-[#374151]">{label}</span>
-      <div className="flex border border-[#e5e7eb] rounded-lg overflow-hidden w-fit">
+      <span className="text-xs font-semibold text-[var(--life-neutral-700)]">{label}</span>
+      <div className="flex border border-[var(--life-neutral-100)] rounded-lg overflow-hidden w-fit">
         {(["asset", "url"] as const).map((t) => (
           <button
             key={t}
             type="button"
             onClick={() => setTab(t)}
-            className={`px-3 py-1.5 text-xs font-medium transition-colors ${tab === t ? "bg-[#2d6fa8] text-white" : "bg-white text-[#6b7280] hover:bg-[#f3f4f6]"}`}
+            className={`px-3 py-1.5 text-xs font-medium transition-colors ${tab === t ? "bg-[var(--life-primary-500)] text-white" : "bg-white text-[var(--life-neutral-600)] hover:bg-[var(--life-neutral-050)]"}`}
           >
             {t === "asset" ? "From Asset Library" : "From URL"}
           </button>
@@ -24,14 +24,14 @@ function AssetOrUrlPicker({ label, value, onChange }: { label: string; value: st
       </div>
       {tab === "asset" ? (
         <div className="flex items-center gap-2">
-          <div className="flex-1 flex items-center gap-2 px-3 py-2 border border-[#e5e7eb] rounded-lg bg-[#f9fafb] text-sm text-[#9ca3af]">
+          <div className="flex-1 flex items-center gap-2 px-3 py-2 border border-[var(--life-neutral-100)] rounded-lg bg-[var(--life-neutral-020)] text-sm text-[var(--life-neutral-400)]">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" />
               <polyline points="21 15 16 10 5 21" />
             </svg>
             {value && !value.startsWith("http") ? value : "No asset selected"}
           </div>
-          <button type="button" className="px-3 py-2 text-xs font-medium text-[#2d6fa8] border border-[#2d6fa8] rounded-lg hover:bg-[#dbeeff] transition-colors">
+          <button type="button" className="px-3 py-2 text-xs font-medium text-[var(--life-primary-500)] border border-[var(--life-primary-500)] rounded-lg hover:bg-[var(--life-primary-100)] transition-colors">
             Browse
           </button>
         </div>
@@ -41,7 +41,7 @@ function AssetOrUrlPicker({ label, value, onChange }: { label: string; value: st
           value={value.startsWith("http") ? value : ""}
           onChange={(e) => onChange(e.target.value)}
           placeholder="https://example.com/image.png"
-          className="w-full px-3 py-2 text-sm border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] placeholder-[#9ca3af] text-[#374151]"
+          className="life-field"
         />
       )}
     </div>
@@ -53,7 +53,7 @@ function ExportCheckbox({ checked, onChange, label }: { checked: boolean; onChan
     <label className="flex items-center gap-2.5 cursor-pointer select-none group">
       <span
         onClick={() => onChange(!checked)}
-        className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${checked ? "bg-[#2d6fa8] border-[#2d6fa8]" : "border-[#d1d5db] bg-white group-hover:border-[#2d6fa8]"}`}
+        className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${checked ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)]" : "border-[var(--life-neutral-200)] bg-white group-hover:border-[var(--life-primary-500)]"}`}
       >
         {checked && (
           <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -61,7 +61,7 @@ function ExportCheckbox({ checked, onChange, label }: { checked: boolean; onChan
           </svg>
         )}
       </span>
-      <span className="text-sm text-[#374151]">{label}</span>
+      <span className="text-sm text-[var(--life-neutral-700)]">{label}</span>
     </label>
   );
 }
@@ -69,15 +69,15 @@ function ExportCheckbox({ checked, onChange, label }: { checked: boolean; onChan
 function ExportTextField({ label, placeholder, value, onChange, optional }: { label: string; placeholder?: string; value: string; onChange: (v: string) => void; optional?: boolean }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="text-xs font-semibold text-[#374151]">
-        {label}{optional && <span className="ml-1 text-[#9ca3af] font-normal">(Optional)</span>}
+      <label className="text-xs font-semibold text-[var(--life-neutral-700)]">
+        {label}{optional && <span className="ml-1 text-[var(--life-neutral-400)] font-normal">(Optional)</span>}
       </label>
       <input
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full px-3 py-2 text-sm border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] placeholder-[#9ca3af] text-[#374151]"
+        className="life-field"
       />
     </div>
   );
@@ -87,13 +87,13 @@ function ExportSelect({ label, value, options, onChange }: { label: string; valu
   const id = label.toLowerCase().replace(/\s+/g, "-");
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={id} className="text-xs font-semibold text-[#374151]">{label}</label>
+      <label htmlFor={id} className="text-xs font-semibold text-[var(--life-neutral-700)]">{label}</label>
       <select
         id={id}
         aria-label={label}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full px-3 py-2 text-sm border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] text-[#374151] bg-white"
+        className="life-field"
       >
         {options.map((o) => <option key={o}>{o}</option>)}
       </select>
@@ -104,7 +104,7 @@ function ExportSelect({ label, value, options, onChange }: { label: string; valu
 function ExportSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-4">
-      <h3 className="text-sm font-semibold text-[#111827] border-b border-[#f3f4f6] pb-2">{title}</h3>
+      <h3 className="text-sm font-semibold text-[var(--life-neutral-850)] border-b border-[var(--life-neutral-050)] pb-2">{title}</h3>
       {children}
     </div>
   );
@@ -170,11 +170,11 @@ function PdfExportForm() {
         <label className="flex items-center gap-3 cursor-pointer select-none">
           <div
             onClick={() => setPasswordEnabled((v) => !v)}
-            className={`relative w-9 h-5 rounded-full transition-colors ${passwordEnabled ? "bg-[#2d6fa8]" : "bg-[#d1d5db]"}`}
+            className={`relative w-9 h-5 rounded-full transition-colors ${passwordEnabled ? "bg-[var(--life-primary-500)]" : "bg-[var(--life-neutral-200)]"}`}
           >
             <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${passwordEnabled ? "translate-x-4" : "translate-x-0.5"}`} />
           </div>
-          <span className="text-sm font-medium text-[#374151]">Enable Password Protection</span>
+          <span className="text-sm font-medium text-[var(--life-neutral-700)]">Enable Password Protection</span>
         </label>
 
         {passwordEnabled && (
@@ -186,7 +186,7 @@ function PdfExportForm() {
             <ExportSelect label="Encryption Level" value={encryptionLevel} options={["RC4-40", "RC4-128", "AES-128", "AES-256"]} onChange={setEncryptionLevel} />
 
             <div className="flex flex-col gap-1.5">
-              <span className="text-xs font-semibold text-[#374151]">Permissions</span>
+              <span className="text-xs font-semibold text-[var(--life-neutral-700)]">Permissions</span>
               <div className="flex flex-col gap-3 pl-1">
                 <ExportCheckbox checked={disablePrinting}    onChange={setDisablePrinting}    label="Disable Printing" />
                 <ExportCheckbox checked={disableCopying}     onChange={setDisableCopying}     label="Disable Copying" />
@@ -209,10 +209,10 @@ function PdfExportForm() {
       </ExportSection>
 
       {/* Export button */}
-      <div className="pt-2 border-t border-[#f3f4f6]">
+      <div className="pt-2 border-t border-[var(--life-neutral-050)]">
         <button
           type="button"
-          className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-[#2E7FA1] hover:bg-[#266580] rounded-lg transition-colors"
+          className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-600)] rounded-lg transition-colors"
         >
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
@@ -236,27 +236,27 @@ function ExportPanel() {
           <button
             type="button"
             onClick={() => setActiveExport("choose")}
-            className="flex items-center gap-1.5 text-sm text-[#6b7280] hover:text-[#111827] transition-colors"
+            className="flex items-center gap-1.5 text-sm text-[var(--life-neutral-600)] hover:text-[var(--life-neutral-850)] transition-colors"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M19 12H5M12 19l-7-7 7-7" />
             </svg>
             Back
           </button>
-          <h2 className="text-lg font-semibold text-[#111827]">Export Source</h2>
+          <h2 className="text-lg font-semibold text-[var(--life-neutral-850)]">Export Source</h2>
         </div>
-        <div className="flex flex-col items-center justify-center py-16 gap-4 text-center border border-dashed border-[#e5e7eb] rounded-xl bg-[#f9fafb]">
-          <div className="w-14 h-14 rounded-2xl bg-white border border-[#e5e7eb] flex items-center justify-center shadow-sm">
+        <div className="flex flex-col items-center justify-center py-16 gap-4 text-center border border-dashed border-[var(--life-neutral-100)] rounded-xl bg-[var(--life-neutral-020)]">
+          <div className="w-14 h-14 rounded-2xl bg-white border border-[var(--life-neutral-100)] flex items-center justify-center shadow-sm">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
               <polyline points="14 2 14 8 20 8" />
             </svg>
           </div>
           <div>
-            <p className="text-sm font-semibold text-[#374151]">Export Source Files</p>
-            <p className="text-xs text-[#9ca3af] mt-1 max-w-xs">Download the raw course source files for backup or import into another authoring tool.</p>
+            <p className="text-sm font-semibold text-[var(--life-neutral-700)]">Export Source Files</p>
+            <p className="text-xs text-[var(--life-neutral-400)] mt-1 max-w-xs">Download the raw course source files for backup or import into another authoring tool.</p>
           </div>
-          <button type="button" className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-[#2E7FA1] hover:bg-[#266580] rounded-lg transition-colors">
+          <button type="button" className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-600)] rounded-lg transition-colors">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
               <polyline points="7 10 12 15 17 10" />
@@ -276,14 +276,14 @@ function ExportPanel() {
           <button
             type="button"
             onClick={() => setActiveExport("choose")}
-            className="flex items-center gap-1.5 text-sm text-[#6b7280] hover:text-[#111827] transition-colors"
+            className="flex items-center gap-1.5 text-sm text-[var(--life-neutral-600)] hover:text-[var(--life-neutral-850)] transition-colors"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M19 12H5M12 19l-7-7 7-7" />
             </svg>
             Back
           </button>
-          <h2 className="text-lg font-semibold text-[#111827]">Export as PDF</h2>
+          <h2 className="text-lg font-semibold text-[var(--life-neutral-850)]">Export as PDF</h2>
         </div>
         <PdfExportForm />
       </div>
@@ -294,8 +294,8 @@ function ExportPanel() {
   return (
     <div className="max-w-2xl w-full flex flex-col gap-6">
       <div>
-        <h2 className="text-lg font-semibold text-[#111827]">Export</h2>
-        <p className="text-sm text-[#6b7280] mt-1">Choose how you'd like to export this course.</p>
+        <h2 className="text-lg font-semibold text-[var(--life-neutral-850)]">Export</h2>
+        <p className="text-sm text-[var(--life-neutral-600)] mt-1">Choose how you'd like to export this course.</p>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -303,10 +303,10 @@ function ExportPanel() {
         <button
           type="button"
           onClick={() => setActiveExport("source")}
-          className="flex flex-col items-start gap-4 p-5 bg-white border border-[#e5e7eb] rounded-xl hover:border-[#2d6fa8] hover:shadow-sm transition-all text-left group"
+          className="flex flex-col items-start gap-4 p-5 bg-white border border-[var(--life-neutral-100)] rounded-xl hover:border-[var(--life-primary-500)] hover:shadow-sm transition-all text-left group"
         >
-          <div className="w-10 h-10 rounded-xl bg-[#f3f4f6] group-hover:bg-[#dbeeff] flex items-center justify-center transition-colors">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="group-hover:stroke-[#2d6fa8]">
+          <div className="w-10 h-10 rounded-xl bg-[var(--life-neutral-050)] group-hover:bg-[var(--life-primary-100)] flex items-center justify-center transition-colors">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="group-hover:stroke-[var(--life-primary-500)]">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
               <polyline points="14 2 14 8 20 8" />
               <line x1="12" y1="18" x2="12" y2="12" />
@@ -314,10 +314,10 @@ function ExportPanel() {
             </svg>
           </div>
           <div>
-            <p className="text-sm font-semibold text-[#111827]">Export Source</p>
-            <p className="text-xs text-[#6b7280] mt-1 leading-relaxed">Download the raw source files for backup or migration.</p>
+            <p className="text-sm font-semibold text-[var(--life-neutral-850)]">Export Source</p>
+            <p className="text-xs text-[var(--life-neutral-600)] mt-1 leading-relaxed">Download the raw source files for backup or migration.</p>
           </div>
-          <span className="mt-auto text-xs font-medium text-[#2d6fa8] flex items-center gap-1">
+          <span className="mt-auto text-xs font-medium text-[var(--life-primary-500)] flex items-center gap-1">
             Select
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M5 12h14M12 5l7 7-7 7" />
@@ -329,20 +329,20 @@ function ExportPanel() {
         <button
           type="button"
           onClick={() => setActiveExport("pdf")}
-          className="flex flex-col items-start gap-4 p-5 bg-white border border-[#e5e7eb] rounded-xl hover:border-[#2d6fa8] hover:shadow-sm transition-all text-left group"
+          className="flex flex-col items-start gap-4 p-5 bg-white border border-[var(--life-neutral-100)] rounded-xl hover:border-[var(--life-primary-500)] hover:shadow-sm transition-all text-left group"
         >
-          <div className="w-10 h-10 rounded-xl bg-[#f3f4f6] group-hover:bg-[#dbeeff] flex items-center justify-center transition-colors">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="group-hover:stroke-[#2d6fa8]">
+          <div className="w-10 h-10 rounded-xl bg-[var(--life-neutral-050)] group-hover:bg-[var(--life-primary-100)] flex items-center justify-center transition-colors">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="group-hover:stroke-[var(--life-primary-500)]">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
               <polyline points="14 2 14 8 20 8" />
               <path d="M9 13h6M9 17h6M9 9h1" />
             </svg>
           </div>
           <div>
-            <p className="text-sm font-semibold text-[#111827]">Export as PDF</p>
-            <p className="text-xs text-[#6b7280] mt-1 leading-relaxed">Generate a styled PDF with TOC, metadata, and security options.</p>
+            <p className="text-sm font-semibold text-[var(--life-neutral-850)]">Export as PDF</p>
+            <p className="text-xs text-[var(--life-neutral-600)] mt-1 leading-relaxed">Generate a styled PDF with TOC, metadata, and security options.</p>
           </div>
-          <span className="mt-auto text-xs font-medium text-[#2d6fa8] flex items-center gap-1">
+          <span className="mt-auto text-xs font-medium text-[var(--life-primary-500)] flex items-center gap-1">
             Select
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M5 12h14M12 5l7 7-7 7" />
@@ -367,18 +367,18 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4" onMouseDown={onClose}>
       <div
-        className="w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-2xl bg-white shadow-2xl border border-[#e5e7eb] flex flex-col"
+        className="w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-2xl bg-white shadow-2xl border border-[var(--life-neutral-100)] flex flex-col"
         role="dialog"
         aria-modal="true"
         aria-label="Export dialog"
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#f3f4f6] shrink-0">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--life-neutral-050)] shrink-0">
           <div>
-            <h3 className="text-base font-semibold text-[#111827]">Export</h3>
-            <p className="text-sm text-[#6b7280] mt-0.5">Choose how you'd like to export this course.</p>
+            <h3 className="text-base font-semibold text-[var(--life-neutral-850)]">Export</h3>
+            <p className="text-sm text-[var(--life-neutral-600)] mt-0.5">Choose how you'd like to export this course.</p>
           </div>
-          <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-[#6b7280] hover:bg-[#f3f4f6] transition-colors" aria-label="Close export dialog">
+          <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-[var(--life-neutral-600)] hover:bg-[var(--life-neutral-050)] transition-colors" aria-label="Close export dialog">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
@@ -386,7 +386,7 @@ export default function ExportDialog({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5 md:p-6 bg-[#f8fafc]">
+        <div className="flex-1 overflow-y-auto p-5 md:p-6 bg-[var(--life-neutral-020)]">
           <ExportPanel />
         </div>
       </div>

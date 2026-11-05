@@ -242,7 +242,7 @@ function hasComponentContent(kind: ComponentKind, data: ComponentData, title: st
 // ── Presentational helpers ───────────────────────────────────────────────────
 
 const inputCls =
-  'w-full rounded border border-border bg-background px-2 py-1 text-sm text-foreground outline-none focus:border-primary';
+  'life-field';
 const labelCls = 'mb-0.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground';
 const stop = (e: React.KeyboardEvent) => e.stopPropagation();
 
@@ -348,7 +348,7 @@ function AssetField({
             <button type="button" onClick={() => setPicking(true)} className="rounded border border-primary px-2 py-0.5 text-xs text-primary hover:bg-primary/5">
               Change
             </button>
-            <button type="button" onClick={() => onChange(undefined)} className="rounded border border-red-500 px-2 py-0.5 text-xs text-red-600 hover:bg-red-50">
+            <button type="button" onClick={() => onChange(undefined)} className="rounded border border-[var(--life-critical-500)] px-2 py-0.5 text-xs text-[var(--life-critical-600)] hover:bg-[var(--life-critical-050)]">
               Remove
             </button>
           </div>
@@ -374,7 +374,7 @@ function AssetField({
             Cancel
           </button>
         </div>
-        {urlError && <p role="alert" className="mt-1 text-xs text-red-600">{urlError}</p>}
+        {urlError && <p role="alert" className="mt-1 text-xs text-[var(--life-critical-600)]">{urlError}</p>}
         </div>
       ) : (
         <div className="flex flex-wrap gap-2">
@@ -622,10 +622,10 @@ function ComponentBody({ kind, data, set, blockId }: { kind: ComponentKind; data
             </label>
             <label className="mt-1 flex items-center gap-1.5 text-sm text-foreground cursor-pointer group">
               <input type="checkbox" checked={f.mandatory} onChange={(e) => setFields(fields.map((x, j) => (j === i ? { ...x, mandatory: e.target.checked } : x)))} aria-label="Is mandatory" className="sr-only peer" />
-              <CheckboxIndicator checked={f.mandatory} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
+              <CheckboxIndicator checked={f.mandatory} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[var(--life-neutral-200)] bg-white group-hover:border-[var(--life-primary-300)]" />
               <span>
                 Required field
-                {f.mandatory && <span className="text-red-600 font-bold">*</span>}
+                {f.mandatory && <span className="text-[var(--life-critical-600)] font-bold">*</span>}
               </span>
             </label>
           </div>
@@ -707,7 +707,7 @@ function ComponentBody({ kind, data, set, blockId }: { kind: ComponentKind; data
                     aria-label="Allow retry"
                     className="sr-only peer"
                   />
-                  <CheckboxIndicator checked={b.allowRetry} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
+                  <CheckboxIndicator checked={b.allowRetry} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[var(--life-neutral-200)] bg-white group-hover:border-[var(--life-primary-300)]" />
                   Allow retry
                 </label>
               </div>
@@ -878,7 +878,7 @@ const instructionHtml = sanitizeEditorHtml(data.instruction);
             <label key={i} className="block">
               <span className="mb-0.5 block text-sm font-medium text-foreground">
                 {f.label || `Field ${i + 1}`}
-                {f.mandatory && <span className="ml-0.5 text-red-600">*</span>}
+                {f.mandatory && <span className="ml-0.5 text-[var(--life-critical-600)]">*</span>}
               </span>
               {f.control === 'Multi-Line Text' ? (
                 <textarea disabled placeholder={f.placeholder} rows={2} className={`${inputCls} resize-none bg-muted/40`} />
@@ -888,7 +888,7 @@ const instructionHtml = sanitizeEditorHtml(data.instruction);
                 </select>
               ) : f.control === 'Checkbox' ? (
                 <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                  <CheckboxIndicator checked={false} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center border-[#d1d5db] bg-white" /> {f.placeholder}
+                  <CheckboxIndicator checked={false} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center border-[var(--life-neutral-200)] bg-white" /> {f.placeholder}
                 </span>
               ) : (
                 <input disabled type={f.control === 'Number' ? 'number' : 'text'} placeholder={f.placeholder} className={`${inputCls} bg-muted/40`} />

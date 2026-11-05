@@ -11,8 +11,8 @@ export default function StatCard({ label, value, delta, deltaPositive, icon, ico
   return (
     <div className="bg-white rounded-xl border border-[#d0d0dc] p-5 flex items-start justify-between hover:shadow-sm transition-shadow">
       <div className="space-y-1.5">
-        <p className="text-sm text-[#6b6b8a] font-medium">{label}</p>
-        <p className="text-2xl font-bold text-[#1a1a2e]">{value}</p>
+        <p className="text-sm text-[var(--life-neutral-600)] font-medium">{label}</p>
+        <p className="text-2xl font-bold text-[var(--life-neutral-850)]">{value}</p>
         {delta && (
           <p className={`text-xs font-medium flex items-center gap-1 ${deltaPositive ? "text-[#2e7d32]" : "text-[#c62828]"}`}>
             <span>{deltaPositive ? "↑" : "↓"}</span>

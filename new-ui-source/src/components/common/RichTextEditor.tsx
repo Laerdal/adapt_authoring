@@ -138,7 +138,7 @@ export default function RichTextEditor({
   return (
     <div className="rich-text-editor-field">
       <div ref={containerRef} />
-      {!ready && <div className="text-[12px] text-[#9ca3af] px-1 py-1">Loading editor…</div>}
+      {!ready && <div className="text-[12px] text-[var(--life-neutral-400)] px-1 py-1">Loading editor…</div>}
       {samaritanOpen && (
         <AiAssistPopover
           initialText={samaritanSeedText}

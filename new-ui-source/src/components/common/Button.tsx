@@ -1,10 +1,19 @@
-// Reusable Button component following LIFE design system
+// Reusable Button component following LIFE design system.
+// Styling lives in life-components.css (.life-btn*), built on the LIFE tokens.
 
 import { cn } from "@/utils";
 
+export type ButtonVariant = "primary" | "secondary" | "ghost" | "text" | "danger";
+export type ButtonSize = "sm" | "md" | "lg";
+
+/** Class string for non-<button> elements (e.g. react-router <Link>) that must look like a LIFE button. */
+export function lifeButtonClass(variant: ButtonVariant = "primary", size: ButtonSize = "md", className?: string) {
+  return cn("life-btn", `life-btn--${variant}`, size !== "md" && `life-btn--${size}`, className);
+}
+
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: "primary" | "secondary" | "ghost" | "danger";
-  size?: "sm" | "md" | "lg";
+  variant?: ButtonVariant;
+  size?: ButtonSize;
   isLoading?: boolean;
   children: React.ReactNode;
 }
@@ -16,27 +25,14 @@ export default function Button({
   disabled,
   className,
   children,
+  type = "button",
   ...props
 }: ButtonProps) {
-  const baseStyles = "inline-flex items-center justify-center gap-2 font-semibold rounded-lg transition-colors";
-
-  const variantStyles = {
-    primary: "bg-[#2d6fa8] hover:bg-[#245c8f] text-white disabled:bg-[#9ca3af] disabled:cursor-not-allowed",
-    secondary: "bg-white border border-[#e5e7eb] text-[#374151] hover:bg-[#f9fafb] disabled:bg-[#f3f4f6] disabled:cursor-not-allowed",
-    ghost: "text-[#374151] hover:bg-[#f3f4f6] disabled:cursor-not-allowed",
-    danger: "bg-[#ef4444] hover:bg-[#dc2626] text-white disabled:bg-[#9ca3af] disabled:cursor-not-allowed",
-  };
-
-  const sizeStyles = {
-    sm: "px-3 py-2 text-sm",
-    md: "px-4 py-2.5 text-sm",
-    lg: "px-6 py-3 text-base",
-  };
-
   return (
     <button
+      type={type}
       disabled={disabled || isLoading}
-      className={cn(baseStyles, variantStyles[variant], sizeStyles[size], className)}
+      className={lifeButtonClass(variant, size, className)}
       {...props}
     >
       {isLoading ? (

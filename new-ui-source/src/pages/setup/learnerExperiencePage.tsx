@@ -149,10 +149,8 @@ function LrToggle({
             aria-checked={checked}
             aria-label={label}
             onClick={() => onChange(!checked)}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] focus:ring-offset-1 ${checked ? "bg-[var(--life-primary-500)]" : "bg-[#d1d5db]"}`}
-          >
-            <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${checked ? "translate-x-5" : "translate-x-1"}`} />
-          </button>
+            className="life-switch"
+        />
         </div>
         {help}
       </div>
@@ -167,11 +165,9 @@ function LrToggle({
           role="switch"
           aria-checked={checked}
           onClick={() => onChange(!checked)}
-          className={`relative w-9 h-5 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2d6fa8] ${checked ? "bg-[#2d6fa8]" : "bg-[#d1d5db]"}`}
-        >
-          <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-150 ${checked ? "translate-x-4" : ""}`} />
-        </button>
-        <span className="text-sm text-[#374151]">{label}{showInfoIcon ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}</span>
+          className="life-switch"
+        />
+        <span className="text-sm text-[var(--life-neutral-700)]">{label}{showInfoIcon ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}</span>
       </label>
       {help}
     </div>
@@ -181,7 +177,7 @@ function LrToggle({
 function LrField({ label, hint, help, children }: { label: string; hint?: string; help?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <InfoFieldLabel label={label} hint={hint} help={help} className="text-[#374151]" />
+      <InfoFieldLabel label={label} hint={hint} help={help} className="text-[var(--life-neutral-700)]" />
       {help}
       {children}
     </div>
@@ -189,7 +185,7 @@ function LrField({ label, hint, help, children }: { label: string; hint?: string
 }
 
 function LrHelp({ children }: { children: React.ReactNode }) {
-  return <p className="text-xs text-[#6b7280] mt-1 leading-snug">{children}</p>;
+  return <p className="text-xs text-[var(--life-neutral-600)] mt-1 leading-snug">{children}</p>;
 }
 
 function ClickToEditRichText({
@@ -214,21 +210,21 @@ function ClickToEditRichText({
     <button
       type="button"
       onClick={() => setEditing(true)}
-      className="w-full min-h-[96px] px-3 py-2 text-left text-sm rounded-lg border border-[#e5e7eb] bg-white text-[#374151] hover:border-[#2d6fa8] hover:bg-[#f8fbff] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8]"
+      className="life-btn life-btn--secondary"
       aria-label={preview ? "Click to edit thank you message" : placeholder}
     >
-      {preview || <span className="text-[#9ca3af]">{placeholder}</span>}
+      {preview || <span className="text-[var(--life-neutral-400)]">{placeholder}</span>}
     </button>
   );
 }
 
-const LR_INPUT = "w-full px-3 py-2 text-sm rounded-lg border border-[#e5e7eb] bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent";
-const LR_TEXTAREA = `${LR_INPUT} resize-none`;
+const LR_INPUT = "life-field";
+const LR_TEXTAREA = LR_INPUT;
 
 /* Demo video placeholder shown at top of each accordion section */
 function DemoVideoPlaceholder({ label, src }: { label?: string; src?: string }) {
   return (
-    <div className="rounded-lg overflow-hidden border border-[#e5e7eb]">
+    <div className="rounded-lg overflow-hidden border border-[var(--life-neutral-100)]">
       <div className="relative bg-[#1b3a4b] flex flex-col items-center justify-center gap-2.5 overflow-hidden" style={{ aspectRatio: '16/9' }}>
         {src ? (
           <video
@@ -294,9 +290,9 @@ function AddResourceDialog({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 flex flex-col max-h-[90vh] overflow-hidden">
         {/* header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#f3f4f6] shrink-0">
-          <h3 className="text-base font-bold text-[#111827]">{isEditing ? "Edit Resource" : "Add Resource"}</h3>
-          <button type="button" onClick={onCancel} className="p-1.5 rounded-lg text-[#6b7280] hover:bg-[#f3f4f6] transition-colors">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--life-neutral-050)] shrink-0">
+          <h3 className="text-base font-bold text-[var(--life-neutral-850)]">{isEditing ? "Edit Resource" : "Add Resource"}</h3>
+          <button type="button" onClick={onCancel} className="p-1.5 rounded-lg text-[var(--life-neutral-600)] hover:bg-[var(--life-neutral-050)] transition-colors">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
             </svg>
@@ -316,17 +312,14 @@ function AddResourceDialog({
                   setErrors((prev) => ({ ...prev, format: undefined }));
                 }}
                 aria-label="Resource Format"
-                className={`${LR_INPUT} appearance-none pr-8 ${errors.format ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                className={`${LR_INPUT} ${errors.format ? "border-[var(--life-critical-600)] focus:ring-[var(--life-critical-600)]" : ""}`}
               >
                 {RESOURCE_FORMAT_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
               </select>
-              <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="6 9 12 15 18 9"/>
-              </svg>
             </div>
-            {errors.format && <p className="text-xs text-[#dc2626] mt-1">{errors.format}</p>}
+            {errors.format && <p className="text-xs text-[var(--life-critical-600)] mt-1">{errors.format}</p>}
           </LrField>
 
           {/* Force Download */}
@@ -347,9 +340,9 @@ function AddResourceDialog({
                 setErrors((prev) => ({ ...prev, title: undefined }));
               }}
               placeholder="Enter resource title"
-              className={`${LR_INPUT} ${errors.title ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+              className={`${LR_INPUT} ${errors.title ? "border-[var(--life-critical-600)] focus:ring-[var(--life-critical-600)]" : ""}`}
             />
-            {errors.title && <p className="text-xs text-[#dc2626] mt-1">{errors.title}</p>}
+            {errors.title && <p className="text-xs text-[var(--life-critical-600)] mt-1">{errors.title}</p>}
           </LrField>
 
           {/* File Name */}
@@ -376,7 +369,7 @@ function AddResourceDialog({
 
           {/* Source - asset vs URL tabs */}
           <LrField label="Source">
-            <div className="flex rounded-lg border border-[#e5e7eb] overflow-hidden mb-2">
+            <div className="flex rounded-lg border border-[var(--life-neutral-100)] overflow-hidden mb-2">
               {(["asset", "url"] as const).map((t) => (
                 <button
                   key={t}
@@ -386,7 +379,7 @@ function AddResourceDialog({
                     setErrors((prev) => ({ ...prev, source: undefined }));
                   }}
                   className={`flex-1 py-2 text-xs font-medium transition-colors ${
-                    res.sourceType === t ? "bg-[#2d6fa8] text-white" : "bg-white text-[#6b7280] hover:bg-[#f9fafb]"
+                    res.sourceType === t ? "bg-[var(--life-primary-500)] text-white" : "bg-white text-[var(--life-neutral-600)] hover:bg-[var(--life-neutral-020)]"
                   }`}
                 >
                   {t === "asset" ? "Select from Asset" : "URL"}
@@ -400,8 +393,8 @@ function AddResourceDialog({
                   setAssetPickerOpen(true);
                   setErrors((prev) => ({ ...prev, source: undefined }));
                 }}
-                className={`w-full flex items-center justify-center gap-2 border-2 border-dashed rounded-xl py-4 text-sm text-[#6b7280] hover:border-[#2d6fa8] hover:text-[#2d6fa8] hover:bg-[#f0f7ff] transition-colors ${
-                  errors.source ? "border-[#dc2626]" : "border-[#d1d5db]"
+                className={`w-full flex items-center justify-center gap-2 border-2 border-dashed rounded-xl py-4 text-sm text-[var(--life-neutral-600)] hover:border-[var(--life-primary-500)] hover:text-[var(--life-primary-500)] hover:bg-[var(--life-primary-020)] transition-colors ${
+                  errors.source ? "border-[var(--life-critical-600)]" : "border-[var(--life-neutral-200)]"
                 }`}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -418,10 +411,10 @@ function AddResourceDialog({
                   setErrors((prev) => ({ ...prev, source: undefined }));
                 }}
                 placeholder="https://example.com/resource"
-                className={`${LR_INPUT} ${errors.source ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                className={`${LR_INPUT} ${errors.source ? "border-[var(--life-critical-600)] focus:ring-[var(--life-critical-600)]" : ""}`}
               />
             )}
-            {errors.source && <p className="text-xs text-[#dc2626] mt-1">{errors.source}</p>}
+            {errors.source && <p className="text-xs text-[var(--life-critical-600)] mt-1">{errors.source}</p>}
           </LrField>
 
           {/* Display on every page */}
@@ -433,18 +426,18 @@ function AddResourceDialog({
         </div>
 
         {/* footer */}
-        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-[#f3f4f6] shrink-0 bg-[#f9fafb]">
+        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-[var(--life-neutral-050)] shrink-0 bg-[var(--life-neutral-020)]">
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#e5e7eb] rounded-lg hover:bg-[#f3f4f6] transition-colors"
+            className="life-btn life-btn--secondary"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={handleAddClick}
-            className="px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors"
+            className="life-btn life-btn--primary"
           >
             {isEditing ? "Save" : "Add"}
           </button>
@@ -566,14 +559,14 @@ function LrCheckList<T extends string>({
         return (
           <label
             key={value}
-            className="flex items-start gap-3 py-2 px-2 rounded-lg hover:bg-[#f9fafb] cursor-pointer group"
+            className="flex items-start gap-3 py-2 px-2 rounded-lg hover:bg-[var(--life-neutral-020)] cursor-pointer group"
           >
             <div
               onClick={() => toggle(value)}
               className={`mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors cursor-pointer ${
                 checked
-                  ? "bg-[#2d6fa8] border-[#2d6fa8]"
-                  : "border-[#d1d5db] bg-white group-hover:border-[#93c5fd]"
+                  ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)]"
+                  : "border-[var(--life-neutral-200)] bg-white group-hover:border-[var(--life-primary-300)]"
               }`}
             >
               {checked && (
@@ -582,7 +575,7 @@ function LrCheckList<T extends string>({
                 </svg>
               )}
             </div>
-            <span className="text-sm text-[#374151] leading-snug">
+            <span className="text-sm text-[var(--life-neutral-700)] leading-snug">
               {label}
               {help && <span className="block mt-1"><LrHelp>{help}</LrHelp></span>}
             </span>
@@ -614,8 +607,8 @@ function LrRadioList<T extends string>({
             onClick={() => onChange(value)}
             className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
               active
-                ? "bg-[#2d6fa8] border-[#2d6fa8] text-white"
-                : "bg-white border-[#e5e7eb] text-[#374151] hover:border-[#93c5fd] hover:bg-[#f0f7ff]"
+                ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)] text-white"
+                : "bg-white border-[var(--life-neutral-100)] text-[var(--life-neutral-700)] hover:border-[var(--life-primary-300)] hover:bg-[var(--life-primary-020)]"
             }`}
           >
             {label}
@@ -646,11 +639,11 @@ function IgnoredWordsInput({ words, onChange }: { words: string[]; onChange: (w:
   }
 
   return (
-    <div className="flex flex-wrap gap-1.5 min-h-[44px] w-full px-3 py-2 rounded-lg border border-[#e5e7eb] bg-white focus-within:ring-2 focus-within:ring-[#2d6fa8] focus-within:border-transparent transition-all">
+    <div className="flex flex-wrap gap-1.5 min-h-[44px] w-full px-3 py-2 rounded-lg border border-[var(--life-neutral-100)] bg-white focus-within:ring-2 focus-within:ring-[var(--life-primary-500)] focus-within:border-transparent transition-all">
       {words.map((w) => (
-        <span key={w} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#dbeeff] text-[#1e4f7a] text-xs font-medium">
+        <span key={w} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[var(--life-primary-100)] text-[#1e4f7a] text-xs font-medium">
           {w}
-          <button type="button" onClick={() => onChange(words.filter((x) => x !== w))} className="text-[#2d6fa8] hover:text-[#1e4f7a] leading-none">
+          <button type="button" onClick={() => onChange(words.filter((x) => x !== w))} className="text-[var(--life-primary-500)] hover:text-[#1e4f7a] leading-none">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
             </svg>
@@ -664,7 +657,7 @@ function IgnoredWordsInput({ words, onChange }: { words: string[]; onChange: (w:
         onKeyDown={handleKey}
         onBlur={() => { if (draft.trim()) addWord(draft); }}
         placeholder={words.length === 0 ? "Type a word and press Enter" : ""}
-        className="flex-1 min-w-[120px] text-sm text-[#111827] outline-none bg-transparent placeholder-[#9ca3af]"
+        className="flex-1 min-w-[120px] text-sm text-[var(--life-neutral-850)] outline-none bg-transparent placeholder-[var(--life-neutral-400)]"
       />
     </div>
   );
@@ -687,11 +680,11 @@ function LeAccordion({
   children: React.ReactNode;
 }) {
   return (
-    <div className="border border-[#e5e7eb] rounded-xl overflow-hidden bg-white">
+    <div className="border border-[var(--life-neutral-100)] rounded-xl overflow-hidden bg-white">
       <button
         type="button"
         onClick={onToggle}
-        className="group w-full flex items-center justify-between gap-3 px-5 py-4 text-left bg-white text-[#111827] hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] transition-colors"
+        className="life-accordion-trigger group !px-5 !min-h-[64px]"
       >
         <div className="flex items-center gap-2.5">
           <span className="text-current">{icon}</span>
@@ -705,7 +698,7 @@ function LeAccordion({
         </svg>
       </button>
       {open && (
-        <div className="px-[22px] py-[20px] border-t border-[#f3f4f6] bg-white space-y-4">
+        <div className="px-[22px] py-[20px] border-t border-[var(--life-neutral-050)] bg-white space-y-4">
           {children}
         </div>
       )}
@@ -1133,12 +1126,12 @@ export function LearnerExperiencePanel({
   }
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#f7f9fb]">
+    <div className="flex flex-col h-full w-full bg-[var(--life-neutral-020)]">
       {/* header */}
-      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-center gap-4">
+      <div className="shrink-0 px-6 py-5 bg-white border-b border-[var(--life-neutral-100)] flex items-center gap-4">
         <div>
-          <h2 className="text-xl font-bold text-[#111827]">Learner Experience</h2>
-          <p className="text-sm text-[#6b7280] mt-0.5">Configure what learners see and can access throughout the course.</p>
+          <h2 className="text-xl font-bold text-[var(--life-neutral-850)]">Learner Experience</h2>
+          <p className="text-sm text-[var(--life-neutral-600)] mt-0.5">Configure what learners see and can access throughout the course.</p>
         </div>
         <div className="ml-auto">
           <SaveChangesButton dirty={hasChanges} saving={lnSaving} disabled={!courseId} onClick={() => void handleLnSave()} portalTargetId="setup-save-button-slot" />
@@ -1166,11 +1159,11 @@ export function LearnerExperiencePanel({
             src="https://cdn-esim.contentservice.net/DEV/Resource_Help_9dc10de290-muxs5jn5.mp4"
           />
           {lrLoading && (
-            <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-3 py-2 text-sm text-[#6b7280]">
+            <div className="rounded-lg border border-[var(--life-neutral-100)] bg-[var(--life-neutral-020)] px-3 py-2 text-sm text-[var(--life-neutral-600)]">
               Loading Learning Resources settings...
             </div>
           )}
-          <div className={`pt-3${lrState.enabled ? " pb-4 border-b border-[#e5e7eb]" : ""}`}>
+          <div className={`pt-3${lrState.enabled ? " pb-4 border-b border-[var(--life-neutral-100)]" : ""}`}>
             <LrToggle
               checked={lrState.enabled}
               onChange={(v) => setLr("enabled", v)}
@@ -1202,9 +1195,9 @@ export function LearnerExperiencePanel({
                     setLrFieldErrors((prev) => ({ ...prev, sectionTitle: undefined }));
                   }}
                   placeholder="e.g. Additional Resources"
-                  className={`${LR_INPUT} ${lrFieldErrors.sectionTitle ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                  className={`${LR_INPUT} ${lrFieldErrors.sectionTitle ? "border-[var(--life-critical-600)] focus:ring-[var(--life-critical-600)]" : ""}`}
                 />
-                {lrFieldErrors.sectionTitle && <p className="text-xs text-[#dc2626] mt-1">{lrFieldErrors.sectionTitle}</p>}
+                {lrFieldErrors.sectionTitle && <p className="text-xs text-[var(--life-critical-600)] mt-1">{lrFieldErrors.sectionTitle}</p>}
               </LrField>
 
               {/* Description */}
@@ -1246,9 +1239,9 @@ export function LearnerExperiencePanel({
                 help={<LrHelp>Turns the filter buttons on and off. Note that the filter buttons will be automatically disabled if all resource items have the same Type value.</LrHelp>}
               />
 
-              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
-                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
-                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Filter Buttons</p>
+              <div className="rounded-xl border border-[var(--life-neutral-100)] overflow-hidden">
+                <div className="px-4 py-3 bg-[var(--life-neutral-020)] border-b border-[var(--life-neutral-050)]">
+                  <p className="text-xs font-bold text-[var(--life-neutral-700)] uppercase tracking-wide">Filter Buttons</p>
                 </div>
                 <div className="px-4 py-4 space-y-3">
                   {LEARNING_RESOURCE_FILTER_FIELDS.map(({ key, label }) => (
@@ -1265,9 +1258,9 @@ export function LearnerExperiencePanel({
                 </div>
               </div>
 
-              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
-                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
-                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Aria Labels</p>
+              <div className="rounded-xl border border-[var(--life-neutral-100)] overflow-hidden">
+                <div className="px-4 py-3 bg-[var(--life-neutral-020)] border-b border-[var(--life-neutral-050)]">
+                  <p className="text-xs font-bold text-[var(--life-neutral-700)] uppercase tracking-wide">Aria Labels</p>
                 </div>
                 <div className="px-4 py-4 space-y-3">
                   {LEARNING_RESOURCE_FILTER_FIELDS.map(({ key, label }) => (
@@ -1288,7 +1281,7 @@ export function LearnerExperiencePanel({
               {lrState.resources.length > 0 && (
                 <div className="space-y-2">
                   {lrState.resources.map((r) => (
-                    <div key={r.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-[#e5e7eb] bg-[#f9fafb]">
+                    <div key={r.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-[var(--life-neutral-100)] bg-[var(--life-neutral-020)]">
                       <ResourceFormatIcon format={r.format} />
                       <button
                         type="button"
@@ -1296,13 +1289,13 @@ export function LearnerExperiencePanel({
                         className="flex-1 min-w-0 text-left"
                         title="Edit resource"
                       >
-                        <p className="text-sm font-medium text-[#111827] truncate">{r.title || <span className="text-[#9ca3af] font-normal">Untitled resource</span>}</p>
-                        <p className="text-xs text-[#6b7280]">{getResourceFormatLabel(r.format)}{r.displayOnEveryPage ? " · Every page" : ""}</p>
+                        <p className="text-sm font-medium text-[var(--life-neutral-850)] truncate">{r.title || <span className="text-[var(--life-neutral-400)] font-normal">Untitled resource</span>}</p>
+                        <p className="text-xs text-[var(--life-neutral-600)]">{getResourceFormatLabel(r.format)}{r.displayOnEveryPage ? " · Every page" : ""}</p>
                       </button>
                       <button
                         type="button"
                         onClick={() => setEditingResource(r)}
-                        className="p-1 rounded text-[#9ca3af] hover:text-[#2d6fa8] hover:bg-[#eaf3fb] transition-colors shrink-0"
+                        className="p-1 rounded text-[var(--life-neutral-400)] hover:text-[var(--life-primary-500)] hover:bg-[#eaf3fb] transition-colors shrink-0"
                         title="Edit resource"
                       >
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1312,7 +1305,7 @@ export function LearnerExperiencePanel({
                       <button
                         type="button"
                         onClick={() => handleRemoveResource(r.id)}
-                        className="p-1 rounded text-[#9ca3af] hover:text-[#ef4444] hover:bg-[#fef2f2] transition-colors shrink-0"
+                        className="life-icon-btn life-icon-btn--sm life-icon-btn--critical"
                         title="Remove resource"
                       >
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1328,7 +1321,7 @@ export function LearnerExperiencePanel({
               <button
                 type="button"
                 onClick={() => setShowAddDialog(true)}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-lg border-2 border-dashed border-[#d1d5db] text-sm text-[#6b7280] hover:border-[#2d6fa8] hover:text-[#2d6fa8] hover:bg-[#f0f7ff] transition-colors w-full justify-center"
+                className="life-btn life-btn--secondary"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
@@ -1356,11 +1349,11 @@ export function LearnerExperiencePanel({
             src="https://cdn-esim.contentservice.net/DEV/course_notes_e4decc897c-muxs5x00.mp4"
           />
           {lnLoading && (
-            <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-3 py-2 text-sm text-[#6b7280]">
+            <div className="rounded-lg border border-[var(--life-neutral-100)] bg-[var(--life-neutral-020)] px-3 py-2 text-sm text-[var(--life-neutral-600)]">
               Loading Learner Notes settings...
             </div>
           )}
-          <div className={`pt-3${lnState.enabled ? " pb-4 border-b border-[#e5e7eb]" : ""}`}>
+          <div className={`pt-3${lnState.enabled ? " pb-4 border-b border-[var(--life-neutral-100)]" : ""}`}>
             <LrToggle
               checked={lnState.enabled}
               onChange={(v) => setLn("enabled", v)}
@@ -1389,9 +1382,9 @@ export function LearnerExperiencePanel({
                     setLnFieldErrors((prev) => ({ ...prev, searchErrorMessage: undefined }));
                   }}
                   placeholder="e.g. Sorry, no results were found"
-                  className={`${LR_INPUT} ${lnFieldErrors.searchErrorMessage ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                  className={`${LR_INPUT} ${lnFieldErrors.searchErrorMessage ? "border-[var(--life-critical-600)] focus:ring-[var(--life-critical-600)]" : ""}`}
                 />
-                {lnFieldErrors.searchErrorMessage && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.searchErrorMessage}</p>}
+                {lnFieldErrors.searchErrorMessage && <p className="text-xs text-[var(--life-critical-600)] mt-1">{lnFieldErrors.searchErrorMessage}</p>}
               </LrField>
               <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "successMessage"), "Success Message")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "successMessage"))}>
                 <input
@@ -1402,9 +1395,9 @@ export function LearnerExperiencePanel({
                     setLnFieldErrors((prev) => ({ ...prev, successMessage: undefined }));
                   }}
                   placeholder="e.g. Note saved successfully"
-                  className={`${LR_INPUT} ${lnFieldErrors.successMessage ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                  className={`${LR_INPUT} ${lnFieldErrors.successMessage ? "border-[var(--life-critical-600)] focus:ring-[var(--life-critical-600)]" : ""}`}
                 />
-                {lnFieldErrors.successMessage && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.successMessage}</p>}
+                {lnFieldErrors.successMessage && <p className="text-xs text-[var(--life-critical-600)] mt-1">{lnFieldErrors.successMessage}</p>}
               </LrField>
               <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "errorMessage"), "Error Message")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "errorMessage"))}>
                 <input
@@ -1415,9 +1408,9 @@ export function LearnerExperiencePanel({
                     setLnFieldErrors((prev) => ({ ...prev, errorMessage: undefined }));
                   }}
                   placeholder="e.g. An error occurred. Please try again."
-                  className={`${LR_INPUT} ${lnFieldErrors.errorMessage ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                  className={`${LR_INPUT} ${lnFieldErrors.errorMessage ? "border-[var(--life-critical-600)] focus:ring-[var(--life-critical-600)]" : ""}`}
                 />
-                {lnFieldErrors.errorMessage && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.errorMessage}</p>}
+                {lnFieldErrors.errorMessage && <p className="text-xs text-[var(--life-critical-600)] mt-1">{lnFieldErrors.errorMessage}</p>}
               </LrField>
               <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "newNote"), "Create a New Note")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "newNote"))}>
                 <input
@@ -1428,9 +1421,9 @@ export function LearnerExperiencePanel({
                     setLnFieldErrors((prev) => ({ ...prev, createANewNote: undefined }));
                   }}
                   placeholder="e.g. Create a new note"
-                  className={`${LR_INPUT} ${lnFieldErrors.createANewNote ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                  className={`${LR_INPUT} ${lnFieldErrors.createANewNote ? "border-[var(--life-critical-600)] focus:ring-[var(--life-critical-600)]" : ""}`}
                 />
-                {lnFieldErrors.createANewNote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.createANewNote}</p>}
+                {lnFieldErrors.createANewNote && <p className="text-xs text-[var(--life-critical-600)] mt-1">{lnFieldErrors.createANewNote}</p>}
               </LrField>
               <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "exportNote"), "Export a Note")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "exportNote"))}>
                 <input
@@ -1441,9 +1434,9 @@ export function LearnerExperiencePanel({
                     setLnFieldErrors((prev) => ({ ...prev, exportANote: undefined }));
                   }}
                   placeholder="e.g. Export note"
-                  className={`${LR_INPUT} ${lnFieldErrors.exportANote ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                  className={`${LR_INPUT} ${lnFieldErrors.exportANote ? "border-[var(--life-critical-600)] focus:ring-[var(--life-critical-600)]" : ""}`}
                 />
-                {lnFieldErrors.exportANote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.exportANote}</p>}
+                {lnFieldErrors.exportANote && <p className="text-xs text-[var(--life-critical-600)] mt-1">{lnFieldErrors.exportANote}</p>}
               </LrField>
               <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "saveNote"), "Save Note")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "saveNote"))}>
                 <input
@@ -1454,9 +1447,9 @@ export function LearnerExperiencePanel({
                     setLnFieldErrors((prev) => ({ ...prev, saveNote: undefined }));
                   }}
                   placeholder="e.g. Save note"
-                  className={`${LR_INPUT} ${lnFieldErrors.saveNote ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                  className={`${LR_INPUT} ${lnFieldErrors.saveNote ? "border-[var(--life-critical-600)] focus:ring-[var(--life-critical-600)]" : ""}`}
                 />
-                {lnFieldErrors.saveNote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.saveNote}</p>}
+                {lnFieldErrors.saveNote && <p className="text-xs text-[var(--life-critical-600)] mt-1">{lnFieldErrors.saveNote}</p>}
               </LrField>
               <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "downloadNote"), "Download a Note")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "downloadNote"))}>
                 <input
@@ -1467,9 +1460,9 @@ export function LearnerExperiencePanel({
                     setLnFieldErrors((prev) => ({ ...prev, downloadANote: undefined }));
                   }}
                   placeholder="e.g. Download note"
-                  className={`${LR_INPUT} ${lnFieldErrors.downloadANote ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                  className={`${LR_INPUT} ${lnFieldErrors.downloadANote ? "border-[var(--life-critical-600)] focus:ring-[var(--life-critical-600)]" : ""}`}
                 />
-                {lnFieldErrors.downloadANote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.downloadANote}</p>}
+                {lnFieldErrors.downloadANote && <p className="text-xs text-[var(--life-critical-600)] mt-1">{lnFieldErrors.downloadANote}</p>}
               </LrField>
               <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "uploadNote"), "Upload a Note")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "uploadNote"))}>
                 <input
@@ -1480,9 +1473,9 @@ export function LearnerExperiencePanel({
                     setLnFieldErrors((prev) => ({ ...prev, uploadANote: undefined }));
                   }}
                   placeholder="e.g. Upload note"
-                  className={`${LR_INPUT} ${lnFieldErrors.uploadANote ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                  className={`${LR_INPUT} ${lnFieldErrors.uploadANote ? "border-[var(--life-critical-600)] focus:ring-[var(--life-critical-600)]" : ""}`}
                 />
-                {lnFieldErrors.uploadANote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.uploadANote}</p>}
+                {lnFieldErrors.uploadANote && <p className="text-xs text-[var(--life-critical-600)] mt-1">{lnFieldErrors.uploadANote}</p>}
               </LrField>
               <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "searchNote"), "Search Note")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "searchNote"))}>
                 <input
@@ -1493,9 +1486,9 @@ export function LearnerExperiencePanel({
                     setLnFieldErrors((prev) => ({ ...prev, searchNote: undefined }));
                   }}
                   placeholder="e.g. Search notes"
-                  className={`${LR_INPUT} ${lnFieldErrors.searchNote ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                  className={`${LR_INPUT} ${lnFieldErrors.searchNote ? "border-[var(--life-critical-600)] focus:ring-[var(--life-critical-600)]" : ""}`}
                 />
-                {lnFieldErrors.searchNote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.searchNote}</p>}
+                {lnFieldErrors.searchNote && <p className="text-xs text-[var(--life-critical-600)] mt-1">{lnFieldErrors.searchNote}</p>}
               </LrField>
               <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "deleteNote"), "Delete Note")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "deleteNote"))}>
                 <input
@@ -1506,9 +1499,9 @@ export function LearnerExperiencePanel({
                     setLnFieldErrors((prev) => ({ ...prev, deleteNote: undefined }));
                   }}
                   placeholder="e.g. Delete note"
-                  className={`${LR_INPUT} ${lnFieldErrors.deleteNote ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                  className={`${LR_INPUT} ${lnFieldErrors.deleteNote ? "border-[var(--life-critical-600)] focus:ring-[var(--life-critical-600)]" : ""}`}
                 />
-                {lnFieldErrors.deleteNote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.deleteNote}</p>}
+                {lnFieldErrors.deleteNote && <p className="text-xs text-[var(--life-critical-600)] mt-1">{lnFieldErrors.deleteNote}</p>}
               </LrField>
               <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "cancelNote"), "Cancel")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "cancelNote"))}>
                 <input
@@ -1519,9 +1512,9 @@ export function LearnerExperiencePanel({
                     setLnFieldErrors((prev) => ({ ...prev, cancel: undefined }));
                   }}
                   placeholder="e.g. Cancel"
-                  className={`${LR_INPUT} ${lnFieldErrors.cancel ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                  className={`${LR_INPUT} ${lnFieldErrors.cancel ? "border-[var(--life-critical-600)] focus:ring-[var(--life-critical-600)]" : ""}`}
                 />
-                {lnFieldErrors.cancel && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.cancel}</p>}
+                {lnFieldErrors.cancel && <p className="text-xs text-[var(--life-critical-600)] mt-1">{lnFieldErrors.cancel}</p>}
               </LrField>
               <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "editNote"), "Edit Note")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "editNote"))}>
                 <input
@@ -1532,9 +1525,9 @@ export function LearnerExperiencePanel({
                     setLnFieldErrors((prev) => ({ ...prev, editNote: undefined }));
                   }}
                   placeholder="e.g. Edit note"
-                  className={`${LR_INPUT} ${lnFieldErrors.editNote ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                  className={`${LR_INPUT} ${lnFieldErrors.editNote ? "border-[var(--life-critical-600)] focus:ring-[var(--life-critical-600)]" : ""}`}
                 />
-                {lnFieldErrors.editNote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.editNote}</p>}
+                {lnFieldErrors.editNote && <p className="text-xs text-[var(--life-critical-600)] mt-1">{lnFieldErrors.editNote}</p>}
               </LrField>
             </>
           )}
@@ -1557,21 +1550,21 @@ export function LearnerExperiencePanel({
             src="https://cdn-esim.contentservice.net/DEV/Search_video_11c7429678-muxs6p06.mp4"
           />
           {lsLoading && (
-            <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-3 py-2 text-sm text-[#6b7280]">
+            <div className="rounded-lg border border-[var(--life-neutral-100)] bg-[var(--life-neutral-020)] px-3 py-2 text-sm text-[var(--life-neutral-600)]">
               Loading Learner Search settings...
             </div>
           )}
-          <div className={`pt-3${lsState.enabled ? " pb-4 border-b border-[#e5e7eb]" : ""}`}>
+          <div className={`pt-3${lsState.enabled ? " pb-4 border-b border-[var(--life-neutral-100)]" : ""}`}>
             <LrToggle checked={lsState.enabled} onChange={(v) => setLs("enabled", v)} label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "_isEnabled"), "Enable Search")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "_isEnabled"))} align="right" />
           </div>
 
           {lsState.enabled && (
             <>
               {/* Match On Rules */}
-              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
-                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
-                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Match On Rules</p>
-                  <p className="text-xs text-[#6b7280] mt-1">Select which word-matching strategies are active.</p>
+              <div className="rounded-xl border border-[var(--life-neutral-100)] overflow-hidden">
+                <div className="px-4 py-3 bg-[var(--life-neutral-020)] border-b border-[var(--life-neutral-050)]">
+                  <p className="text-xs font-bold text-[var(--life-neutral-700)] uppercase tracking-wide">Match On Rules</p>
+                  <p className="text-xs text-[var(--life-neutral-600)] mt-1">Select which word-matching strategies are active.</p>
                 </div>
                 <div className="px-4 py-4 space-y-3">
                   <LrToggle checked={lsState.matchOn.contentWordBeginsPhraseWord} onChange={(v) => setMatchOn("contentWordBeginsPhraseWord", v)} label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "_matchOn", "_contentWordBeginsPhraseWord"), "A word in the content begins the search phrase word")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "_matchOn", "_contentWordBeginsPhraseWord"))} />
@@ -1582,9 +1575,9 @@ export function LearnerExperiencePanel({
               </div>
 
               {/* Display options */}
-              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
-                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
-                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Display Options</p>
+              <div className="rounded-xl border border-[var(--life-neutral-100)] overflow-hidden">
+                <div className="px-4 py-3 bg-[var(--life-neutral-020)] border-b border-[var(--life-neutral-050)]">
+                  <p className="text-xs font-bold text-[var(--life-neutral-700)] uppercase tracking-wide">Display Options</p>
                 </div>
                 <div className="px-4 py-4 space-y-3">
                   <LrToggle checked={lsState.showFoundWords} onChange={(v) => setLs("showFoundWords", v)} label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "_showFoundWords"), "Show found words")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "_showFoundWords"))} />
@@ -1595,7 +1588,7 @@ export function LearnerExperiencePanel({
               {/* Ignored Words */}
               <LrField label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "_ignoreWords"), "Ignored Words")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "_ignoreWords"))}>
                 <IgnoredWordsInput words={lsState.ignoredWords} onChange={(w) => setLs("ignoredWords", w)} />
-                <p className="text-xs text-[#9ca3af] mt-1">Type a word and press Enter to add. These words are excluded from search indexing.</p>
+                <p className="text-xs text-[var(--life-neutral-400)] mt-1">Type a word and press Enter to add. These words are excluded from search indexing.</p>
               </LrField>
 
               {/* Numeric settings */}
@@ -1643,11 +1636,11 @@ export function LearnerExperiencePanel({
             src="https://cdn-esim.contentservice.net/LA/AI_Tutor_3c4e313383-muy1qy02.mp4"
           />
           {atLoading && (
-            <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-3 py-2 text-sm text-[#6b7280]">
+            <div className="rounded-lg border border-[var(--life-neutral-100)] bg-[var(--life-neutral-020)] px-3 py-2 text-sm text-[var(--life-neutral-600)]">
               Loading Ask AI Tutor settings...
             </div>
           )}
-          <div className={`pt-3${atState.enabled ? " pb-4 border-b border-[#e5e7eb]" : ""}`}>
+          <div className={`pt-3${atState.enabled ? " pb-4 border-b border-[var(--life-neutral-100)]" : ""}`}>
             <LrToggle
               checked={atState.enabled}
               onChange={(v) => setAt("enabled", v)}
@@ -1692,24 +1685,24 @@ export function LearnerExperiencePanel({
               </LrField>
 
               {/* Documents */}
-              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
-                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
-                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Documents</p>
-                  <p className="text-xs text-[#6b7280] mt-1">Upload reference documents for the AI Tutor to draw from.</p>
+              <div className="rounded-xl border border-[var(--life-neutral-100)] overflow-hidden">
+                <div className="px-4 py-3 bg-[var(--life-neutral-020)] border-b border-[var(--life-neutral-050)]">
+                  <p className="text-xs font-bold text-[var(--life-neutral-700)] uppercase tracking-wide">Documents</p>
+                  <p className="text-xs text-[var(--life-neutral-600)] mt-1">Upload reference documents for the AI Tutor to draw from.</p>
                 </div>
                 <div className="px-4 py-3 space-y-2">
                   {atState.documents.length > 0 && (
                     <div className="space-y-1.5">
                       {atState.documents.map((doc) => (
-                        <div key={doc.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-[#e5e7eb] bg-[#f9fafb]">
+                        <div key={doc.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-[var(--life-neutral-100)] bg-[var(--life-neutral-020)]">
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
                           </svg>
-                          <span className="flex-1 text-sm text-[#374151] truncate">{doc.name}</span>
+                          <span className="flex-1 text-sm text-[var(--life-neutral-700)] truncate">{doc.name}</span>
                           <button
                             type="button"
                             onClick={() => handleRemoveDocument(doc.id)}
-                            className="p-1 rounded text-[#9ca3af] hover:text-[#ef4444] hover:bg-[#fef2f2] transition-colors shrink-0"
+                            className="life-icon-btn life-icon-btn--sm life-icon-btn--critical"
                             title="Remove document"
                           >
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1723,7 +1716,7 @@ export function LearnerExperiencePanel({
                   <button
                     type="button"
                     onClick={handleAddDocument}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-lg border-2 border-dashed border-[#d1d5db] text-sm text-[#6b7280] hover:border-[#2d6fa8] hover:text-[#2d6fa8] hover:bg-[#f0f7ff] transition-colors w-full justify-center"
+                    className="life-btn life-btn--secondary"
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                       <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
@@ -1753,7 +1746,7 @@ export function LearnerExperiencePanel({
             label="See how Laerdal Course Feedback works"
             src="https://cdn-esim.contentservice.net/DEV/course_Feedback_4_e8eaa74e92-muxs7da9.mp4"
           />
-          <div className={`pt-3${cfState.enabled ? " pb-4 border-b border-[#e5e7eb]" : ""}`}>
+          <div className={`pt-3${cfState.enabled ? " pb-4 border-b border-[var(--life-neutral-100)]" : ""}`}>
             <LrToggle
               checked={cfState.enabled}
               onChange={(v) => setCf("enabled", v)}
@@ -1765,9 +1758,9 @@ export function LearnerExperiencePanel({
           {cfState.enabled && (
             <>
               {/* Options - multi-select */}
-              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
-                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
-                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Options</p>
+              <div className="rounded-xl border border-[var(--life-neutral-100)] overflow-hidden">
+                <div className="px-4 py-3 bg-[var(--life-neutral-020)] border-b border-[var(--life-neutral-050)]">
+                  <p className="text-xs font-bold text-[var(--life-neutral-700)] uppercase tracking-wide">Options</p>
                 </div>
                 <div className="px-4 py-2">
                   <LrCheckList<CourseFeedbackOption>
@@ -1779,9 +1772,9 @@ export function LearnerExperiencePanel({
               </div>
 
               {/* Trigger button */}
-              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
-                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
-                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Trigger Button</p>
+              <div className="rounded-xl border border-[var(--life-neutral-100)] overflow-hidden">
+                <div className="px-4 py-3 bg-[var(--life-neutral-020)] border-b border-[var(--life-neutral-050)]">
+                  <p className="text-xs font-bold text-[var(--life-neutral-700)] uppercase tracking-wide">Trigger Button</p>
                 </div>
                 <div className="px-4 py-4 space-y-3">
                   <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_triggerButton", "text"), "Button text")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_triggerButton", "text"))}>
@@ -1806,14 +1799,14 @@ export function LearnerExperiencePanel({
               </div>
 
               {/* Feedback widget */}
-              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
-                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
-                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Feedback Widget</p>
+              <div className="rounded-xl border border-[var(--life-neutral-100)] overflow-hidden">
+                <div className="px-4 py-3 bg-[var(--life-neutral-020)] border-b border-[var(--life-neutral-050)]">
+                  <p className="text-xs font-bold text-[var(--life-neutral-700)] uppercase tracking-wide">Feedback Widget</p>
                 </div>
                 <div className="px-4 py-4 space-y-4">
-                  <div className="rounded-lg border border-[#e5e7eb] overflow-hidden">
-                    <div className="px-3.5 py-2.5 bg-[#fafafa] border-b border-[#f3f4f6]">
-                      <p className="text-xs font-semibold text-[#374151] uppercase tracking-wide">Rating Step</p>
+                  <div className="rounded-lg border border-[var(--life-neutral-100)] overflow-hidden">
+                    <div className="px-3.5 py-2.5 bg-[var(--life-neutral-020)] border-b border-[var(--life-neutral-050)]">
+                      <p className="text-xs font-semibold text-[var(--life-neutral-700)] uppercase tracking-wide">Rating Step</p>
                     </div>
                     <div className="px-3.5 py-3 space-y-3">
                       <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_rating", "title"), "Title")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_rating", "title"))}>
@@ -1857,9 +1850,9 @@ export function LearnerExperiencePanel({
                     </div>
                   </div>
 
-                  <div className="rounded-lg border border-[#e5e7eb] overflow-hidden">
-                    <div className="px-3.5 py-2.5 bg-[#fafafa] border-b border-[#f3f4f6]">
-                      <p className="text-xs font-semibold text-[#374151] uppercase tracking-wide">Common Step</p>
+                  <div className="rounded-lg border border-[var(--life-neutral-100)] overflow-hidden">
+                    <div className="px-3.5 py-2.5 bg-[var(--life-neutral-020)] border-b border-[var(--life-neutral-050)]">
+                      <p className="text-xs font-semibold text-[var(--life-neutral-700)] uppercase tracking-wide">Common Step</p>
                     </div>
                     <div className="px-3.5 py-3 space-y-3">
                       <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_comment", "title"), "Title")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_comment", "title"))}>
@@ -1901,9 +1894,9 @@ export function LearnerExperiencePanel({
                     </div>
                   </div>
 
-                  <div className="rounded-lg border border-[#e5e7eb] overflow-hidden">
-                    <div className="px-3.5 py-2.5 bg-[#fafafa] border-b border-[#f3f4f6]">
-                      <p className="text-xs font-semibold text-[#374151] uppercase tracking-wide">Buttons</p>
+                  <div className="rounded-lg border border-[var(--life-neutral-100)] overflow-hidden">
+                    <div className="px-3.5 py-2.5 bg-[var(--life-neutral-020)] border-b border-[var(--life-neutral-050)]">
+                      <p className="text-xs font-semibold text-[var(--life-neutral-700)] uppercase tracking-wide">Buttons</p>
                     </div>
                     <div className="px-3.5 py-3 space-y-3">
                       <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_buttons", "next"), "Next button text")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_buttons", "next"))}>
@@ -1930,9 +1923,9 @@ export function LearnerExperiencePanel({
               </div>
 
               {/* Thank you message */}
-              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
-                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
-                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">THANK YOU MESSAGE</p>
+              <div className="rounded-xl border border-[var(--life-neutral-100)] overflow-hidden">
+                <div className="px-4 py-3 bg-[var(--life-neutral-020)] border-b border-[var(--life-neutral-050)]">
+                  <p className="text-xs font-bold text-[var(--life-neutral-700)] uppercase tracking-wide">THANK YOU MESSAGE</p>
                 </div>
                 <div className="px-4 py-4">
                   <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_thankYou", "body"), "Body")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_thankYou", "body"))}>

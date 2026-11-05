@@ -6,6 +6,7 @@ import AiAssistant from "@/components/common/AiAssistant";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import type { AssetPickerResult, AssetPickerType } from "@/types/assetPicker";
 import { SaveStatusToast } from "./setup/SaveStatusToast";
+import { lifeButtonClass } from "@/components/common/Button";
 
 type Asset = DashboardAsset;
 
@@ -23,10 +24,10 @@ interface AssetManagementWorkspaceProps {
 }
 
 const FORMAT_COLORS: Record<AssetFormat, string> = {
-  image: "bg-[#dbeeff] text-[#1e4d73]",
+  image: "bg-[var(--life-primary-100)] text-[var(--life-primary-800)]",
   audio: "bg-[#f0fdf4] text-[#166534]",
   video: "bg-[#fef3c7] text-[#92400e]",
-  other: "bg-[#f3f4f6] text-[#374151]",
+  other: "bg-[var(--life-neutral-050)] text-[var(--life-neutral-700)]",
 };
 
 const FORMAT_ICONS: Record<AssetFormat, React.ReactNode> = {
@@ -53,10 +54,10 @@ const FORMAT_ICONS: Record<AssetFormat, React.ReactNode> = {
 };
 
 const THUMBNAIL_COLORS: Record<AssetFormat, string> = {
-  image: "bg-gradient-to-br from-[#dbeeff] to-[#93c5fd]",
-  audio: "bg-gradient-to-br from-[#d1fae5] to-[#6ee7b7]",
+  image: "bg-gradient-to-br from-[var(--life-primary-100)] to-[var(--life-primary-300)]",
+  audio: "bg-gradient-to-br from-[var(--life-positive-100)] to-[#6ee7b7]",
   video: "bg-gradient-to-br from-[#fef3c7] to-[#fcd34d]",
-  other: "bg-gradient-to-br from-[#f3f4f6] to-[#d1d5db]",
+  other: "bg-gradient-to-br from-[var(--life-neutral-050)] to-[var(--life-neutral-200)]",
 };
 
 // ── Upload types ─────────────────────────────────────────────────────────────
@@ -365,7 +366,7 @@ function AssetPreviewMedia({ asset, onImageMeasure }: { asset: Asset; onImageMea
   if (asset.format === "audio") {
     return (
       <div className="flex min-h-[160px] flex-col items-center justify-center gap-4 rounded-[20px] border border-[#dbe7f3] bg-[linear-gradient(180deg,#f8fbff_0%,#edf4fb_100%)] px-6 py-6 text-center">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-[#2d6fa8] shadow-sm">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-[var(--life-primary-500)] shadow-sm">
           <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
           </svg>
@@ -376,7 +377,7 @@ function AssetPreviewMedia({ asset, onImageMeasure }: { asset: Asset; onImageMea
   }
 
   return (
-    <div className="flex min-h-[160px] flex-col items-center justify-center gap-4 rounded-[20px] border border-dashed border-[#cbd5e1] bg-[#f8fafc] px-6 py-6 text-center">
+    <div className="flex min-h-[160px] flex-col items-center justify-center gap-4 rounded-[20px] border border-dashed border-[#cbd5e1] bg-[var(--life-neutral-020)] px-6 py-6 text-center">
       <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-[#64748b] shadow-sm">
         <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
@@ -422,26 +423,26 @@ function AssetPreviewPanel({
     return (
       <aside className="sticky top-0 self-start">
         <div className="rounded-[24px] border border-[#e5edf5] bg-white/90 p-6 text-center shadow-[0_16px_40px_rgba(15,23,42,0.06)] backdrop-blur">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#eef6fd] text-[#2d6fa8]">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#eef6fd] text-[var(--life-primary-500)]">
             <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
           </div>
-          <h2 className="mt-4 text-sm font-semibold uppercase tracking-[0.18em] text-[#2d6fa8]">Preview</h2>
-          <p className="mt-3 text-sm leading-6 text-[#6b7280]">Select an asset to preview it here with file details and dimensions.</p>
+          <h2 className="mt-4 text-sm font-semibold uppercase tracking-[0.18em] text-[var(--life-primary-500)]">Preview</h2>
+          <p className="mt-3 text-sm leading-6 text-[var(--life-neutral-600)]">Select an asset to preview it here with file details and dimensions.</p>
           {pickerMode && (
             <div className="mt-5 flex items-center justify-center gap-2">
               <button
                 type="button"
                 onClick={onCancel}
-                className="inline-flex items-center justify-center rounded-xl border border-[#d1d5db] bg-white px-4 py-2.5 text-sm font-medium text-[#374151] transition-colors hover:bg-[#f9fafb]"
+                className={lifeButtonClass("secondary")}
               >
                 Cancel
               </button>
               <button
                 type="button"
                 disabled
-                className="inline-flex items-center justify-center rounded-xl bg-[#2d6fa8] px-4 py-2.5 text-sm font-semibold text-white opacity-40"
+                className={lifeButtonClass("primary")}
               >
                 Add
               </button>
@@ -456,7 +457,7 @@ function AssetPreviewPanel({
     <aside className="sticky top-0 self-start h-[calc(100vh-10rem)]">
       <div className="flex h-full flex-col overflow-hidden rounded-[24px] border border-[#e5edf5] bg-white shadow-[0_16px_40px_rgba(15,23,42,0.08)]">
         <div className="border-b border-[#edf2f7] bg-[linear-gradient(135deg,#f6fbff_0%,#eef5fb_100%)] px-5 py-4">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#2d6fa8]">Asset Preview</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--life-primary-500)]">Asset Preview</p>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto space-y-6 p-5 text-center pb-10">
@@ -464,27 +465,27 @@ function AssetPreviewPanel({
 
           <div className="space-y-4">
             <div>
-              <h3 className="text-[24px] font-semibold leading-tight text-[#2d6fa8] break-words">{asset.title}</h3>
+              <h3 className="text-[24px] font-semibold leading-tight text-[var(--life-primary-500)] break-words">{asset.title}</h3>
               {asset.description && (
-                <p className="mt-3 text-sm leading-6 text-[#6b7280] break-words">{asset.description}</p>
+                <p className="mt-3 text-sm leading-6 text-[var(--life-neutral-600)] break-words">{asset.description}</p>
               )}
             </div>
 
             <div className="rounded-[18px] border border-[#e5edf5] bg-[#f8fbff] px-4 py-3 text-left">
-              <div className="grid gap-2 text-sm text-[#4b5563]">
+              <div className="grid gap-2 text-sm text-[var(--life-neutral-700)]">
                 <div className="flex items-center justify-between gap-4">
-                  <span className="font-medium text-[#111827]">Size</span>
+                  <span className="font-medium text-[var(--life-neutral-850)]">Size</span>
                   <span>{formatBytes(asset.size)}</span>
                 </div>
                 {duration && (
                   <div className="flex items-center justify-between gap-4">
-                    <span className="font-medium text-[#111827]">Duration</span>
+                    <span className="font-medium text-[var(--life-neutral-850)]">Duration</span>
                     <span>{duration}</span>
                   </div>
                 )}
                 {width && height && (
                   <div className="flex items-center justify-between gap-4">
-                    <span className="font-medium text-[#111827]">Dimensions</span>
+                    <span className="font-medium text-[var(--life-neutral-850)]">Dimensions</span>
                     <span>{width} x {height}</span>
                   </div>
                 )}
@@ -494,7 +495,7 @@ function AssetPreviewPanel({
             {asset.tags.length > 0 && (
               <div className="flex flex-wrap justify-center gap-2">
                 {asset.tags.map((tag) => (
-                  <span key={tag} className="rounded-full bg-[#eef6fd] px-2.5 py-1 text-xs font-medium text-[#2d6fa8]">{tag}</span>
+                  <span key={tag} className="rounded-full bg-[#eef6fd] px-2.5 py-1 text-xs font-medium text-[var(--life-primary-500)]">{tag}</span>
                 ))}
               </div>
             )}
@@ -505,14 +506,14 @@ function AssetPreviewPanel({
                   <button
                     type="button"
                     onClick={onCancel}
-                    className="inline-flex items-center justify-center rounded-xl border border-[#d1d5db] bg-white px-4 py-2.5 text-sm font-medium text-[#374151] transition-colors hover:bg-[#f9fafb]"
+                    className={lifeButtonClass("secondary")}
                   >
                     Cancel
                   </button>
                   <button
                     type="button"
                     onClick={() => onConfirm?.(asset)}
-                    className="inline-flex items-center justify-center rounded-xl bg-[#2d6fa8] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#245c8f]"
+                    className={lifeButtonClass("primary")}
                   >
                     Add
                   </button>
@@ -520,7 +521,7 @@ function AssetPreviewPanel({
               ) : asset.isDeleted ? (
                 <div className="space-y-3 pb-2">
                   {restoreError && (
-                    <div className="rounded-xl border border-[#fecaca] bg-[#fef2f2] px-3.5 py-3 text-left text-sm text-[#b91c1c]">
+                    <div className="rounded-xl border border-[var(--life-critical-100)] bg-[var(--life-critical-050)] px-3.5 py-3 text-left text-sm text-[var(--life-critical-600)]">
                       {restoreError}
                     </div>
                   )}
@@ -528,7 +529,7 @@ function AssetPreviewPanel({
                     <button
                       type="button"
                       onClick={() => onRestore?.(asset)}
-                      className="inline-flex items-center justify-center rounded-xl bg-[#16a34a] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#15803d]"
+                      className={lifeButtonClass("primary")}
                     >
                       Restore
                     </button>
@@ -539,14 +540,14 @@ function AssetPreviewPanel({
                   <button
                     type="button"
                     onClick={() => onEdit(asset)}
-                    className="inline-flex items-center justify-center rounded-xl bg-[#2d6fa8] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#245c8f]"
+                    className={lifeButtonClass("primary")}
                   >
                     Edit
                   </button>
                   <button
                     type="button"
                     onClick={() => onDelete(asset)}
-                    className="inline-flex items-center justify-center rounded-xl bg-[#ff5c73] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#ef445c]"
+                    className={lifeButtonClass("danger")}
                   >
                     Delete
                   </button>
@@ -573,7 +574,8 @@ const AssetCardItem = memo(function AssetCardItem({ asset, clickable = false, on
           onActivate?.(asset);
         }
       } : undefined}
-      className={`rounded-xl overflow-hidden transition-all flex flex-col group border ${selected ? "border-[#2d6fa8] shadow-[0_12px_28px_rgba(45,111,168,0.22)] ring-2 ring-[#dbeeff]" : "border-[#e5e7eb]"} bg-white ${clickable ? "cursor-pointer hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:ring-offset-2" : "hover:shadow-md"} ${asset.isDeleted ? "opacity-80 grayscale-[0.2]" : ""}`}
+      aria-pressed={clickable ? selected : undefined}
+      className={`life-card overflow-hidden group ${selected ? "!border-[var(--life-primary-500)] !shadow-[0_0_0_3px_var(--life-primary-100)]" : ""} ${clickable ? "cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--life-primary-400)]" : ""} ${asset.isDeleted ? "opacity-80 grayscale-[0.2]" : ""}`}
     >
       <div className="relative">
         {/* Thumbnail */}
@@ -602,16 +604,16 @@ const AssetCardItem = memo(function AssetCardItem({ asset, clickable = false, on
       {/* Body */}
       <div className="p-4 flex flex-col gap-2 flex-1">
         <div className="flex items-start justify-between gap-2">
-          <h3 className="text-sm font-semibold text-[#111827] leading-tight line-clamp-2">{asset.title}</h3>
+          <h3 className="text-sm font-semibold text-[var(--life-neutral-850)] leading-tight line-clamp-2">{asset.title}</h3>
           <span className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${FORMAT_COLORS[asset.format]}`}>
             {FORMAT_ICONS[asset.format]}
             {asset.format}
           </span>
         </div>
 
-        <p className="text-xs text-[#6b7280] line-clamp-2 leading-relaxed">{asset.description || "No description."}</p>
+        <p className="text-xs text-[var(--life-neutral-600)] line-clamp-2 leading-relaxed">{asset.description || "No description."}</p>
 
-        <div className="flex items-center gap-3 text-xs text-[#9ca3af] mt-auto pt-1">
+        <div className="flex items-center gap-3 text-xs text-[var(--life-neutral-400)] mt-auto pt-1">
           <span className="flex items-center gap-1">
             <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
@@ -623,9 +625,9 @@ const AssetCardItem = memo(function AssetCardItem({ asset, clickable = false, on
         {asset.tags.length > 0 && (
           <div className="flex flex-wrap gap-1 pt-1">
             {asset.tags.slice(0, 3).map((t) => (
-              <span key={t} className="px-1.5 py-0.5 bg-[#f3f4f6] text-[#6b7280] rounded text-[10px]">{t}</span>
+              <span key={t} className="px-1.5 py-0.5 bg-[var(--life-neutral-050)] text-[var(--life-neutral-600)] rounded text-[10px]">{t}</span>
             ))}
-            {asset.tags.length > 3 && <span className="px-1.5 py-0.5 text-[10px] text-[#9ca3af]">+{asset.tags.length - 3}</span>}
+            {asset.tags.length > 3 && <span className="px-1.5 py-0.5 text-[10px] text-[var(--life-neutral-400)]">+{asset.tags.length - 3}</span>}
           </div>
         )}
       </div>
@@ -1075,15 +1077,15 @@ export function AssetManagementWorkspace({
       {/* ── Page header ── */}
       <div className="px-6 md:px-8 pt-6 pb-4 flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-[#111827] leading-tight">{pickerMode ? (pickerTitle || "Select Asset") : "Asset Management"}</h1>
+          <h1 className="text-2xl md:text-3xl font-bold text-[var(--life-neutral-850)] leading-tight">{pickerMode ? (pickerTitle || "Select Asset") : "Asset Management"}</h1>
           {!pickerMode ? (
-            <p className="mt-1 text-sm text-[#6b7280]">Upload, organize, and manage your course assets</p>
+            <p className="mt-1 text-sm text-[var(--life-neutral-600)]">Upload, organize, and manage your course assets</p>
           ) : null}
         </div>
         <button
           type="button"
           onClick={() => { setUpload(EMPTY_UPLOAD); setUploadOpen(true); }}
-          className="shrink-0 flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors shadow-sm"
+          className={lifeButtonClass("primary", "md", "shrink-0")}
         >
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
           <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
@@ -1099,7 +1101,7 @@ export function AssetManagementWorkspace({
       <div className="px-6 md:px-8 pb-3 flex flex-wrap items-center gap-3">
         {/* Search */}
         <div className="relative flex-1 min-w-[200px] max-w-sm">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9ca3af]" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--life-neutral-400)]" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
           <input
@@ -1108,10 +1110,10 @@ export function AssetManagementWorkspace({
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Escape") setSearch(""); }}
             placeholder="Search by name"
-            className="w-full pl-9 pr-4 py-2 text-sm border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent bg-white placeholder-[#9ca3af] text-[#111827] transition-colors"
+            className="life-field pl-9 pr-8"
           />
           {search && (
-            <button type="button" onClick={() => setSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#9ca3af] hover:text-[#374151]">
+            <button type="button" onClick={() => setSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--life-neutral-400)] hover:text-[var(--life-neutral-700)]">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
               </svg>
@@ -1121,24 +1123,21 @@ export function AssetManagementWorkspace({
 
         {/* Format filter */}
         {!fixedPickerFormat ? (
-        <div className="flex items-center gap-1 bg-[#f3f4f6] rounded-lg p-1">
+        <div role="group" aria-label="Asset type" className="life-tabs">
           {FORMATS.map((f) => (
             <button
               key={f}
               type="button"
+              aria-pressed={formatFilter === f}
               onClick={() => setFormatFilter(f)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
-                formatFilter === f
-                  ? "bg-white text-[#2d6fa8] shadow-sm"
-                  : "text-[#6b7280] hover:text-[#374151]"
-              }`}
+              className="life-tab"
             >
               {FORMAT_LABELS[f]}
             </button>
           ))}
         </div>
         ) : (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#dbeeff] text-xs text-[#2d6fa8] font-medium">
+          <span className="life-chip">
             {FORMAT_LABELS[fixedPickerFormat]}
           </span>
         )}
@@ -1150,15 +1149,15 @@ export function AssetManagementWorkspace({
               setTagFilterOpen((open) => !open);
               setTagSearch("");
             }}
-            className={`flex items-center gap-1.5 px-3 py-2 text-sm border rounded-lg transition-colors whitespace-nowrap ${
-              selectedTags.length > 0
-                ? "border-[#2d6fa8] bg-[#dbeeff] text-[#2d6fa8] font-medium"
-                : "bg-white border-[#e5e7eb] text-[#374151] hover:bg-[#f9fafb]"
+            aria-haspopup="listbox"
+            aria-expanded={tagFilterOpen}
+            className={`life-field w-auto cursor-pointer whitespace-nowrap ${
+              selectedTags.length > 0 ? "life-field--active font-medium" : tagFilterOpen ? "life-field--open" : ""
             }`}
           >
             Search by tag
             {selectedTags.length > 0 && (
-              <span className="w-4 h-4 rounded-full bg-[#2d6fa8] text-white text-[10px] font-bold flex items-center justify-center">{selectedTags.length}</span>
+              <span className="w-4 h-4 rounded-full bg-[var(--life-primary-500)] text-white text-[10px] font-bold flex items-center justify-center">{selectedTags.length}</span>
             )}
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${tagFilterOpen ? "rotate-180" : ""}`}>
               <path d="M6 9l6 6 6-6" />
@@ -1166,10 +1165,10 @@ export function AssetManagementWorkspace({
           </button>
 
           {tagFilterOpen && (
-            <div className="absolute left-0 mt-1 w-64 bg-white border border-[#e5e7eb] rounded-lg shadow-lg z-30 py-1">
+            <div role="listbox" aria-multiselectable="true" className="life-menu absolute left-0 mt-1 w-64 z-30">
               <div className="px-2 pt-1.5 pb-1">
                 <div className="relative">
-                  <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9ca3af]" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--life-neutral-400)]" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
                   </svg>
                   <input
@@ -1177,15 +1176,15 @@ export function AssetManagementWorkspace({
                     value={tagSearch}
                     onChange={(e) => setTagSearch(e.target.value)}
                     placeholder="Search tags..."
-                    className="w-full pl-7 pr-2 py-1.5 text-xs border border-[#e5e7eb] rounded-md focus:outline-none focus:ring-1 focus:ring-[#2d6fa8] focus:border-transparent text-[#111827] bg-[#f9fafb]"
+                    className="life-field h-8 pl-7 pr-2 text-xs"
                     onClick={(e) => e.stopPropagation()}
                   />
                 </div>
               </div>
 
-              <div className="max-h-56 overflow-y-auto">
+              <div className="max-h-56 overflow-y-auto life-scroll">
                 {visibleTagOptions.length === 0 && (
-                  <p className="px-3 py-2 text-sm text-[#9ca3af]">No matching tags</p>
+                  <p className="px-3 py-2 text-sm text-[var(--life-neutral-400)]">No matching tags</p>
                 )}
 
                 {visibleTagOptions.map((tag) => {
@@ -1195,9 +1194,9 @@ export function AssetManagementWorkspace({
                       key={tag}
                       type="button"
                       onClick={() => toggleTag(tag)}
-                      className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center justify-between ${
-                        isSelected ? "bg-[#dbeeff] text-[#2d6fa8] font-medium" : "text-[#374151] hover:bg-[#f9fafb]"
-                      }`}
+                      role="option"
+                      aria-pressed={isSelected}
+                      className="life-menu-item justify-between"
                     >
                       <span>{tag}</span>
                       {isSelected && (
@@ -1212,14 +1211,14 @@ export function AssetManagementWorkspace({
 
               {selectedTags.length > 0 && (
                 <>
-                  <div className="border-t border-[#f3f4f6] my-1" />
+                  <div className="life-menu-divider" />
                   <button
                     type="button"
                     onClick={() => {
                       clearTags();
                       setTagFilterOpen(false);
                     }}
-                    className="w-full text-left px-3 py-2 text-sm text-[#ef4444] hover:bg-[#fef2f2] transition-colors"
+                    className="life-menu-item life-menu-item--critical"
                   >
                     Clear tags
                   </button>
@@ -1233,9 +1232,9 @@ export function AssetManagementWorkspace({
         {(search || selectedTags.length > 0) && (
           <div className="flex items-center gap-2 flex-wrap">
             {search && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#f3f4f6] text-xs text-[#374151] font-medium">
+              <span className="life-chip life-chip--neutral">
                 "{search}"
-                <button type="button" onClick={() => setSearch("")} className="text-[#9ca3af] hover:text-[#374151]">
+                <button type="button" onClick={() => setSearch("")} className="text-[var(--life-neutral-400)] hover:text-[var(--life-neutral-700)]">
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
                     <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                   </svg>
@@ -1243,13 +1242,13 @@ export function AssetManagementWorkspace({
               </span>
             )}
             {selectedTags.map((tag) => (
-              <span key={tag} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#eef2ff] text-xs text-[#3730a3] font-medium">
+              <span key={tag} className="life-chip">
                 Tag: {tag}
                 <button
                   type="button"
                   onClick={() => setSelectedTags((prev) => prev.filter((item) => item.toLowerCase() !== tag.toLowerCase()))}
                   aria-label={`Remove tag ${tag}`}
-                  className="text-[#6366f1] hover:text-[#4338ca]"
+                  className="text-[var(--life-primary-600)] hover:text-[var(--life-primary-800)]"
                 >
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
                     <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -1260,7 +1259,7 @@ export function AssetManagementWorkspace({
           </div>
         )}
 
-        <span className="ml-auto text-xs text-[#9ca3af]">{filtered.length} asset{filtered.length !== 1 ? "s" : ""}</span>
+        <span className="ml-auto text-xs text-[var(--life-neutral-400)]">{filtered.length} asset{filtered.length !== 1 ? "s" : ""}</span>
 
       </div>
 
@@ -1270,13 +1269,13 @@ export function AssetManagementWorkspace({
           <div className="min-w-0">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-[#f3f4f6] flex items-center justify-center mb-4">
+            <div className="w-16 h-16 rounded-2xl bg-[var(--life-neutral-050)] flex items-center justify-center mb-4">
               <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="#9ca3af" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
             </div>
-            <p className="text-sm font-medium text-[#374151]">No assets found</p>
-            <p className="text-xs text-[#9ca3af] mt-1">Try adjusting your search or filter, or upload a new asset.</p>
+            <p className="text-sm font-medium text-[var(--life-neutral-700)]">No assets found</p>
+            <p className="text-xs text-[var(--life-neutral-400)] mt-1">Try adjusting your search or filter, or upload a new asset.</p>
           </div>
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-3 sm:grid-cols-[repeat(auto-fill,minmax(170px,1fr))] md:gap-4 xl:grid-cols-[repeat(auto-fill,minmax(230px,1fr))]">
@@ -1284,7 +1283,7 @@ export function AssetManagementWorkspace({
           </div>
         )}
         {hasMore && (
-          <div ref={assetSentinelRef} className="flex justify-center py-8 text-sm text-[#9ca3af]">
+          <div ref={assetSentinelRef} className="flex justify-center py-8 text-sm text-[var(--life-neutral-400)]">
             {isLoadingMore ? "Loading more…" : ""}
           </div>
         )}
@@ -1316,10 +1315,10 @@ export function AssetManagementWorkspace({
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
 
             {/* ── Header ── */}
-            <div className="px-6 py-4 border-b border-[#e5e7eb] flex items-center justify-between shrink-0">
-              <h2 className="font-semibold text-[#111827] text-base">Upload Asset</h2>
+            <div className="px-6 py-4 border-b border-[var(--life-neutral-100)] flex items-center justify-between shrink-0">
+              <h2 className="font-semibold text-[var(--life-neutral-850)] text-base">Upload Asset</h2>
               {upload.step !== "uploading" && (
-                <button type="button" onClick={closeUpload} className="p-1.5 rounded-lg text-[#6b7280] hover:bg-[#f3f4f6] transition-colors">
+                <button type="button" onClick={closeUpload} aria-label="Close" className="life-icon-btn life-icon-btn--sm">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                     <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                   </svg>
@@ -1332,7 +1331,7 @@ export function AssetManagementWorkspace({
               <>
                 <div className="px-6 py-5 overflow-y-auto flex flex-col gap-4">
                   {upload.uploadError && (
-                    <div className="rounded-lg border border-[#fecaca] bg-[#fef2f2] px-3.5 py-3 text-sm text-[#b91c1c]">
+                    <div className="rounded-lg border border-[var(--life-critical-100)] bg-[var(--life-critical-050)] px-3.5 py-3 text-sm text-[var(--life-critical-600)]">
                       {upload.uploadError}
                     </div>
                   )}
@@ -1345,18 +1344,18 @@ export function AssetManagementWorkspace({
                     onClick={() => uploadInputRef.current?.click()}
                     className={`border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center gap-3 cursor-pointer transition-colors ${
                       uploadDrag
-                        ? "border-[#2d6fa8] bg-[#dbeeff]"
+                        ? "border-[var(--life-primary-500)] bg-[var(--life-primary-100)]"
                         : upload.file && !upload.fileValidation.ok
-                          ? "border-[#ef4444] bg-[#fef2f2]"
+                          ? "border-[var(--life-critical-500)] bg-[var(--life-critical-050)]"
                           : upload.file && upload.fileValidation.ok
                             ? "border-[#22c55e] bg-[#f0fdf4]"
-                            : "border-[#d1d5db] hover:border-[#2d6fa8] hover:bg-[#f9fafb]"
+                            : "border-[var(--life-neutral-200)] hover:border-[var(--life-primary-500)] hover:bg-[var(--life-neutral-020)]"
                     }`}
                   >
                     {upload.file ? (
                       <>
                         <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                          upload.fileValidation.ok ? "bg-[#dcfce7]" : "bg-[#fef2f2]"
+                          upload.fileValidation.ok ? "bg-[#dcfce7]" : "bg-[var(--life-critical-050)]"
                         }`}>
                           {upload.fileValidation.ok ? (
                             <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="#22c55e" strokeWidth={1.8}>
@@ -1369,32 +1368,32 @@ export function AssetManagementWorkspace({
                           )}
                         </div>
                         <div className="text-center">
-                          <p className={`text-sm font-semibold ${upload.fileValidation.ok ? "text-[#15803d]" : "text-[#dc2626]"}`}>
+                          <p className={`text-sm font-semibold ${upload.fileValidation.ok ? "text-[#15803d]" : "text-[var(--life-critical-600)]"}`}>
                             {upload.file.name}
                           </p>
-                          <p className="text-xs text-[#6b7280] mt-0.5">{formatFileSize(upload.file.size)}</p>
+                          <p className="text-xs text-[var(--life-neutral-600)] mt-0.5">{formatFileSize(upload.file.size)}</p>
                         </div>
                         {upload.fileValidation.error && (
-                          <p className="text-xs text-[#ef4444] font-medium text-center">{upload.fileValidation.error}</p>
+                          <p className="text-xs text-[var(--life-critical-500)] font-medium text-center">{upload.fileValidation.error}</p>
                         )}
                         <button
                           type="button"
                           onClick={(e) => { e.stopPropagation(); setUpload((p) => ({ ...p, file: null, fileValidation: { ok: true }, title: "", uploadError: null })); }}
-                          className="text-xs text-[#9ca3af] hover:text-[#374151] underline underline-offset-2"
+                          className="text-xs text-[var(--life-neutral-400)] hover:text-[var(--life-neutral-700)] underline underline-offset-2"
                         >
                           Choose a different file
                         </button>
                       </>
                     ) : (
                       <>
-                        <div className="w-12 h-12 rounded-xl bg-[#f3f4f6] flex items-center justify-center">
+                        <div className="w-12 h-12 rounded-xl bg-[var(--life-neutral-050)] flex items-center justify-center">
                           <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="#6b7280" strokeWidth={1.5}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" />
                           </svg>
                         </div>
                         <div className="text-center">
-                          <p className="text-sm font-medium text-[#374151]">Drop file here or click to browse</p>
-                          <p className="text-xs text-[#9ca3af] mt-1">Images, audio, video, or documents — max {maxFileUploadSize}</p>
+                          <p className="text-sm font-medium text-[var(--life-neutral-700)]">Drop file here or click to browse</p>
+                          <p className="text-xs text-[var(--life-neutral-400)] mt-1">Images, audio, video, or documents — max {maxFileUploadSize}</p>
                         </div>
                       </>
                     )}
@@ -1410,8 +1409,8 @@ export function AssetManagementWorkspace({
 
                   {/* Asset Title */}
                   <div>
-                    <label className="block text-xs font-semibold text-[#374151] mb-1.5">
-                      Asset Title <span className="text-[#ef4444]">*</span>
+                    <label className="life-label">
+                      Asset Title <span className="text-[var(--life-critical-500)]">*</span>
                     </label>
                     <input
                       type="text"
@@ -1420,22 +1419,18 @@ export function AssetManagementWorkspace({
                       placeholder="Enter asset title"
                       maxLength={120}
                       aria-invalid={upload.formErrors.title ? "true" : "false"}
-                      className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent placeholder-[#9ca3af] transition-colors ${
-                        upload.formErrors.title
-                          ? "border-[#ef4444] focus:ring-[#ef4444]"
-                          : "border-[#e5e7eb] focus:ring-[#2d6fa8]"
-                      }`}
+                      className="life-field"
                     />
                     <div className="flex items-center justify-between mt-1">
                       {upload.formErrors.title ? (
-                        <p className="text-xs text-[#ef4444] flex items-center gap-1">
+                        <p className="text-xs text-[var(--life-critical-500)] flex items-center gap-1">
                           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                             <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
                           </svg>
                           {upload.formErrors.title}
                         </p>
                       ) : <span />}
-                      <span className={`text-xs tabular-nums ${upload.title.length > 100 ? "text-[#f59e0b]" : "text-[#9ca3af]"}`}>
+                      <span className={`text-xs tabular-nums ${upload.title.length > 100 ? "text-[#f59e0b]" : "text-[var(--life-neutral-400)]"}`}>
                         {upload.title.length}/120
                       </span>
                     </div>
@@ -1443,8 +1438,8 @@ export function AssetManagementWorkspace({
 
                   {/* Asset Description */}
                   <div>
-                    <label className="block text-xs font-semibold text-[#374151] mb-1.5">
-                      Asset Description <span className="text-[#ef4444]">*</span>
+                    <label className="life-label">
+                      Asset Description <span className="text-[var(--life-critical-500)]">*</span>
                     </label>
                     <textarea
                       value={upload.description}
@@ -1452,14 +1447,10 @@ export function AssetManagementWorkspace({
                       placeholder="Describe what this asset is and how it should be used…"
                       rows={3}
                       aria-invalid={upload.formErrors.description ? "true" : "false"}
-                      className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent placeholder-[#9ca3af] resize-none transition-colors ${
-                        upload.formErrors.description
-                          ? "border-[#ef4444] focus:ring-[#ef4444]"
-                          : "border-[#e5e7eb] focus:ring-[#2d6fa8]"
-                      }`}
+                      className="life-field"
                     />
                     {upload.formErrors.description && (
-                      <p className="text-xs text-[#ef4444] flex items-center gap-1 mt-1">
+                      <p className="text-xs text-[var(--life-critical-500)] flex items-center gap-1 mt-1">
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                           <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
                         </svg>
@@ -1470,34 +1461,34 @@ export function AssetManagementWorkspace({
 
                   {/* Tags */}
                   <div>
-                    <label className="block text-xs font-semibold text-[#374151] mb-1.5">Tags</label>
+                    <label className="life-label">Tags</label>
                     <input
                       type="text"
                       value={upload.tags}
                       onChange={(e) => setUpload((p) => ({ ...p, tags: e.target.value, uploadError: null }))}
                       placeholder="cpr, training, emergency"
-                      className="w-full px-3 py-2 text-sm border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent placeholder-[#9ca3af]"
+                      className="life-field"
                     />
-                    <p className="text-xs text-[#9ca3af] mt-1">Separate tags with commas</p>
+                    <p className="text-xs text-[var(--life-neutral-400)] mt-1">Separate tags with commas</p>
                     {upload.tags && (
                       <div className="flex flex-wrap gap-1.5 mt-2">
                         {upload.tags.split(",").map((t) => t.trim()).filter(Boolean).map((t) => (
-                          <span key={t} className="px-2 py-0.5 bg-[#f3f4f6] text-[#6b7280] rounded text-xs">{t}</span>
+                          <span key={t} className="px-2 py-0.5 bg-[var(--life-neutral-050)] text-[var(--life-neutral-600)] rounded text-xs">{t}</span>
                         ))}
                       </div>
                     )}
                   </div>
                 </div>
 
-                <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[#e5e7eb] shrink-0">
-                  <button type="button" onClick={closeUpload} className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors">
+                <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[var(--life-neutral-100)] shrink-0">
+                  <button type="button" onClick={closeUpload} className={lifeButtonClass("secondary")}>
                     Cancel
                   </button>
                   <button
                     type="button"
                     onClick={startUpload}
                     disabled={!upload.file || !upload.fileValidation.ok}
-                    className="px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                    className={lifeButtonClass("primary")}
                   >
                     <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
                       <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" />
@@ -1512,32 +1503,32 @@ export function AssetManagementWorkspace({
             {upload.step === "uploading" && (
               <div className="px-6 py-10 flex flex-col items-center gap-5">
                 <div className="relative w-16 h-16">
-                  <div className="absolute inset-0 rounded-full bg-[#dbeeff] animate-ping opacity-30" />
-                  <div className="relative w-16 h-16 rounded-full bg-[#dbeeff] flex items-center justify-center">
+                  <div className="absolute inset-0 rounded-full bg-[var(--life-primary-100)] animate-ping opacity-30" />
+                  <div className="relative w-16 h-16 rounded-full bg-[var(--life-primary-100)] flex items-center justify-center">
                     <svg width="26" height="26" fill="none" viewBox="0 0 24 24" stroke="#2d6fa8" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
                       <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" />
                     </svg>
                   </div>
                 </div>
                 <div className="text-center">
-                  <p className="text-sm font-semibold text-[#111827]">Uploading "{upload.title}"</p>
-                  <p className="text-xs text-[#9ca3af] mt-1">{upload.file ? formatFileSize(upload.file.size) : ""} · Please wait…</p>
+                  <p className="text-sm font-semibold text-[var(--life-neutral-850)]">Uploading "{upload.title}"</p>
+                  <p className="text-xs text-[var(--life-neutral-400)] mt-1">{upload.file ? formatFileSize(upload.file.size) : ""} · Please wait…</p>
                 </div>
                 <div className="w-full">
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-xs text-[#6b7280]">Progress</span>
-                    <span className="text-xs font-semibold text-[#2d6fa8] tabular-nums">{Math.round(upload.progress)}%</span>
+                    <span className="text-xs text-[var(--life-neutral-600)]">Progress</span>
+                    <span className="text-xs font-semibold text-[var(--life-primary-500)] tabular-nums">{Math.round(upload.progress)}%</span>
                   </div>
-                  <div className="w-full h-2 bg-[#f3f4f6] rounded-full overflow-hidden">
+                  <div className="w-full h-2 bg-[var(--life-neutral-050)] rounded-full overflow-hidden">
                     {/* Progress width must be inline — it's a runtime value that cannot be a static Tailwind class */}
                     {/* eslint-disable-next-line react/forbid-dom-props */}
                     <div
-                      className="h-full bg-[#2d6fa8] rounded-full transition-all duration-150"
+                      className="h-full bg-[var(--life-primary-500)] rounded-full transition-all duration-150"
                       style={{ width: `${upload.progress}%` }} // skipcq: JS-0394
                     />
                   </div>
                 </div>
-                <p className="text-xs text-[#9ca3af]">Do not close this window.</p>
+                <p className="text-xs text-[var(--life-neutral-400)]">Do not close this window.</p>
               </div>
             )}
 
@@ -1557,9 +1548,9 @@ export function AssetManagementWorkspace({
         >
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
             {/* Header */}
-            <div className="px-6 py-4 border-b border-[#e5e7eb] flex items-center justify-between shrink-0">
-              <h2 className="font-semibold text-[#111827] text-base">Edit Asset Details</h2>
-              <button type="button" onClick={() => setEditState(null)} className="p-1.5 rounded-lg text-[#6b7280] hover:bg-[#f3f4f6] transition-colors">
+            <div className="px-6 py-4 border-b border-[var(--life-neutral-100)] flex items-center justify-between shrink-0">
+              <h2 className="font-semibold text-[var(--life-neutral-850)] text-base">Edit Asset Details</h2>
+              <button type="button" onClick={() => setEditState(null)} aria-label="Close" className="life-icon-btn life-icon-btn--sm">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                   <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
@@ -1569,29 +1560,29 @@ export function AssetManagementWorkspace({
             {/* Body */}
             <div className="px-6 py-5 overflow-y-auto flex flex-col gap-4">
               {editState.saveError && (
-                <div className="rounded-lg border border-[#fecaca] bg-[#fef2f2] px-3.5 py-3 text-sm text-[#b91c1c]">
+                <div className="rounded-lg border border-[var(--life-critical-100)] bg-[var(--life-critical-050)] px-3.5 py-3 text-sm text-[var(--life-critical-600)]">
                   {editState.saveError}
                 </div>
               )}
 
               {/* Asset Title */}
               <div>
-                <label className="block text-xs font-semibold text-[#374151] mb-1.5">
-                  Asset Title <span className="text-[#ef4444]">*</span>
+                <label className="life-label">
+                  Asset Title <span className="text-[var(--life-critical-500)]">*</span>
                 </label>
                 <input
                   type="text"
                   value={editState.title}
                   onChange={(e) => setEditState((p) => p ? { ...p, title: e.target.value, saveError: null } : p)}
                   placeholder="Asset title"
-                  className="w-full px-3 py-2 text-sm border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent placeholder-[#9ca3af]"
+                  className="life-field"
                 />
               </div>
 
               {/* Asset Description */}
               <div>
-                <label className="block text-xs font-semibold text-[#374151] mb-1.5">
-                  Asset Description <span className="text-[#ef4444]">*</span>
+                <label className="life-label">
+                  Asset Description <span className="text-[var(--life-critical-500)]">*</span>
                 </label>
                 <textarea
                   value={editState.description}
@@ -1599,37 +1590,33 @@ export function AssetManagementWorkspace({
                   placeholder="Describe this asset…"
                   rows={3}
                   aria-invalid={!editState.description.trim() ? "true" : "false"}
-                  className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent placeholder-[#9ca3af] resize-none transition-colors ${
-                    !editState.description.trim()
-                      ? "border-[#ef4444] focus:ring-[#ef4444]"
-                      : "border-[#e5e7eb] focus:ring-[#2d6fa8]"
-                  }`}
+                  className="life-field"
                 />
                 {!editState.description.trim() && (
-                  <p className="text-xs text-[#ef4444] mt-1">Description is required.</p>
+                  <p className="text-xs text-[var(--life-critical-500)] mt-1">Description is required.</p>
                 )}
               </div>
 
               {/* Tags */}
               <div>
-                <label className="block text-xs font-semibold text-[#374151] mb-1.5">Tags</label>
+                <label className="life-label">Tags</label>
                 <input
                   type="text"
                   value={editState.tags}
                   onChange={(e) => setEditState((p) => p ? { ...p, tags: e.target.value, saveError: null } : p)}
                   placeholder="tag1, tag2, tag3"
-                  className="w-full px-3 py-2 text-sm border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent placeholder-[#9ca3af]"
+                  className="life-field"
                 />
-                <p className="text-xs text-[#9ca3af] mt-1">Separate tags with commas</p>
+                <p className="text-xs text-[var(--life-neutral-400)] mt-1">Separate tags with commas</p>
               </div>
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[#e5e7eb] shrink-0">
+            <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[var(--life-neutral-100)] shrink-0">
               <button
                 type="button"
                 onClick={() => setEditState(null)}
-                className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors"
+                className={lifeButtonClass("secondary")}
               >
                 Cancel
               </button>
@@ -1637,7 +1624,7 @@ export function AssetManagementWorkspace({
                 type="button"
                 onClick={saveEdit}
                 disabled={!editState.title.trim() || !editState.description.trim()}
-                className="px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className={lifeButtonClass("primary")}
               >
                 Save Changes
               </button>
@@ -1666,7 +1653,7 @@ export function AssetManagementWorkspace({
         <ConfirmDialog
           open
           title="Restore Asset"
-          message={<>Are you sure you want to restore <span className="font-medium text-[#111827]">"{restoreTarget.title}"</span>?</>}
+          message={<>Are you sure you want to restore <span className="font-medium text-[var(--life-neutral-850)]">"{restoreTarget.title}"</span>?</>}
           variant="success"
           cancelLabel="Cancel"
           confirmLabel="Restore Asset"

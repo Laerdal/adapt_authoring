@@ -59,14 +59,14 @@ export default function ArticleCanvas({
         onClick={handleCardClick}
         className={`menu-canvas-card relative w-full max-w-3xl mx-auto cursor-pointer transition-all border-2 ${
           isSelected
-            ? "border-[#2E7FA1] bg-[#D4E9F2]"
+            ? "border-[var(--life-primary-500)] bg-[#D4E9F2]"
             : "border-transparent bg-white hover:border-transparent hover:shadow-[0_0_5px_2px_#CBE1E6]"
         }`}
       >
         <div className={`flex items-start ${previewMode ? "gap-0 px-6 py-4" : "gap-4 px-6 py-6"}`}>
           {/* Drag handle */}
           {!previewMode && (
-            <div className="text-[#ABABAB] flex-shrink-0 mt-1">
+            <div className="text-[var(--life-neutral-300)] flex-shrink-0 mt-1">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                 <circle cx="9" cy="5" r="1.5" />
                 <circle cx="9" cy="12" r="1.5" />
@@ -88,7 +88,7 @@ export default function ArticleCanvas({
 
             {/* Article Title */}
             {previewMode ? (
-              <h2 className="w-full text-4xl font-normal leading-tight font-[Lato] text-[#1f2937]">
+              <h2 className="w-full text-4xl font-normal leading-tight font-[Lato] text-[var(--life-neutral-850)]">
                 {article.title || "Untitled Section"}
               </h2>
             ) : (
@@ -97,7 +97,7 @@ export default function ArticleCanvas({
                 value={article.title}
                 onChange={(e) => onUpdate({ title: e.target.value })}
                 placeholder="Article Title"
-                className="w-full bg-transparent border-none outline-none text-2xl font-bold placeholder-[#ABABAB] focus:ring-0 cursor-text font-[Lato]"
+                className="w-full bg-transparent border-none outline-none text-2xl font-bold placeholder-[var(--life-neutral-300)] focus:ring-0 cursor-text font-[Lato]"
                 aria-label="Article title"
               />
             )}
@@ -109,7 +109,7 @@ export default function ArticleCanvas({
               type="button"
               aria-label="Copy article"
               onClick={(e) => { e.stopPropagation(); onCopy?.(); }}
-              className="w-6 h-6 flex items-center justify-center rounded text-[#ABABAB] hover:text-[#474747] hover:bg-[#F2F2F2] transition-colors"
+              className="life-icon-btn life-icon-btn--xs"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
@@ -120,7 +120,7 @@ export default function ArticleCanvas({
               type="button"
               aria-label="Delete article"
               onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete this article?")) onDelete?.(); }}
-              className="w-6 h-6 flex items-center justify-center rounded text-[#ABABAB] hover:text-[#DC3449] hover:bg-[#FDDEE2] transition-colors"
+              className="life-icon-btn life-icon-btn--xs life-icon-btn--critical"
             >
               <EditorMaskIcon file="delete-icon.svg" className="block w-[16px] h-[16px] shrink-0 bg-current" />
             </button>
@@ -141,7 +141,7 @@ export default function ArticleCanvas({
                 <rect x="4" y="4" width="16" height="16" />
               </g>
             </svg>
-            <p className="text-sm text-[#ABABAB]">No blocks in this article yet.</p>
+            <p className="text-sm text-[var(--life-neutral-300)]">No blocks in this article yet.</p>
           </div>
         ) : (
           article.blocks.map((block) => (
@@ -171,7 +171,7 @@ export default function ArticleCanvas({
               e.stopPropagation();
               onAddBlock();
             }}
-            className="w-full max-w-3xl mx-auto flex items-center justify-center gap-2 px-4 py-2.5 bg-[#2E7FA1] hover:bg-[#266580] active:bg-[#1D4C60] text-white text-base font-bold rounded-lg transition-colors font-[Lato]"
+            className="life-btn life-btn--primary"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="12" y1="5" x2="12" y2="19" />

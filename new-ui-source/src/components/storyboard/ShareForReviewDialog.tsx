@@ -258,14 +258,14 @@ export default function ShareForReviewDialog({
         </div>
 
         <div className="flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="sb-toolbar-btn">
+          <button type="button" onClick={onClose} className="life-btn life-btn--secondary">
             Cancel
           </button>
           <button
             type="button"
             onClick={() => void handleShare()}
             disabled={sharing || loading}
-            className="sb-toolbar-btn sb-toolbar-btn-primary"
+            className="life-btn life-btn--primary"
           >
             {sharing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
             Share

@@ -13,8 +13,8 @@ interface TagOverflowListProps {
  */
 export default function TagOverflowList({
   tags,
-  tagClassName = "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#dbeeff] text-[#1e4d73]",
-  moreClassName = "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#f3f4f6] text-[#6b7280] cursor-pointer",
+  tagClassName = "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[var(--life-primary-100)] text-[var(--life-primary-800)]",
+  moreClassName = "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[var(--life-neutral-050)] text-[var(--life-neutral-600)] cursor-pointer",
   className = "",
 }: TagOverflowListProps) {
   const containerRef = useRef<HTMLDivElement>(null);

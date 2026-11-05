@@ -57,36 +57,36 @@ export default function ShareTemplateDialog({ template, onSave, onClose }: {
       onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); if (!saving) onClose() } }}
       onClick={(event) => { if (event.target === event.currentTarget && !saving) onClose() }}
     >
-      <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-[#e5e7eb]">
+      <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-[var(--life-neutral-100)]">
         <div className="min-w-0">
-          <h2 id="share-template-title" className="font-semibold text-[#111827] text-base">Share Template</h2>
-          <p className="text-xs text-[#6b7280] mt-0.5 break-words">{template.name}</p>
+          <h2 id="share-template-title" className="font-semibold text-[var(--life-neutral-850)] text-base">Share Template</h2>
+          <p className="text-xs text-[var(--life-neutral-600)] mt-0.5 break-words">{template.name}</p>
         </div>
-        <button type="button" onClick={onClose} disabled={saving} aria-label="Close" title="Close" className="p-1.5 rounded-lg hover:bg-[#f3f4f6] text-[#6b7280] disabled:opacity-40">
+        <button type="button" onClick={onClose} disabled={saving} aria-label="Close" title="Close" className="p-1.5 rounded-lg hover:bg-[var(--life-neutral-050)] text-[var(--life-neutral-600)] disabled:opacity-40">
           <X size={18} />
         </button>
       </div>
       <div className="px-6 py-5 flex flex-col gap-4 max-h-[60vh] overflow-y-auto">
-        <label className="flex items-center gap-2 text-sm font-medium text-[#374151]">
-          <input type="checkbox" checked={isShared} disabled={saving} onChange={(event) => setIsShared(event.target.checked)} className="h-4 w-4 accent-[#2d6fa8]" />
+        <label className="flex items-center gap-2 text-sm font-medium text-[var(--life-neutral-700)]">
+          <input type="checkbox" checked={isShared} disabled={saving} onChange={(event) => setIsShared(event.target.checked)} className="h-4 w-4 accent-[var(--life-primary-500)]" />
           Share with all users
         </label>
         {!isShared && (
           <div className="flex flex-col gap-2">
-            <label htmlFor="template-user-search" className="text-sm font-medium text-[#374151]">Share with specific users</label>
+            <label htmlFor="template-user-search" className="text-sm font-medium text-[var(--life-neutral-700)]">Share with specific users</label>
             <input
               id="template-user-search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               disabled={loading || loadError || saving}
               placeholder={loading ? 'Loading users...' : 'Search by name or email'}
-              className="w-full px-3 py-2.5 text-sm border border-[#d1d5db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] text-[#111827]"
+              className="w-full px-3 py-2.5 text-sm border border-[var(--life-neutral-200)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] text-[var(--life-neutral-850)]"
             />
-            {loadError && <p role="alert" className="text-sm text-[#b42318]">Failed to load users. Close and reopen to try again.</p>}
+            {loadError && <p role="alert" className="text-sm text-[var(--life-critical-600)]">Failed to load users. Close and reopen to try again.</p>}
             {search && !loading && !loadError && (
-              <div className="border border-[#d1d5db] rounded-lg max-h-40 overflow-y-auto divide-y divide-[#e5e7eb]">
-                {matches.length === 0 ? <p className="px-3 py-2 text-sm text-[#6b7280]">No matching users</p> : matches.map((user) => (
-                  <button key={user._id} type="button" disabled={saving} onClick={() => { setSelectedIds((previous) => [...previous, user._id]); setQuery('') }} className="block w-full px-3 py-2 text-left text-sm text-[#374151] hover:bg-[#f9fafb] break-words">
+              <div className="border border-[var(--life-neutral-200)] rounded-lg max-h-40 overflow-y-auto divide-y divide-[var(--life-neutral-100)]">
+                {matches.length === 0 ? <p className="px-3 py-2 text-sm text-[var(--life-neutral-600)]">No matching users</p> : matches.map((user) => (
+                  <button key={user._id} type="button" disabled={saving} onClick={() => { setSelectedIds((previous) => [...previous, user._id]); setQuery('') }} className="block w-full px-3 py-2 text-left text-sm text-[var(--life-neutral-700)] hover:bg-[var(--life-neutral-020)] break-words">
                     {user.email}
                   </button>
                 ))}
@@ -95,9 +95,9 @@ export default function ShareTemplateDialog({ template, onSave, onClose }: {
             {selectedIds.map((userId) => {
               const label = users.find((user) => user._id === userId)?.email || userId
               return (
-                <div key={userId} className="flex items-center gap-2 rounded-lg bg-[#f3f4f6] px-3 py-2 text-sm text-[#374151]">
+                <div key={userId} className="flex items-center gap-2 rounded-lg bg-[var(--life-neutral-050)] px-3 py-2 text-sm text-[var(--life-neutral-700)]">
                   <span className="min-w-0 flex-1 break-words">{label}</span>
-                  <button type="button" disabled={saving} aria-label={`Remove ${label}`} title={`Remove ${label}`} onClick={() => setSelectedIds((previous) => previous.filter((id) => id !== userId))} className="p-1 rounded hover:bg-[#e5e7eb]">
+                  <button type="button" disabled={saving} aria-label={`Remove ${label}`} title={`Remove ${label}`} onClick={() => setSelectedIds((previous) => previous.filter((id) => id !== userId))} className="p-1 rounded hover:bg-[var(--life-neutral-100)]">
                     <X size={14} />
                   </button>
                 </div>
@@ -105,11 +105,11 @@ export default function ShareTemplateDialog({ template, onSave, onClose }: {
             })}
           </div>
         )}
-        {error && <p role="alert" className="text-sm text-[#b42318]">{error}</p>}
+        {error && <p role="alert" className="text-sm text-[var(--life-critical-600)]">{error}</p>}
       </div>
-      <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[#e5e7eb]">
-        <button type="button" disabled={saving} onClick={onClose} className="px-4 py-2 text-sm font-medium text-[#374151] border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] disabled:opacity-40">Cancel</button>
-        <button type="button" disabled={saving || (!isShared && (loading || loadError))} onClick={() => void save()} className="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] disabled:opacity-40 disabled:cursor-not-allowed rounded-lg">
+      <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[var(--life-neutral-100)]">
+        <button type="button" disabled={saving} onClick={onClose} className="px-4 py-2 text-sm font-medium text-[var(--life-neutral-700)] border border-[var(--life-neutral-200)] rounded-lg hover:bg-[var(--life-neutral-020)] disabled:opacity-40">Cancel</button>
+        <button type="button" disabled={saving || (!isShared && (loading || loadError))} onClick={() => void save()} className="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-600)] disabled:opacity-40 disabled:cursor-not-allowed rounded-lg">
           <Share2 size={15} />{saving ? 'Saving...' : 'Share'}
         </button>
       </div>

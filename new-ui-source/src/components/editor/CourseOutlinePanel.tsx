@@ -12,7 +12,7 @@ import type { CourseStructure, SModule, StructureLevel } from "@/types/structure
 import { mergedChildren } from "@/types/structure";
 
 const ICON_BASE = "/new/assets/icons";
-const INLINE_ADD_BUTTON_CLASS = "h-8 shrink-0 inline-flex items-center justify-center gap-1.5 px-2 rounded-[6px] text-[#2E7FA1] text-xs font-medium hover:bg-[#f0f8ff] transition-colors";
+const INLINE_ADD_BUTTON_CLASS = "life-btn life-btn--text life-btn--sm shrink-0";
 
 function MaskIcon({ file, className }: { file: string; className?: string }) {
   const iconPath = `${ICON_BASE}/${file}`;
@@ -148,7 +148,7 @@ function TreeRow({
     <div
       {...dragBindings}
       data-outline-selected={selected ? "true" : undefined}
-      className={`w-full min-h-9 flex items-center gap-[6px] text-left border-l-[3px] transition-colors group relative [&[data-outline-drop=before]]:shadow-[inset_0_2px_0_#2d6fa8] [&[data-outline-drop=into]]:ring-2 [&[data-outline-drop=into]]:ring-[#2d6fa8] ${
+      className={`w-full min-h-9 flex items-center gap-[6px] text-left border-l-[3px] transition-colors group relative [&[data-outline-drop=before]]:shadow-[inset_0_2px_0_#2d6fa8] [&[data-outline-drop=into]]:ring-2 [&[data-outline-drop=into]]:ring-[var(--life-primary-500)] ${
         selected
           ? "bg-[var(--life-primary-100)] border-[var(--life-primary-500)]"
           : "border-transparent hover:bg-[var(--life-neutral-100)]"
@@ -156,13 +156,14 @@ function TreeRow({
       style={{ paddingLeft, paddingRight: 6, paddingTop: 6, paddingBottom: 6 }}
     >
       {dragBindings && (
-        <button type="button" data-outline-grip title={`Drag ${label}`} aria-label={`Drag ${label}`} className="shrink-0 cursor-grab active:cursor-grabbing text-[#9ca3af] opacity-0 group-hover:opacity-100 focus:opacity-100" onClick={event => event.stopPropagation()}>
+        <button type="button" data-outline-grip title={`Drag ${label}`} aria-label={`Drag ${label}`} className="shrink-0 cursor-grab active:cursor-grabbing text-[var(--life-neutral-400)] opacity-0 group-hover:opacity-100 focus:opacity-100" onClick={event => event.stopPropagation()}>
           <GripVertical size={12} />
         </button>
       )}
       <div
         role="button"
         tabIndex={0}
+        aria-current={selected ? "true" : undefined}
         onClick={onClick}
         onKeyDown={(event) => {
           if (event.key === "Enter" || event.key === " ") {
@@ -170,7 +171,7 @@ function TreeRow({
             onClick();
           }
         }}
-        className="flex items-center gap-[6px] min-w-0 flex-1 cursor-pointer"
+        className="flex items-center gap-[6px] min-w-0 flex-1 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--life-primary-400)]"
       >
         {canExpand ? (
           <button
@@ -179,7 +180,7 @@ function TreeRow({
               event.stopPropagation();
               onToggleExpand?.();
             }}
-            className="w-[14px] h-[14px] shrink-0 self-center flex items-center justify-center text-[#9aa7b2] hover:text-[#1f2937]"
+            className="w-[20px] h-[20px] shrink-0 self-center flex items-center justify-center rounded-[4px] text-[var(--life-neutral-500)] hover:text-[var(--life-neutral-850)] hover:bg-[var(--life-neutral-100)] focus-visible:outline-2 focus-visible:outline-[var(--life-primary-400)]"
             aria-label={`${expanded ? "Collapse" : "Expand"} ${toggleLabel}`}
             title={`${expanded ? "Collapse" : "Expand"} ${toggleLabel}`}
           >
@@ -206,8 +207,8 @@ function TreeRow({
             labelClassName ?? "text-[13px] font-medium"
           } ${
             selected
-              ? "text-[var(--life-primary-500)]"
-              : "text-[#5b6674] group-hover:text-[#374151]"
+              ? "text-[var(--life-primary-700)]"
+              : "text-[var(--life-neutral-700)] group-hover:text-[var(--life-neutral-850)]"
           }`}
         >
           {label || "Untitled"}
@@ -222,7 +223,7 @@ function TreeRow({
               event.stopPropagation();
               onAdd?.();
             }}
-            className="w-6 h-6 rounded-[4px] flex items-center justify-center text-[#2E7FA1] hover:bg-[#e8f3f8] active:bg-[#d4e9f2]"
+            className="life-icon-btn life-icon-btn--xs shrink-0 !text-[var(--life-primary-600)] hover:!bg-[var(--life-primary-050)] active:!bg-[var(--life-primary-100)]"
             aria-label={`Add ${titleCase(addLabel)}`}
             title={`Add ${titleCase(addLabel)}`}
           >
@@ -237,7 +238,7 @@ function TreeRow({
               event.stopPropagation();
               onAddTemplate();
             }}
-            className="w-6 h-6 rounded-[4px] flex items-center justify-center text-[var(--life-accent1-500)] hover:bg-[var(--life-accent1-050)] active:bg-[var(--life-accent1-100)]"
+            className="life-icon-btn life-icon-btn--xs shrink-0 !text-[var(--life-accent1-600)] hover:!bg-[var(--life-accent1-050)] active:!bg-[var(--life-accent1-100)]"
             aria-label={`Use ${titleCase(addLabel)} Template`}
             title={`Use ${titleCase(addLabel)} Template`}
           >
@@ -252,7 +253,7 @@ function TreeRow({
               event.stopPropagation();
               onDelete?.();
             }}
-            className="w-6 h-6 rounded-[4px] flex items-center justify-center text-[#9aa7b2] hover:text-[#DC3449] hover:bg-[#FDDEE2] transition-colors"
+            className="life-icon-btn life-icon-btn--xs life-icon-btn--critical"
             aria-label="Delete"
           >
             <MaskIcon file="delete-icon.svg" className="block w-[12px] h-[12px] shrink-0 bg-current" />
@@ -291,11 +292,11 @@ function InlineAddRow({
         className="w-full h-9 flex items-center justify-start gap-1"
         style={{ paddingLeft: paddingLeft + titleIndent, paddingRight: 6 }}
       >
-        <span className="mr-1 text-[13px] font-medium text-[#2E7FA1]">{label}</span>
+        <span className="mr-1 text-[13px] font-medium text-[var(--life-primary-500)]">{label}</span>
         <button
           type="button"
           onClick={onAddStartFresh}
-          className="w-6 h-6 shrink-0 rounded-[4px] flex items-center justify-center text-[#2E7FA1] hover:bg-[#e8f3f8] active:bg-[#d4e9f2]"
+          className="life-icon-btn life-icon-btn--xs shrink-0 !text-[var(--life-primary-600)] hover:!bg-[var(--life-primary-050)] active:!bg-[var(--life-primary-100)]"
           aria-label="Add Component"
           title="Add Component"
         >
@@ -305,7 +306,7 @@ function InlineAddRow({
           type="button"
           onClick={onAddTemplate}
           disabled={!onAddTemplate}
-          className="w-6 h-6 shrink-0 rounded-[4px] flex items-center justify-center text-[var(--life-accent1-500)] hover:bg-[var(--life-accent1-050)] active:bg-[var(--life-accent1-100)] disabled:opacity-40"
+          className="life-icon-btn life-icon-btn--xs shrink-0 !text-[var(--life-accent1-600)] hover:!bg-[var(--life-accent1-050)] active:!bg-[var(--life-accent1-100)]"
           aria-label="Use Component Template"
           title="Use Component Template"
         >
@@ -320,7 +321,7 @@ function InlineAddRow({
       <button
         type="button"
         onClick={onClick}
-        className="w-full h-9 flex items-center text-[#2E7FA1] hover:bg-[#f0f8ff] transition-colors"
+        className="w-full h-9 flex items-center text-[var(--life-primary-500)] hover:bg-[#f0f8ff] transition-colors"
         style={{ paddingLeft, paddingRight: 6 }}
       >
         <span className="w-[14px] h-[14px] mr-[6px]" aria-hidden="true" />
@@ -879,16 +880,16 @@ export default function CourseOutlinePanel({
     <div
       ref={panelRef}
       style={{ "--outline-panel-width": `${panelWidth}px` } as CSSProperties}
-      className="w-[280px] md:w-[var(--outline-panel-width)] h-full bg-white border-r border-[#d8dee6] flex flex-col shrink-0 overflow-x-hidden"
+      className="w-[280px] md:w-[var(--outline-panel-width)] h-full bg-white border-r border-[var(--life-neutral-200)] flex flex-col shrink-0 overflow-x-hidden"
     >
-      <div className="px-[14px] py-3 border-b border-[#d8dee6] flex items-center justify-between shrink-0">
-        <span className="text-sm tracking-[0.08em] font-semibold text-[#3b4753] uppercase">Structure</span>
+      <div className="px-[14px] py-3 border-b border-[var(--life-neutral-200)] flex items-center justify-between shrink-0">
+        <span className="text-sm tracking-[0.08em] font-semibold text-[var(--life-neutral-700)] uppercase">Structure</span>
         <div className="flex items-center gap-[6px]">
           {onAddModule && (
             <button
               type="button"
               onClick={() => onAddModule()}
-              className="w-[26px] h-[26px] rounded-[6px] border border-[#d8dee6] flex items-center justify-center text-[var(--life-accent1-400)] hover:bg-[var(--life-accent1-050)] hover:border-[var(--life-accent1-300)] transition-colors"
+              className="life-icon-btn life-icon-btn--sm life-icon-btn--outlined !text-[var(--life-accent1-600)] hover:!bg-[var(--life-accent1-050)]"
               aria-label="Add Module"
               title="Add Module"
             >
@@ -898,7 +899,7 @@ export default function CourseOutlinePanel({
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded flex items-center justify-center text-[#6b7280] hover:bg-[#f5f7fa]"
+            className="life-icon-btn life-icon-btn--sm"
             aria-label="Collapse structure"
             title="Collapse structure"
           >

@@ -102,7 +102,7 @@ export default function GuideDialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[1000] grid place-items-center overflow-y-auto bg-[#111827]/55 p-4 backdrop-blur-[2px]"
+      className="fixed inset-0 z-[1000] grid place-items-center overflow-y-auto bg-[var(--life-neutral-850)]/55 p-4 backdrop-blur-[2px]"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -114,7 +114,7 @@ export default function GuideDialog({
         aria-labelledby="guide-dialog-title"
         aria-describedby="guide-dialog-description"
         tabIndex={-1}
-        className="my-auto flex max-h-[min(90dvh,900px)] w-full max-w-5xl flex-col overflow-hidden rounded-lg border border-[#d8dee6] bg-white shadow-2xl outline-none"
+        className="my-auto flex max-h-[min(90dvh,900px)] w-full max-w-5xl flex-col overflow-hidden rounded-lg border border-[var(--life-neutral-200)] bg-white shadow-2xl outline-none"
       >
         <header className="flex shrink-0 items-start justify-between gap-4 border-b border-[#e5e9ef] px-5 py-4 sm:px-7">
           <div className="min-w-0">
@@ -127,7 +127,7 @@ export default function GuideDialog({
             onClick={onClose}
             aria-label="Close guide"
             title="Close guide"
-            className="-mr-1 -mt-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[#52606d] hover:bg-[#f1f4f7] hover:text-[#15202b] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2d6fa8]"
+            className="-mr-1 -mt-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[#52606d] hover:bg-[#f1f4f7] hover:text-[#15202b] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--life-primary-500)]"
           >
             <CloseIcon />
           </button>
@@ -136,7 +136,7 @@ export default function GuideDialog({
         <div className="min-h-0 overflow-y-auto px-5 py-5 sm:px-7 sm:py-6">
           <div className="grid gap-3 md:grid-cols-3">
             {panels.map((panel, index) => (
-              <section key={panel.title} className="border-l-2 border-[#2d6fa8] bg-[#f5f8fb] px-4 py-3.5">
+              <section key={panel.title} className="border-l-2 border-[var(--life-primary-500)] bg-[#f5f8fb] px-4 py-3.5">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#526b7e]">0{index + 1}</p>
                 <h3 className="mt-1 text-sm font-semibold text-[#17212b]">{panel.title}</h3>
                 <p className="mt-1.5 text-sm leading-5 text-[#586673]">{panel.description}</p>
@@ -152,7 +152,7 @@ export default function GuideDialog({
                 <ul className="mt-2 space-y-2">
                   {section.items.map((item) => (
                     <li key={item} className="flex gap-2 text-sm leading-5 text-[#485663]">
-                      <span aria-hidden="true" className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-[#2d6fa8]" />
+                      <span aria-hidden="true" className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--life-primary-500)]" />
                       <span>{item}</span>
                     </li>
                   ))}
