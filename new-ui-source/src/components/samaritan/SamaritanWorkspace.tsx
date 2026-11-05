@@ -385,7 +385,9 @@ export default function SamaritanWorkspace({
     if (approved) setLock(true);
     try {
       const response = await approvePlan(requestId, approved);
-      setTurns((t) => [...t, { kind: "plan-result", response }]);
+      // A cancelled plan comes back without the per-action results a run has, so it
+      // is shown the way a cancelled single action is instead of as a plan result.
+      setTurns((t) => [...t, approved ? { kind: "plan-result", response } : { kind: "result", text: "Cancelled." }]);
       // completed, rolled_back or partial_failure: all can leave persisted changes.
       if (approved) await reloadHost(onStructureChanged);
     } catch (err) {
@@ -624,7 +626,7 @@ export default function SamaritanWorkspace({
                   <div>
                     <p className="font-medium">Plan {turn.response.status}</p>
                     <ul className="text-xs">
-                      {turn.response.actions.map((a) => (
+                      {(turn.response.actions ?? []).map((a) => (
                         <li key={a.actionId}>- {a.actionType}: {a.status}{a.verificationResult && !a.verificationResult.passed ? " (verification issues)" : ""}</li>
                       ))}
                     </ul>
