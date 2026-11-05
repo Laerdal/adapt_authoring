@@ -35,6 +35,10 @@ import { UnsavedChangesModal } from "../setup/unsavedChangesModal";
 import PublishCourseDialog, { type PublishCoursePhase } from "../../components/publish/PublishCourseDialog";
 import PageEditorTopBar from "./pageEditorTopBar";
 import PageEditorNavigation from "./pageEditorNavigation";
+// Samaritan workspace - see its own file header for why selection state
+// is passed as props rather than the (non-functional, in embedded mode)
+// studio:selected postMessage event.
+import SamaritanWorkspace from "../../components/samaritan/SamaritanWorkspace";
 import { getEditorDeletionError, projectEditorStructure, structureWithCanvasOrder, type EditorDeletionError } from "./editorStructureMoves";
 import { flattenStructure, moveCourseStructure } from "../../hooks/useCourseStructure";
 import type { StructureLevel } from "../../types/structure";
@@ -3338,6 +3342,7 @@ interface CourseEditorProps {
   initialTheme?: string;
   initialMenu?: string;
   initialPageId?: string;
+  initialAiTopic?: string;
 }
 
 export default function CourseEditor({
@@ -3347,9 +3352,21 @@ export default function CourseEditor({
   initialTheme = "LIFE Theme",
   initialMenu = "LIFE Menu",
   initialPageId,
+  initialAiTopic,
 }: CourseEditorProps) {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [isSamaritanOpen, setIsSamaritanOpen] = useState(!!initialAiTopic);
+  // While Samaritan applies an approved change the whole editor is inert: nothing
+  // can be typed or saved until the reload has put Samaritan's changes on screen,
+  // so that reload can never replace edits made in the meantime. (The panel itself
+  // is portaled to <body>, outside this element, and stays usable.)
+  const [isSamaritanApplying, setIsSamaritanApplying] = useState(false);
+  const editorRootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = editorRootRef.current as (HTMLDivElement & { inert?: boolean }) | null;
+    if (el) el.inert = isSamaritanApplying;
+  }, [isSamaritanApplying]);
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
   const [leftPanelWidth, setLeftPanelWidth] = useState(LEFT_PANEL_DEFAULT_WIDTH);
   const [isResizingLeftPanel, setIsResizingLeftPanel] = useState(false);
@@ -3957,6 +3974,7 @@ export default function CourseEditor({
                 ? "page"
                 : "menu"
       );
+      return true;
     } catch (error) {
       if (!isCurrentRequest()) return;
 
@@ -3976,6 +3994,7 @@ export default function CourseEditor({
       setStructureLoadError(
         error instanceof Error ? error.message : "Failed to load course structure"
       );
+      return false;
     } finally {
       if (isCurrentRequest()) {
         setIsLoadingStructure(false);
@@ -12502,8 +12521,41 @@ export default function CourseEditor({
   const loginName = user?.username || user?.email || "Not signed in";
 
   return (
-    <div className="flex flex-col h-screen bg-white overflow-hidden">
+    <div ref={editorRootRef} aria-busy={isSamaritanApplying} className="flex flex-col h-screen bg-white overflow-hidden">
+      {courseId && courseId !== "new-course" && (
+        <SamaritanWorkspace
+          courseId={courseId}
+          selectedBlockId={selectedBlockId}
+          selectedComponentId={selectedComponentId}
+          hasCanvasSelection={hasCanvasSelection}
+          autoSendMessage={initialAiTopic}
+          open={isSamaritanOpen}
+          onOpenChange={setIsSamaritanOpen}
+          onApplyingChange={setIsSamaritanApplying}
+          anchorId="page-editor-top-bar"
+          writeBlockedReason={
+            hasUnsavedChanges ? "You have unsaved changes. Save them first, so edits made by Samaritan do not replace them." : null
+          }
+          // A reload that reports failure must reach the panel: the editor then stays
+          // locked (and offers a retry) instead of unlocking on stale content.
+          onExecuted={async (componentId) => {
+            const ok = await loadStructureFromDatabase({
+              pageId: selectedPageId,
+              articleId: selectedArticleId,
+              blockId: selectedBlockId,
+              componentId
+            });
+            if (ok === false) throw new Error("Failed to reload the course structure");
+          }}
+          onStructureChanged={async () => {
+            const ok = await loadStructureFromDatabase({ pageId: selectedPageId, articleId: selectedArticleId, blockId: selectedBlockId });
+            if (ok === false) throw new Error("Failed to reload the course structure");
+          }}
+        />
+      )}
       <PageEditorTopBar
+        isSamaritanOpen={isSamaritanOpen}
+        onToggleSamaritan={courseId && courseId !== "new-course" ? () => setIsSamaritanOpen((o) => !o) : undefined}
         courseTitle={courseTitle}
         onCourseTitleChange={setCourseTitle}
         onToggleLeftPanel={() => setLeftPanelOpen((o) => !o)}
