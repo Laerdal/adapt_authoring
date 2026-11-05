@@ -1,7 +1,7 @@
 name: adapt-pipeline
 
 # One pipeline for adapt_authoring + adapt-authoring-plugins + adapt-framework-plugins + adapt-cdn-deploy-cli.
-#  - push develop / master / release/**   -> build, package, (deploy)
+#  - push develop / master / release/**   -> build, package, (deploy).
 #  - pull_request to develop / master     -> build + package only (validation)
 #  - workflow_dispatch                    -> what the plugin repos call when THEY change (see docs/centralized-cicd.md);
 #                                            run with `ref: develop|master` so the workflow file of that branch is used.
