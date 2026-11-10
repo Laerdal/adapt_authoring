@@ -125,6 +125,7 @@ function TreeRow({
   addLabel = "section",
   toggleLabel = "section",
   labelClassName,
+  labelColorClass,
 }: {
   dragBindings?: OutlineDragBindings;
   label: string;
@@ -143,6 +144,8 @@ function TreeRow({
   addLabel?: string;
   toggleLabel?: string;
   labelClassName?: string;
+  /** Per-level title colour (matches the level icon); falls back to the selected/neutral colours. */
+  labelColorClass?: string;
 }) {
   return (
     <div
@@ -198,7 +201,9 @@ function TreeRow({
               <path d="M9 6l6 6-6 6" />
             </svg>
           </button>
-        ) : null}
+        ) : (
+          <span className="w-[20px] shrink-0" aria-hidden="true" />
+        )}
 
         <span className="w-[18px] shrink-0 self-center flex items-center justify-center">{icon}</span>
         <span
@@ -206,9 +211,10 @@ function TreeRow({
           className={`min-w-0 flex-1 self-center leading-[1.35] truncate ${
             labelClassName ?? "text-[13px] font-medium"
           } ${
-            selected
+            labelColorClass ??
+            (selected
               ? "text-[var(--life-primary-700)]"
-              : "text-[var(--life-neutral-700)] group-hover:text-[var(--life-neutral-850)]"
+              : "text-[var(--life-neutral-700)] group-hover:text-[var(--life-neutral-850)]")
           }`}
         >
           {label || "Untitled"}
@@ -605,6 +611,7 @@ export default function CourseOutlinePanel({
           paddingLeft={topicPadding}
           selected={pageSelected}
           labelClassName="text-[13px] font-bold"
+          labelColorClass="text-[var(--life-primary-700)]"
           onClick={() => {
             setActiveAddMenu(null);
             onPageSelect(page.id);
@@ -641,7 +648,8 @@ export default function CourseOutlinePanel({
                 dragBindings={dragBindings({ id: article.id, level: 'section', parentId: page.id, parentLevel: 'topic' })}
                 paddingLeft={sectionPadding}
                 selected={articleSelected}
-                labelClassName="text-[13px] font-medium"
+                labelClassName="text-[13px] font-bold"
+                labelColorClass="text-[var(--life-accent3-500)]"
                 onClick={() => {
                   setActiveAddMenu(null);
                   onArticleSelect(page.id, article.id);
@@ -695,7 +703,8 @@ export default function CourseOutlinePanel({
                       dragBindings={dragBindings({ id: block.id, level: 'contentGroup', parentId: article.id, parentLevel: 'section' })}
                       paddingLeft={groupPadding}
                       selected={blockSelected}
-                      labelClassName="text-[13px] font-normal"
+                      labelClassName="text-[13px] font-bold"
+                      labelColorClass="text-[var(--life-accent4-500)]"
                       onClick={() => {
                         setActiveAddMenu(null);
                         onBlockSelect(page.id, article.id, block.id);
@@ -732,6 +741,8 @@ export default function CourseOutlinePanel({
                         label={component.settings.title || component.type}
                         paddingLeft={componentPadding}
                         selected={selectedComponentId === component.id}
+                        labelClassName="text-[13px] font-bold"
+                        labelColorClass="text-[var(--life-neutral-700)]"
                         onClick={() => {
                           setActiveAddMenu(null);
                           onComponentSelect(page.id, article.id, block.id, component.id);
@@ -764,7 +775,7 @@ export default function CourseOutlinePanel({
                         label="Add"
                         paddingLeft={componentPadding}
                         panelExpanded
-                        titleIndent={45}
+                        titleIndent={71}
                         componentActions
                         onAddStartFresh={() => runAddAction({ level: "component", pageId: page.id, articleId: article.id, blockId: block.id })}
                         onAddTemplate={onUseTemplate ? () => {
@@ -825,7 +836,8 @@ export default function CourseOutlinePanel({
           dragBindings={dragBindings({ id: mod.id, level: 'module', parentId: positions.find(position => position.id === mod.id)?.parentId || courseId, parentLevel: positions.find(position => position.id === mod.id)?.parentId === courseId ? 'course' : 'module' })}
           paddingLeft={modulePadding}
           selected={false}
-          labelClassName="text-[13px] font-bold text-[#1d4c60]"
+          labelClassName="text-[13px] font-bold"
+          labelColorClass="text-[var(--life-accent1-700)]"
           onClick={() => {
             setActiveAddMenu(null);
             setExpandedModules((previous) => ({ ...previous, [mod.id]: !isExpanded(previous, mod.id) }));

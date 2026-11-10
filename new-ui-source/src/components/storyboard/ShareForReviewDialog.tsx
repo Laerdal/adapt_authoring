@@ -161,13 +161,7 @@ export default function ShareForReviewDialog({
             }}
             placeholder={loading ? 'Loading users…' : 'Search by name or email…'}
             disabled={loading}
-            className="w-full rounded px-2.5 py-1.5 outline-none"
-            style={{
-              fontSize: 13,
-              border: '1px solid var(--life-color-border-subtle)',
-              background: 'var(--life-color-bg-surface-default)',
-              color: 'var(--life-color-text-default)',
-            }}
+            className="life-field"
           />
           {showSuggestions && !loading && (query.trim().length > 0 || suggestions.length > 0) && (
             <div

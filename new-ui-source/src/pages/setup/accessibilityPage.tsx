@@ -348,9 +348,7 @@ function A11yJsonField({
         onChange={(e) => onChange(e.target.value)}
         spellCheck={false}
         rows={5}
-        className={`w-full px-3 py-2 text-sm font-mono rounded-lg border bg-white text-[var(--life-neutral-850)] focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] focus:border-transparent transition-colors resize-y ${
-          invalid ? "border-[var(--life-critical-500)]" : "border-[var(--life-neutral-100)]"
-        }`}
+        className={`life-field font-mono resize-y ${invalid ? "!border-[var(--life-critical-500)]" : ""}`}
       />
       {invalid && <span className="text-[12px] text-[var(--life-critical-500)]">Enter valid JSON (e.g. {"{}"}).</span>}
     </div>

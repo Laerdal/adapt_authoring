@@ -27,6 +27,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import type { StoryboardInsertKind } from '@/types/storyboard';
+import { useExclusiveMenu } from './useExclusiveMenu';
 
 interface MenuItem {
   kind: StoryboardInsertKind;
@@ -120,6 +121,8 @@ export default function AddContentMenu({ onInsert }: { onInsert: (kind: Storyboa
       window.removeEventListener('scroll', onScroll, true);
     };
   }, [open]);
+
+  useExclusiveMenu(open, setOpen, btnRef);
 
   const choose = (kind: StoryboardInsertKind) => {
     onInsert(kind);

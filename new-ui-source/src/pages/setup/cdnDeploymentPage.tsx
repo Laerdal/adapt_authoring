@@ -128,7 +128,7 @@ function TextField({
         onChange={(e) => onChange(sanitize ? sanitize(e.target.value) : e.target.value)}
         placeholder={placeholder}
         aria-invalid={!!error}
-        className={`w-full px-3 py-2 text-sm rounded-lg border bg-white text-[var(--life-neutral-850)] focus:outline-none focus:ring-2 focus:border-transparent transition-colors ${error ? "border-[var(--life-error-500)] focus:ring-[var(--life-error-500)]" : "border-[var(--life-neutral-100)] focus:ring-[var(--life-primary-500)]"}`}
+        className={`life-field ${error ? "!border-[var(--life-critical-500)]" : ""}`}
       />
       {error ? (
         <p className="text-[11px] text-[var(--life-error-500)] leading-snug">{error}</p>

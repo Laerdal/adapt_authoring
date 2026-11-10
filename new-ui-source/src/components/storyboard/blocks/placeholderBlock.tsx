@@ -59,7 +59,7 @@ export const placeholderBlock = createReactBlockSpec(
             value={block.props.title as string}
             onChange={(e) => setTitle(e.target.value)}
             placeholder={`${label} title…`}
-            className="mt-2 w-full border-0 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+            className="life-field mt-2"
           />
           <p className="mt-1 text-xs text-muted-foreground">
             Placeholder → <code>{block.props.adaptComponent as string}</code>. Configure in the Page Editor.

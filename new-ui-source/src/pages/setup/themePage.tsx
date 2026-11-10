@@ -1115,7 +1115,7 @@ function LifeListField({
                   value={idKey === '_spriteSheetId' ? (item as LifeSpriteSheet)._spriteSheetId : (item as LifeSingleIcon).iconId}
                   onChange={(e) => onChange(index, idKey, e.target.value)}
                   aria-invalid={!!idError}
-                  className={`text-xs w-full border rounded px-2 py-1.5 text-[var(--life-neutral-850)] outline-none ${idError ? 'border-[var(--life-critical-500)] focus:border-[var(--life-critical-500)]' : 'border-[var(--life-neutral-200)] focus:border-[var(--life-primary-500)]'}`}
+                  className={`life-field ${idError ? "!border-[var(--life-critical-500)]" : ""}`}
                 />
                 {idError && <p className="mt-1 text-xs text-[var(--life-critical-500)]">{idError}</p>}
               </div>
@@ -1130,7 +1130,7 @@ function LifeListField({
                   value={item.src}
                   onChange={(e) => onChange(index, 'src', e.target.value)}
                   aria-invalid={!!itemErrors.src}
-                  className={`text-xs w-full border rounded px-2 py-1.5 text-[var(--life-neutral-850)] outline-none ${itemErrors.src ? 'border-[var(--life-critical-500)] focus:border-[var(--life-critical-500)]' : 'border-[var(--life-neutral-200)] focus:border-[var(--life-primary-500)]'}`}
+                  className={`life-field ${itemErrors.src ? "!border-[var(--life-critical-500)]" : ""}`}
                 />
                 {itemErrors.src && <p className="mt-1 text-xs text-[var(--life-critical-500)]">{itemErrors.src}</p>}
               </div>
