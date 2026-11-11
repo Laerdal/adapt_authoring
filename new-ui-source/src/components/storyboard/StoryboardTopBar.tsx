@@ -27,6 +27,7 @@ import {
 import { createPortal } from 'react-dom';
 import { REVIEW_STATUS_LABEL, type ReviewStatus } from '@/types/storyboard';
 import GuideDialog, { type GuidePanel, type GuideSection } from '@/components/common/GuideDialog';
+import { useExclusiveMenu } from './useExclusiveMenu';
 
 const STORYBOARD_GUIDE_PANELS: GuidePanel[] = [
   {
@@ -189,6 +190,8 @@ function Dropdown({
       window.removeEventListener('scroll', close, true);
     };
   }, [open]);
+
+  useExclusiveMenu(open, setOpen, btnRef);
 
   return (
     <>

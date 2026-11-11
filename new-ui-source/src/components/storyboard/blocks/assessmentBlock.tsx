@@ -96,7 +96,8 @@ function HeaderBtn({ onClick, active, children, title }: { onClick: () => void; 
       type="button"
       onClick={onClick}
       title={title}
-      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs hover:bg-muted ${active ? 'border-primary text-primary' : 'text-muted-foreground'}`}
+      className={`life-btn life-btn--secondary ${active ? '!bg-[var(--life-primary-100)]' : ''}`}
+      aria-pressed={active === undefined ? undefined : active}
     >
       {children}
     </button>
@@ -683,7 +684,7 @@ export const assessmentBlock = createReactBlockSpec(
             <button
               type="button"
               onClick={() => setCollapsed(false)}
-              className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full border bg-background px-2 py-0.5 text-xs text-muted-foreground opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100 focus:opacity-100"
+              className="life-btn life-btn--secondary absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
               title="Edit content"
             >
               <Pencil className="h-3 w-3" /> Edit
@@ -699,7 +700,7 @@ export const assessmentBlock = createReactBlockSpec(
             <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
               {LABELS[kind]}
             </span>
-            <input value={title} placeholder={`${LABELS[kind]} title`} onKeyDown={stop} onChange={(e) => setTitle(e.target.value)} className="min-w-0 flex-1 border-0 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground" />
+            <input value={title} placeholder={`${LABELS[kind]} title`} onKeyDown={stop} onChange={(e) => setTitle(e.target.value)} className="life-field min-w-0 flex-1" />
             <HeaderBtn onClick={() => update({ ...model, showTitle: !model.showTitle })} active={model.showTitle} title="Show the title to learners">
               <Check className="h-3 w-3" /> Show title
             </HeaderBtn>

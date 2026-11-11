@@ -9,6 +9,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Heading1, ChevronDown } from 'lucide-react';
+import { useExclusiveMenu } from './useExclusiveMenu';
 
 interface HeadingOption {
   level: 1 | 2 | 3;
@@ -59,6 +60,8 @@ export default function HeadingMenu({ onSelect }: { onSelect: (level: number) =>
       window.removeEventListener('scroll', close, true);
     };
   }, [open]);
+
+  useExclusiveMenu(open, setOpen, btnRef);
 
   const choose = (level: number) => {
     onSelect(level);

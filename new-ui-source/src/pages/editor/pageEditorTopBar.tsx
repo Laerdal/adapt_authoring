@@ -3,6 +3,7 @@ import { Lightbulb } from "lucide-react";
 import GuideDialog, { type GuidePanel, type GuideSection } from "../../components/common/GuideDialog";
 import CommonCourseTopBarRow from "../../components/course/CommonCourseTopBarRow";
 import PublishMenuButton from "../../components/publish/PublishMenuButton";
+import { lifeButtonClass } from "../../components/common/Button";
 import SamaritanIcon from "../../components/storyboard/SamaritanIcon";
 
 const PAGE_EDITOR_GUIDE_PANELS: GuidePanel[] = [
@@ -150,7 +151,7 @@ export default function PageEditorTopBar({
         type="button"
         onClick={onSave}
         disabled={isSaveDisabled || isSaving}
-        className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold bg-transparent text-[var(--life-base-black)] rounded-[8px] hover:bg-[var(--life-primary-050)] hover:text-[var(--life-primary-700)] active:bg-[var(--life-primary-100)] active:text-[var(--life-primary-800)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+        className={lifeButtonClass("ghost", "md", "!px-3")}
       >
         <HeaderMaskIcon file="save-icon.svg" />
         <span className="hidden lg:inline">{isSaving ? "Saving..." : "Save"}</span>
@@ -162,7 +163,7 @@ export default function PageEditorTopBar({
         onClick={() => setIsGuideOpen(true)}
         aria-haspopup="dialog"
         aria-expanded={isGuideOpen}
-        className="inline-flex items-center gap-1.5 rounded-[8px] px-2.5 py-2 text-[13px] font-medium text-[#40515e] transition-colors hover:bg-[#f1f5f8] hover:text-[#1d3547] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--life-primary-500)]"
+        className={lifeButtonClass("ghost", "md", "!px-3")}
       >
         <Lightbulb size={16} strokeWidth={1.8} aria-hidden="true" />
         <span>How-To Guide</span>
@@ -172,11 +173,7 @@ export default function PageEditorTopBar({
           type="button"
           onClick={onToggleSamaritan}
           aria-pressed={isSamaritanOpen}
-          className={`inline-flex items-center gap-1.5 rounded-[8px] border px-3 py-2 text-[13px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2d6fa8] ${
-            isSamaritanOpen
-              ? "border-[#2d6fa8] bg-[#eaf3fa] text-[#1d3547]"
-              : "border-[#d8dde6] bg-white text-[#1d3547] hover:bg-[#f1f5f8]"
-          }`}
+          className={lifeButtonClass("secondary", "md", isSamaritanOpen ? "!bg-[var(--life-primary-100)]" : "")}
         >
           <SamaritanIcon className="h-4 w-4" />
           <span>Ask Samaritan</span>

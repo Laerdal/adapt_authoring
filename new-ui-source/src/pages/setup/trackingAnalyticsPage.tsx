@@ -104,9 +104,7 @@ function TextField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className={`w-full px-3 py-2 text-sm rounded-lg border bg-white text-[var(--life-neutral-850)] focus:outline-none focus:ring-2 focus:border-transparent transition-colors ${
-          error ? "border-[var(--life-critical-500)] focus:ring-[var(--life-critical-500)]" : "border-[var(--life-neutral-100)] focus:ring-[var(--life-primary-500)]"
-        }`}
+        className={`life-field ${error ? "!border-[var(--life-critical-500)]" : ""}`}
       />
       {error && <span className="text-xs text-[var(--life-critical-600)]">{error}</span>}
     </div>
@@ -839,9 +837,7 @@ function DeploymentModal({
               }}
               placeholder="https://..."
               aria-invalid={!!deploymentUrlError}
-              className={`w-full px-3 py-2 text-sm rounded-lg border bg-white text-[var(--life-neutral-850)] focus:outline-none focus:ring-2 focus:border-transparent ${
-                deploymentUrlError ? "border-[var(--life-critical-500)] focus:ring-[var(--life-critical-500)]" : "border-[var(--life-neutral-100)] focus:ring-[var(--life-primary-500)]"
-              }`}
+              className={`life-field ${deploymentUrlError ? "!border-[var(--life-critical-500)]" : ""}`}
             />
             {deploymentUrlError && <span className="text-xs text-[var(--life-critical-600)]">{deploymentUrlError}</span>}
           </div>
