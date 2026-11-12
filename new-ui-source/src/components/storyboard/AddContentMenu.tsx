@@ -27,6 +27,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import type { StoryboardInsertKind } from '@/types/storyboard';
+import { useExclusiveMenu } from './useExclusiveMenu';
 
 interface MenuItem {
   kind: StoryboardInsertKind;
@@ -121,6 +122,8 @@ export default function AddContentMenu({ onInsert }: { onInsert: (kind: Storyboa
     };
   }, [open]);
 
+  useExclusiveMenu(open, setOpen, btnRef);
+
   const choose = (kind: StoryboardInsertKind) => {
     onInsert(kind);
     setOpen(false);
@@ -132,7 +135,7 @@ export default function AddContentMenu({ onInsert }: { onInsert: (kind: Storyboa
         ref={btnRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="sb-toolbar-btn"
+        className="life-btn life-btn--secondary"
         aria-haspopup="menu"
         aria-expanded={open}
       >

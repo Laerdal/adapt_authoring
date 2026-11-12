@@ -14,8 +14,8 @@ export default function Card({
   ...props
 }: CardProps) {
   const variantStyles = {
-    default: "bg-white rounded-lg border border-[#e5e7eb]",
-    bordered: "bg-white rounded-lg border-2 border-[#e5e7eb]",
+    default: "bg-white rounded-lg border border-[var(--life-neutral-100)]",
+    bordered: "bg-white rounded-lg border-2 border-[var(--life-neutral-100)]",
     elevated: "bg-white rounded-lg shadow-lg",
   };
 

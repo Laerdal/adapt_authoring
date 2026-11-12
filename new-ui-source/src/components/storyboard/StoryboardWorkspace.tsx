@@ -59,6 +59,7 @@ import StoryboardTopBar from './StoryboardTopBar';
 import ReviewCenter from './ReviewCenter';
 import GenerateDialog from './GenerateDialog';
 import AiAssistPopover from './AiAssistPopover';
+import SamaritanWorkspace from '../samaritan/SamaritanWorkspace';
 import CommentPopover from './CommentPopover';
 import ShareForReviewDialog from './ShareForReviewDialog';
 import { storyboardActions, type AiAssistRequest, type CommentRequest } from './storyboardActions';
@@ -186,6 +187,10 @@ export default function StoryboardWorkspace({
     }
   };
   const sb = useStoryboard(courseId);
+  // Live dirty flag. refreshFromCourse runs from callbacks that captured an older
+  // render, so it must read this, not the stale sb.dirty of its closure.
+  const sbDirtyRef = useRef(false);
+  sbDirtyRef.current = sb.dirty;
   const review = useStoryboardReview(sb.storyboardId, sb.refreshStatus);
   const editorRef = useRef<StoryboardEditorHandle>(null);
   const navigate = useNavigate();
@@ -332,10 +337,16 @@ export default function StoryboardWorkspace({
   // (spec §1 — keep the storyboard synchronized with the AT). Guarded so it
   // never discards unsaved edits. Runs automatically (see effect below) on
   // revisiting the page — there is no manual "Refresh" control.
-  const refreshFromCourse = async () => {
-    if (!courseId || !booted || sb.dirty) return;
+  // strict: a failure is thrown to the caller instead of swallowed. Used after a
+  // Samaritan change, where the page must not become editable again on the old
+  // document (a later Save would write its stale bodies over the approved change).
+  const refreshFromCourse = async (opts?: { strict?: boolean }) => {
+    if (!courseId || !booted || sbDirtyRef.current) return;
     try {
       const fresh = await getCourseStoryboardBlocks(courseId);
+      // The author may have started typing while this request was in flight;
+      // replacing the document now would discard those edits.
+      if (sbDirtyRef.current) return;
       if (fresh.length) {
         editorRef.current?.setDocument(fresh);
         sb.setDocument(fresh);
@@ -343,7 +354,8 @@ export default function StoryboardWorkspace({
         setHeadings(editorRef.current?.getHeadings() ?? []);
         setSummary(editorRef.current?.getSummary() ?? EMPTY_SUMMARY);
       }
-    } catch {
+    } catch (err) {
+      if (opts?.strict) throw err;
       /* silent — the current document stays as-is until the next successful sync */
     }
   };
@@ -363,25 +375,22 @@ export default function StoryboardWorkspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId, booted, sb.dirty]);
 
-  // Document-level "Ask Samaritan" (toolbar): open the SAME Samaritan popup,
-  // seeded from the cursor block. Insert → new Text component at the cursor;
-  // Replace → rewrite the cursor block. (Card-level AI supplies its own
-  // handlers via the storyboardActions channel.)
-  const openEnrichAi = () => {
-    setAiConfig({
-      initialText: activeBlock?.text || editorRef.current?.getActiveText() || '',
-      onInsert: (text) => {
-        const result = editorRef.current?.insertComponent('text', {
-          data: { description: text, showTitle: false },
-          afterId: activeBlock?.id,
-        });
-        if (result && !result.id && result.warning) flash(result.warning);
-        setHeadings(editorRef.current?.getHeadings() ?? []);
-        setSummary(editorRef.current?.getSummary() ?? EMPTY_SUMMARY);
-      },
-      onReplace: (text) => editorRef.current?.replaceActive(text),
+  // Document-level "Enrich with AI" (toolbar): opens the Samaritan co-author
+  // panel. Its approved writes go to the Adapt course (which this storyboard
+  // mirrors); onStructureChanged pulls the result back in through the same
+  // refreshFromCourse sync used when the page regains focus. The card-level AI
+  // menu still supplies its own text-assist handlers via storyboardActions.
+  const [samaritanOpen, setSamaritanOpen] = useState(false);
+  // While Samaritan applies an approved change the document, contents and top bar
+  // are inert (no typing, no Save) until refreshFromCourse has run, so the refresh
+  // can never replace edits and a later Save never works from a stale document.
+  const [samaritanApplying, setSamaritanApplying] = useState(false);
+  const storyboardRootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    storyboardRootRef.current?.querySelectorAll<HTMLElement & { inert?: boolean }>('[data-sb-lock]').forEach((el) => {
+      el.inert = samaritanApplying;
     });
-  };
+  }, [samaritanApplying, showContents]);
 
   const handleSave = async () => {
     if (saveRunning) return; // a Save is already in flight — see saveRunning's declaration
@@ -691,7 +700,8 @@ export default function StoryboardWorkspace({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
+    <div ref={storyboardRootRef} aria-busy={samaritanApplying} className="flex h-full min-h-0 flex-col bg-background text-foreground">
+      <div data-sb-lock>
       <StoryboardTopBar
         status={sb.status}
         onBack={() => onBack?.()}
@@ -704,9 +714,10 @@ export default function StoryboardWorkspace({
         dirty={sb.dirty}
         saving={sb.saving || saveRunning}
       />
+      </div>
 
       {sb.error && (
-        <div className="border-b border-[#fecaca] bg-[#fef2f2] px-4 py-2 text-sm text-[#991b1b]">
+        <div className="border-b border-[var(--life-critical-100)] bg-[var(--life-critical-050)] px-4 py-2 text-sm text-[var(--life-critical-600)]">
           {sb.error}
         </div>
       )}
@@ -714,7 +725,7 @@ export default function StoryboardWorkspace({
       <div className="flex min-h-0 flex-1">
         {/* Left — Contents */}
         {showContents ? (
-          <div className="w-64 shrink-0 border-r">
+          <div data-sb-lock className="w-64 shrink-0 border-r">
             <ContentsPanel
               headings={headings}
               summary={summary}
@@ -736,11 +747,12 @@ export default function StoryboardWorkspace({
         )}
 
         {/* Center — document */}
-        <main className="flex min-w-0 flex-1 flex-col bg-background">
+        <main data-sb-lock className="flex min-w-0 flex-1 flex-col bg-background">
           <DocumentToolbar
             onInsert={insert}
             onInsertHeading={insertHeading}
-            onEnrichAI={openEnrichAi}
+            onEnrichAI={() => setSamaritanOpen((o) => !o)}
+            enrichOpen={samaritanOpen}
           />
           <div className="flex-1 overflow-y-auto">
             {/* Authoring canvas ~60% of the viewport (Lovable proportions),
@@ -797,6 +809,25 @@ export default function StoryboardWorkspace({
             </article>
           </div>
         </main>
+
+        {/* Right — Enrich with Samaritan (course co-author with approved writes) */}
+        {samaritanOpen && courseId && (
+          <SamaritanWorkspace
+            courseId={courseId}
+            selectedBlockId={null}
+            selectedComponentId={null}
+            hasCanvasSelection={false}
+            open={samaritanOpen}
+            onOpenChange={setSamaritanOpen}
+            variant="docked"
+            title="Enrich with Samaritan"
+            writeBlockedReason={
+              sb.dirty ? 'You have unsaved storyboard changes. Save first, so edits made by Samaritan do not collide with them.' : null
+            }
+            onApplyingChange={setSamaritanApplying}
+            onStructureChanged={() => refreshFromCourse({ strict: true })}
+          />
+        )}
 
         {/* Right — Review Center (comments + audit, AC8/AC9) */}
         {showReview ? (

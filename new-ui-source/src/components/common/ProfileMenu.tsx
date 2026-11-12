@@ -25,6 +25,8 @@ function openSupport() {
 export default function ProfileMenu() {
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const { user, loading } = useAuth();
   const fullName = [toDisplayNamePart(user?.firstName), toDisplayNamePart(user?.lastName)].filter(Boolean).join(" ");
   const displayName = fullName || user?.email || (loading ? "Loading..." : "Not signed in");
@@ -55,6 +57,42 @@ export default function ProfileMenu() {
     return () => document.removeEventListener("mousedown", handleMouseDown);
   }, []);
 
+  // Move focus into the menu when it opens.
+  useEffect(() => {
+    if (!profileOpen) return;
+    menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+  }, [profileOpen]);
+
+  function closeMenu(restoreFocus: boolean) {
+    setProfileOpen(false);
+    if (restoreFocus) triggerRef.current?.focus();
+  }
+
+  function handleMenuKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    const items = Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
+    if (!items.length) return;
+    const index = items.indexOf(document.activeElement as HTMLElement);
+    let next: number | null = null;
+    if (event.key === "ArrowDown") next = (index + 1) % items.length;
+    else if (event.key === "ArrowUp") next = (index - 1 + items.length) % items.length;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = items.length - 1;
+    else if (event.key === "Escape") {
+      event.preventDefault();
+      closeMenu(true);
+      return;
+    } else if (event.key === "Tab") {
+      // Move focus out of the menu before it unmounts so Tab continues from the trigger.
+      triggerRef.current?.focus();
+      closeMenu(false);
+      return;
+    }
+    if (next !== null) {
+      event.preventDefault();
+      items[next].focus();
+    }
+  }
+
   function switchToClassic() {
     setProfileOpen(false);
     window.location.href = "/classic";
@@ -63,45 +101,47 @@ export default function ProfileMenu() {
   return (
     <div ref={profileRef} className="relative shrink-0">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setProfileOpen((open) => !open)}
         aria-label="Profile menu"
         aria-expanded={profileOpen}
-        className="w-9 h-9 rounded-lg bg-[#2d6fa8] hover:bg-[#245c8f] flex items-center justify-center shrink-0 transition-colors text-xs font-bold text-white"
+        aria-haspopup="menu"
+        className="life-profile-btn shrink-0"
       >
         {initials}
       </button>
 
       {profileOpen && (
-        <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-[#e5e7eb] rounded-xl shadow-xl z-50 overflow-hidden">
-          <div className="px-4 py-3 border-b border-[#f3f4f6]">
-            <p className="text-sm font-semibold text-[#111827]">{displayName}</p>
-            {email && <p className="text-xs text-[#6b7280] mt-0.5">{email}</p>}
-            {role && <span className="inline-block mt-1.5 px-2 py-0.5 rounded-full bg-[#fef3c7] text-[#92400e] text-[10px] font-semibold">{role}</span>}
+        <div ref={menuRef} role="menu" aria-label="Profile" onKeyDown={handleMenuKeyDown} className="life-menu absolute right-0 top-full mt-2 w-56 z-50 overflow-hidden !p-0">
+          <div className="px-4 py-3 border-b border-[var(--life-color-border-subtle)]">
+            <p className="text-sm font-semibold text-[var(--life-color-text-default)]">{displayName}</p>
+            {email && <p className="text-xs text-[var(--life-color-text-subtle)] mt-0.5">{email}</p>}
+            {role && <span className="inline-block mt-1.5 px-2 py-0.5 rounded-full bg-[var(--life-warning-100)] text-[var(--life-neutral-700)] text-[10px] font-semibold">{role}</span>}
           </div>
 
           <div className="py-1">
-            <button type="button" onClick={() => { setProfileOpen(false); openFeedback(); }} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-[#374151] hover:text-[var(--life-primary-700)] transition-colors cursor-pointer">
+            <button type="button" role="menuitem" tabIndex={-1} onClick={() => { setProfileOpen(false); openFeedback(); }} className="life-menu-item px-4">
               <EditorMaskIcon file="feedback-icon.svg" className="block w-[15px] h-[15px] shrink-0 bg-current" />
               Feedback
             </button>
-            <button type="button" onClick={() => { setProfileOpen(false); openSupport(); }} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-[#374151] hover:text-[var(--life-primary-700)] transition-colors cursor-pointer">
+            <button type="button" role="menuitem" tabIndex={-1} onClick={() => { setProfileOpen(false); openSupport(); }} className="life-menu-item px-4">
               <EditorMaskIcon file="support-icon.svg" className="block w-[15px] h-[15px] shrink-0 bg-current" />
               Support
             </button>
           </div>
 
-          <div className="border-t border-[#f3f4f6] py-1">
-            <button type="button" onClick={switchToClassic} className="w-full flex items-center justify-between gap-2.5 px-4 py-2.5 text-sm text-[#374151] hover:text-[var(--life-primary-700)] transition-colors cursor-pointer">
+          <div className="border-t border-[var(--life-color-border-subtle)] py-1">
+            <button type="button" role="menuitem" tabIndex={-1} onClick={switchToClassic} className="life-menu-item justify-between px-4">
               <span>Switch to Classic</span>
-              <span className="relative inline-flex h-4 w-7 shrink-0 items-center rounded-full bg-[#e5e7eb]" aria-hidden="true">
+              <span className="relative inline-flex h-4 w-7 shrink-0 items-center rounded-full bg-[var(--life-neutral-200)]" aria-hidden="true">
                 <span className="inline-block h-3 w-3 translate-x-0.5 rounded-full bg-white shadow" />
               </span>
             </button>
           </div>
 
-          <div className="border-t border-[#f3f4f6] py-1">
-            <button type="button" onClick={handleLogout} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-[#ef4444] hover:bg-[#fef2f2] transition-colors">
+          <div className="border-t border-[var(--life-color-border-subtle)] py-1">
+            <button type="button" role="menuitem" tabIndex={-1} onClick={handleLogout} className="life-menu-item life-menu-item--critical px-4">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
                 <polyline points="16 17 21 12 16 7" />

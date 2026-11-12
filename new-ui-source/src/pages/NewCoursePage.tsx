@@ -8,8 +8,8 @@ export default function NewCoursePage() {
         <Header onMenuToggle={() => {}} />
         <main className="flex-1 flex items-center justify-center">
           <div className="text-center">
-            <h1 className="text-3xl font-bold text-gray-900">New Course Page</h1>
-            <p className="text-gray-600 mt-2">This page will handle course creation flow</p>
+            <h1 className="text-3xl font-bold text-[var(--life-neutral-850)]">New Course Page</h1>
+            <p className="text-[var(--life-neutral-600)] mt-2">This page will handle course creation flow</p>
           </div>
         </main>
       </div>

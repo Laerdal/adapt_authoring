@@ -491,27 +491,24 @@ function CourseStructurePanel({
   }
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#f7f9fb]">
+    <div className="flex flex-col h-full w-full bg-[var(--life-neutral-020)]">
       <SaveStatusToast toast={saveSuccess ? { type: "success", message: "Changes saved successfully" } : null} onDismiss={() => setSaveSuccess(false)} />
-      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-start gap-4">
+      <div className="shrink-0 px-6 py-5 bg-white border-b border-[var(--life-neutral-100)] flex items-start gap-4">
         <div>
-          <h2 className="text-xl font-bold text-[#111827]">Course Structure</h2>
-          <p className="text-sm text-[#6b7280] mt-0.5">Create and organize the learning journey using the tree view. Click any field to edit content directly.</p>
+          <h2 className="text-xl font-bold text-[var(--life-neutral-850)]">Course Structure</h2>
+          <p className="text-sm text-[var(--life-neutral-600)] mt-0.5">Create and organize the learning journey using the tree view. Click any field to edit content directly.</p>
         </div>
 
         <div className="ml-auto flex items-center gap-3 shrink-0">
           <SaveChangesButton dirty={dirty} saving={saving} disabled={!courseId} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
 
           {/* View mode toggle */}
-          <div className="flex items-center border border-[#e5e7eb] rounded-lg overflow-hidden shrink-0">
+          <div role="group" aria-label="Course structure view" className="life-tabs shrink-0">
           <button
             type="button"
+            aria-pressed={viewMode === "tree"}
             onClick={() => setViewMode("tree")}
-            className={`flex items-center gap-1.5 px-3 py-2 text-sm transition-colors ${
-              viewMode === "tree"
-                ? "bg-[#2d6fa8] text-white font-medium"
-                : "bg-white text-[#6b7280] hover:text-[#111827]"
-            }`}
+            className="life-tab gap-1.5"
             title="Tree view"
           >
             {/* Tree toggle glyph - from public/assets/icons/Icon-tree.svg (currentColor so it tints per state) */}
@@ -525,12 +522,9 @@ function CourseStructurePanel({
           </button>
           <button
             type="button"
+            aria-pressed={viewMode === "map"}
             onClick={() => setViewMode("map")}
-            className={`flex items-center gap-1.5 px-3 py-2 text-sm border-l border-[#e5e7eb] transition-colors ${
-              viewMode === "map"
-                ? "bg-[#2d6fa8] text-white font-medium"
-                : "bg-white text-[#6b7280] hover:text-[#111827]"
-            }`}
+            className="life-tab gap-1.5"
             title="Course map view"
           >
             {/* Map toggle glyph - from public/assets/icons/Icon-map.svg (currentColor so it tints per state) */}
@@ -562,11 +556,11 @@ function CourseStructurePanel({
       />
 
       {!courseId ? (
-        <div className="rounded-lg border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm text-[#991b1b]">
+        <div className="rounded-lg border border-[var(--life-critical-100)] bg-[var(--life-critical-050)] px-4 py-3 text-sm text-[var(--life-critical-600)]">
           No course is associated with this setup flow, so the structure cannot be loaded.
         </div>
       ) : loading ? (
-        <div className="flex items-center gap-3 text-sm text-[#6b7280] py-12 justify-center">
+        <div className="flex items-center gap-3 text-sm text-[var(--life-neutral-600)] py-12 justify-center">
           <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M21 12a9 9 0 1 1-6.219-8.56" strokeLinecap="round" />
           </svg>
@@ -614,18 +608,18 @@ function CourseStructurePanel({
             type="button"
             onClick={() => setHintDismissed(true)}
             aria-label="Dismiss"
-            className="absolute top-3 right-3 p-1 rounded text-[#9ca3af] hover:text-[#374151] hover:bg-white/60 transition-colors"
+            className="absolute top-3 right-3 p-1 rounded text-[var(--life-neutral-400)] hover:text-[var(--life-neutral-700)] hover:bg-white/60 transition-colors"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
             </svg>
           </button>
           <div className="flex items-start gap-3">
-            <svg className="shrink-0 mt-0.5 text-[#2d6fa8]" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+            <svg className="shrink-0 mt-0.5 text-[var(--life-primary-500)]" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
               <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
             </svg>
             <div>
-              <p className="text-sm font-semibold text-[#111827]">Course structure created</p>
+              <p className="text-sm font-semibold text-[var(--life-neutral-850)]">Course structure created</p>
               <p className="text-sm text-[#5b7c93] mt-1">
                 <strong>Storyboard</strong> — Plan ideas, content, and learning flow.
                 <span className="mt-1 block"><strong>Course Editor</strong> — Build pages, layouts, components, and interactions.</span>
@@ -635,7 +629,7 @@ function CourseStructurePanel({
                 <button
                   type="button"
                   onClick={onOpenStoryboard}
-                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] rounded-lg hover:bg-[#255d8f] transition-colors"
+                  className="life-btn life-btn--primary"
                 >
                   Open Storyboard
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -645,7 +639,7 @@ function CourseStructurePanel({
                 <button
                   type="button"
                   onClick={onOpenCourseEditor}
-                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-[#1f2937] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors"
+                  className="life-btn life-btn--secondary"
                 >
                   Open Course Editor
                 </button>
@@ -745,8 +739,8 @@ function DesktopCalculatedValues({
   sizes: Array<{ label: string; value: string }>;
 }) {
   return (
-    <div className="mt-2 rounded-lg bg-[#f0f7ff] border-l-4 border-[#2d6fa8] px-4 py-3 text-xs text-[#374151] space-y-0.5">
-      <p className="font-semibold text-[#111827] mb-1">Calculated values for Desktop:</p>
+    <div className="mt-2 rounded-lg bg-[var(--life-primary-020)] border-l-4 border-[var(--life-primary-500)] px-4 py-3 text-xs text-[var(--life-neutral-700)] space-y-0.5">
+      <p className="font-semibold text-[var(--life-neutral-850)] mb-1">Calculated values for Desktop:</p>
       {sizes.map((s) => (
         <p key={s.label}><span className="font-semibold">{s.label}:</span> {s.value}</p>
       ))}
@@ -758,13 +752,13 @@ function DesktopCalculatedValues({
 function ColorField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-xs font-medium text-[#374151] flex items-center gap-1">
+      <span className="text-xs font-medium text-[var(--life-neutral-700)] flex items-center gap-1">
         {label}
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
         </svg>
       </span>
-      <label className="w-11 h-11 rounded-lg border-2 border-[#e5e7eb] overflow-hidden cursor-pointer hover:border-[#2d6fa8] transition-colors block">
+      <label className="w-11 h-11 rounded-lg border-2 border-[var(--life-neutral-100)] overflow-hidden cursor-pointer hover:border-[var(--life-primary-500)] transition-colors block">
         <input type="color" value={value} onChange={(e) => onChange(e.target.value)} aria-label={label} title={label} className="w-full h-full opacity-0 absolute" />
         <span className="w-full h-full block rounded-md" style={{ backgroundColor: value }} />
       </label>
@@ -776,7 +770,7 @@ function ColorField({ label, value, onChange }: { label: string; value: string; 
 function FontSelect({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-xs font-medium text-[#374151] flex items-center gap-1">
+      <span className="text-xs font-medium text-[var(--life-neutral-700)] flex items-center gap-1">
         {label}
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
@@ -788,13 +782,10 @@ function FontSelect({ label, value, onChange }: { label: string; value: string; 
           onChange={(e) => onChange(e.target.value)}
           aria-label={label}
           title={label}
-          className="w-full border border-[#e5e7eb] rounded-lg px-3 py-2.5 text-sm text-[#111827] bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent pr-8"
+          className="life-field"
         >
           {FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
         </select>
-        <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
       </div>
     </div>
   );
@@ -804,14 +795,14 @@ function FontSelect({ label, value, onChange }: { label: string; value: string; 
 function Accordion({ title, icon, children, defaultOpen = false }: { title: string; icon: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border border-[#e5e7eb] rounded-xl overflow-hidden">
+    <div className="border border-[var(--life-neutral-100)] rounded-xl overflow-hidden">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between px-4 py-3.5 bg-white hover:bg-[#f9fafb] transition-colors"
+        className="w-full flex items-center justify-between px-4 py-3.5 bg-white hover:bg-[var(--life-neutral-020)] transition-colors"
       >
-        <div className="flex items-center gap-2.5 text-sm font-semibold text-[#111827]">
-          <span className="text-[#6b7280]">{icon}</span>
+        <div className="flex items-center gap-2.5 text-sm font-semibold text-[var(--life-neutral-850)]">
+          <span className="text-[var(--life-neutral-600)]">{icon}</span>
           {title}
         </div>
         <svg
@@ -821,7 +812,7 @@ function Accordion({ title, icon, children, defaultOpen = false }: { title: stri
           <polyline points="6 9 12 15 18 9" />
         </svg>
       </button>
-      {open && <div className="px-[22px] py-[20px] border-t border-[#f3f4f6] bg-white">{children}</div>}
+      {open && <div className="px-[22px] py-[20px] border-t border-[var(--life-neutral-050)] bg-white">{children}</div>}
     </div>
   );
 }
@@ -835,18 +826,18 @@ function ThemePreview({ cfg }: { cfg: CustomThemeValues }) {
   return (
     <div className="flex flex-col h-full bg-[#f0f4f8]">
       {/* preview header */}
-      <div className="h-10 bg-white border-b border-[#e5e7eb] flex items-center justify-between px-4 shrink-0">
-        <span className="text-xs font-semibold text-[#111827] flex items-center gap-1.5">
+      <div className="h-10 bg-white border-b border-[var(--life-neutral-100)] flex items-center justify-between px-4 shrink-0">
+        <span className="text-xs font-semibold text-[var(--life-neutral-850)] flex items-center gap-1.5">
           <svg width="12" height="12" viewBox="0 0 24 24" fill={cfg.primaryColor} stroke="none"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
           Live Preview
         </span>
         <div className="flex items-center gap-1.5">
-          <button type="button" title="Toggle dark mode" aria-label="Toggle dark mode" className="p-1.5 rounded-lg border border-[#e5e7eb] hover:bg-[#f3f4f6] transition-colors">
+          <button type="button" title="Toggle dark mode" aria-label="Toggle dark mode" className="p-1.5 rounded-lg border border-[var(--life-neutral-100)] hover:bg-[var(--life-neutral-050)] transition-colors">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
             </svg>
           </button>
-          <button type="button" title="Expand preview" aria-label="Expand preview" className="p-1.5 rounded-lg border border-[#e5e7eb] hover:bg-[#f3f4f6] transition-colors">
+          <button type="button" title="Expand preview" aria-label="Expand preview" className="p-1.5 rounded-lg border border-[var(--life-neutral-100)] hover:bg-[var(--life-neutral-050)] transition-colors">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
             </svg>
@@ -856,12 +847,12 @@ function ThemePreview({ cfg }: { cfg: CustomThemeValues }) {
 
       {/* simulated course shell */}
       <div className="flex-1 overflow-y-auto p-4">
-        <div className="bg-white rounded-xl border border-[#e5e7eb] overflow-hidden shadow-sm">
+        <div className="bg-white rounded-xl border border-[var(--life-neutral-100)] overflow-hidden shadow-sm">
           {/* progress bar */}
           <div className="h-1" style={{ backgroundColor: cfg.primaryColor }} />
 
           {/* course nav bar */}
-          <div className="flex items-center gap-3 px-4 py-3 border-b border-[#f3f4f6]" style={{ backgroundColor: cfg.primaryColor }}>
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--life-neutral-050)]" style={{ backgroundColor: cfg.primaryColor }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M19 12H5M12 19l-7-7 7-7"/>
             </svg>
@@ -879,11 +870,11 @@ function ThemePreview({ cfg }: { cfg: CustomThemeValues }) {
             <h1 className="font-bold mb-3" style={{ ...headingStyle, fontSize: h1Size }}>{cfg.pageTitleSize === "h6" ? "-" : "New Menu/Page Title"}</h1>
 
             {/* article block */}
-            <div className="border border-[#e5e7eb] rounded-lg p-3 mb-3">
+            <div className="border border-[var(--life-neutral-100)] rounded-lg p-3 mb-3">
               <h2 className="font-semibold text-sm mb-1" style={headingStyle}>New Article Title</h2>
-              <div className="border border-[#e5e7eb] rounded-md p-3">
+              <div className="border border-[var(--life-neutral-100)] rounded-md p-3">
                 <h3 className="font-semibold text-xs mb-1" style={headingStyle}>New Block Title</h3>
-                <div className="border border-[#e5e7eb] rounded p-3">
+                <div className="border border-[var(--life-neutral-100)] rounded p-3">
                   <p className="font-semibold text-xs mb-1" style={headingStyle}>New Component Title</p>
                   <p className="text-xs mb-1" style={bodyStyle}>Body text</p>
                   <a href="#" className="text-xs underline block mb-1" style={{ color: cfg.linkFontColor, fontFamily: cfg.paragraphFont }}>This is a sample link</a>
@@ -892,7 +883,7 @@ function ThemePreview({ cfg }: { cfg: CustomThemeValues }) {
                   {/* MCQ */}
                   <div className="space-y-2 mb-3">
                     {["Correct", "Incorrect"].map((opt, i) => (
-                      <div key={opt} className="flex items-center gap-2 border border-[#e5e7eb] rounded-md px-3 py-2" style={{ backgroundColor: i === 0 ? cfg.secondaryColor + "22" : "" }}>
+                      <div key={opt} className="flex items-center gap-2 border border-[var(--life-neutral-100)] rounded-md px-3 py-2" style={{ backgroundColor: i === 0 ? cfg.secondaryColor + "22" : "" }}>
                         <div className="w-5 h-5 rounded flex items-center justify-center shrink-0" style={{ backgroundColor: cfg.secondaryColor }}>
                           {i === 0 && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
                         </div>
@@ -957,12 +948,12 @@ function GlobalThemeSection({ cfg, setCfg }: { cfg: CustomThemeValues; setCfg: (
       </div>
       {/* page title size */}
       <div className="flex flex-col gap-1.5">
-        <span className="text-xs font-medium text-[#374151] flex items-center gap-1">
+        <span className="text-xs font-medium text-[var(--life-neutral-700)] flex items-center gap-1">
           Page Title Size (H1)
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
           </svg>
-          <button type="button" onClick={() => set("pageTitleSize", DEFAULT_CUSTOM.pageTitleSize)} title="Reset" className="ml-1 text-[#9ca3af] hover:text-[#6b7280]">
+          <button type="button" onClick={() => set("pageTitleSize", DEFAULT_CUSTOM.pageTitleSize)} title="Reset" className="ml-1 text-[var(--life-neutral-400)] hover:text-[var(--life-neutral-600)]">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>
             </svg>
@@ -974,13 +965,10 @@ function GlobalThemeSection({ cfg, setCfg }: { cfg: CustomThemeValues; setCfg: (
             onChange={(e) => set("pageTitleSize", e.target.value)}
             aria-label="Page Title Size (H1)"
             title="Page Title Size (H1)"
-            className="w-full border-2 border-[#2d6fa8] rounded-lg px-3 py-2.5 text-sm text-[#111827] bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] pr-8"
+            className="life-field"
           >
             {H1_SIZE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
-          <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="6 9 12 15 18 9"/>
-          </svg>
         </div>
         {sizes && <DesktopCalculatedValues sizes={sizes} />}
       </div>
@@ -1022,7 +1010,7 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
           <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/>
         </svg>
       ),
-      content: <div className="pt-4 text-sm text-[#9ca3af] italic">Page structure options coming soon.</div>,
+      content: <div className="pt-4 text-sm text-[var(--life-neutral-400)] italic">Page structure options coming soon.</div>,
     },
     {
       id: "progress",
@@ -1032,7 +1020,7 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
           <line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/>
         </svg>
       ),
-      content: <div className="pt-4 text-sm text-[#9ca3af] italic">Progress styling options coming soon.</div>,
+      content: <div className="pt-4 text-sm text-[var(--life-neutral-400)] italic">Progress styling options coming soon.</div>,
     },
     {
       id: "navigation",
@@ -1042,7 +1030,7 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
           <polygon points="3 11 22 2 13 21 11 13 3 11"/>
         </svg>
       ),
-      content: <div className="pt-4 text-sm text-[#9ca3af] italic">Navigation styling options coming soon.</div>,
+      content: <div className="pt-4 text-sm text-[var(--life-neutral-400)] italic">Navigation styling options coming soon.</div>,
     },
     {
       id: "menu",
@@ -1052,7 +1040,7 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
           <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
         </svg>
       ),
-      content: <div className="pt-4 text-sm text-[#9ca3af] italic">Menu styling options coming soon.</div>,
+      content: <div className="pt-4 text-sm text-[var(--life-neutral-400)] italic">Menu styling options coming soon.</div>,
     },
     {
       id: "feedback",
@@ -1062,7 +1050,7 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
           <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
         </svg>
       ),
-      content: <div className="pt-4 text-sm text-[#9ca3af] italic">Feedback & validation options coming soon.</div>,
+      content: <div className="pt-4 text-sm text-[var(--life-neutral-400)] italic">Feedback & validation options coming soon.</div>,
     },
     {
       id: "overlays",
@@ -1072,54 +1060,54 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
           <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
         </svg>
       ),
-      content: <div className="pt-4 text-sm text-[#9ca3af] italic">Overlays styling options coming soon.</div>,
+      content: <div className="pt-4 text-sm text-[var(--life-neutral-400)] italic">Overlays styling options coming soon.</div>,
     },
   ];
 
   return (
     <div className="flex h-full overflow-hidden">
       {/* left: accordion editor */}
-      <div className="w-1/2 h-full overflow-y-auto border-r border-[#e5e7eb] bg-white">
-        <div className="flex items-center gap-2 px-5 py-3 border-b border-[#f3f4f6] shrink-0">
-          <button type="button" onClick={onBack} className="text-xs text-[#2d6fa8] hover:underline flex items-center gap-1">
+      <div className="w-1/2 h-full overflow-y-auto border-r border-[var(--life-neutral-100)] bg-white">
+        <div className="flex items-center gap-2 px-5 py-3 border-b border-[var(--life-neutral-050)] shrink-0">
+          <button type="button" onClick={onBack} className="text-xs text-[var(--life-primary-500)] hover:underline flex items-center gap-1">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M19 12H5M12 19l-7-7 7-7"/>
             </svg>
             Theme
           </button>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
-          <span className="text-xs text-[#374151] font-medium">Custom Theme</span>
+          <span className="text-xs text-[var(--life-neutral-700)] font-medium">Custom Theme</span>
         </div>
         {/* -- Custom Icons: Sprite Sheets -- */}
-        <div className="px-5 pt-4 pb-5 border-b border-[#f3f4f6]">
-          <p className="text-xs font-semibold text-[#374151] mb-1">Custom Icons: Sprite Sheets</p>
-          <p className="text-xs text-[#6b7280] mb-3 leading-relaxed">Upload an SVG sprite sheet to replace default icons across the course.</p>
-          <label className="flex flex-col items-center justify-center w-full h-20 border-2 border-dashed border-[#d1d5db] rounded-xl cursor-pointer hover:border-[#2d6fa8] hover:bg-[#f0f7ff] transition-colors group">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="group-hover:stroke-[#2d6fa8] transition-colors mb-1">
+        <div className="px-5 pt-4 pb-5 border-b border-[var(--life-neutral-050)]">
+          <p className="text-xs font-semibold text-[var(--life-neutral-700)] mb-1">Custom Icons: Sprite Sheets</p>
+          <p className="text-xs text-[var(--life-neutral-600)] mb-3 leading-relaxed">Upload an SVG sprite sheet to replace default icons across the course.</p>
+          <label className="flex flex-col items-center justify-center w-full h-20 border-2 border-dashed border-[var(--life-neutral-200)] rounded-xl cursor-pointer hover:border-[var(--life-primary-500)] hover:bg-[var(--life-primary-020)] transition-colors group">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="group-hover:stroke-[var(--life-primary-500)] transition-colors mb-1">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
             </svg>
-            <span className="text-xs text-[#6b7280] group-hover:text-[#2d6fa8] transition-colors">Click to upload sprite sheet (.svg)</span>
+            <span className="text-xs text-[var(--life-neutral-600)] group-hover:text-[var(--life-primary-500)] transition-colors">Click to upload sprite sheet (.svg)</span>
             <input type="file" accept=".svg" aria-label="Upload SVG sprite sheet" className="hidden" />
           </label>
         </div>
 
         {/* -- Custom Icons: Single Icons -- */}
-        <div className="px-5 pt-4 pb-5 border-b border-[#f3f4f6]">
-          <p className="text-xs font-semibold text-[#374151] mb-1">Custom Icons: Single Icons</p>
-          <p className="text-xs text-[#6b7280] mb-3 leading-relaxed">Upload individual SVG icon files to override specific icons in the course.</p>
-          <label className="flex flex-col items-center justify-center w-full h-20 border-2 border-dashed border-[#d1d5db] rounded-xl cursor-pointer hover:border-[#2d6fa8] hover:bg-[#f0f7ff] transition-colors group">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="group-hover:stroke-[#2d6fa8] transition-colors mb-1">
+        <div className="px-5 pt-4 pb-5 border-b border-[var(--life-neutral-050)]">
+          <p className="text-xs font-semibold text-[var(--life-neutral-700)] mb-1">Custom Icons: Single Icons</p>
+          <p className="text-xs text-[var(--life-neutral-600)] mb-3 leading-relaxed">Upload individual SVG icon files to override specific icons in the course.</p>
+          <label className="flex flex-col items-center justify-center w-full h-20 border-2 border-dashed border-[var(--life-neutral-200)] rounded-xl cursor-pointer hover:border-[var(--life-primary-500)] hover:bg-[var(--life-primary-020)] transition-colors group">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="group-hover:stroke-[var(--life-primary-500)] transition-colors mb-1">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
             </svg>
-            <span className="text-xs text-[#6b7280] group-hover:text-[#2d6fa8] transition-colors">Click to upload icons (.svg)</span>
+            <span className="text-xs text-[var(--life-neutral-600)] group-hover:text-[var(--life-primary-500)] transition-colors">Click to upload icons (.svg)</span>
             <input type="file" accept=".svg" multiple aria-label="Upload single SVG icons" className="hidden" />
           </label>
         </div>
 
         {/* -- Configuration: Component -- */}
-        <div className="px-5 pt-4 pb-5 border-b border-[#f3f4f6]">
-          <p className="text-xs font-semibold text-[#374151] mb-0.5">Configuration: Component</p>
-          <p className="text-xs text-[#6b7280] mb-3 leading-relaxed">Component-level behavior and feedback configuration.</p>
+        <div className="px-5 pt-4 pb-5 border-b border-[var(--life-neutral-050)]">
+          <p className="text-xs font-semibold text-[var(--life-neutral-700)] mb-0.5">Configuration: Component</p>
+          <p className="text-xs text-[var(--life-neutral-600)] mb-3 leading-relaxed">Component-level behavior and feedback configuration.</p>
           <div className="space-y-1">
             {(
               [
@@ -1129,11 +1117,11 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
                 { key: "hidePartiallyCorrect",      label: "Hide partially correct feedback on the question and result page" },
               ] as { key: keyof typeof componentConfig; label: string }[]
             ).map(({ key, label }) => (
-              <label key={key} className="flex items-start gap-3 py-2 px-2 rounded-lg hover:bg-[#f9fafb] cursor-pointer group">
+              <label key={key} className="flex items-start gap-3 py-2 px-2 rounded-lg hover:bg-[var(--life-neutral-020)] cursor-pointer group">
                 <div
                   onClick={() => toggleConfig(key)}
                   className={`mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors cursor-pointer ${
-                    componentConfig[key] ? "bg-[#2d6fa8] border-[#2d6fa8]" : "border-[#d1d5db] bg-white group-hover:border-[#93c5fd]"
+                    componentConfig[key] ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)]" : "border-[var(--life-neutral-200)] bg-white group-hover:border-[var(--life-primary-300)]"
                   }`}
                 >
                   {componentConfig[key] && (
@@ -1142,7 +1130,7 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
                     </svg>
                   )}
                 </div>
-                <span className="text-xs text-[#374151] leading-snug">{label}</span>
+                <span className="text-xs text-[var(--life-neutral-700)] leading-snug">{label}</span>
               </label>
             ))}
           </div>
@@ -1207,10 +1195,10 @@ function ThemePanel({ initialThemeName }: { initialThemeName?: string }) {
   return (
     <div className="max-w-3xl w-full px-6 py-6">
       <div className="mb-6">
-        <h2 className="text-base font-semibold text-[#111827]">
-          Select Theme <span className="text-red-500">*</span>
+        <h2 className="text-base font-semibold text-[var(--life-neutral-850)]">
+          Select Theme <span className="text-[var(--life-critical-500)]">*</span>
         </h2>
-        <p className="text-sm text-[#6b7280] mt-0.5">Choose a theme for your course.</p>
+        <p className="text-sm text-[var(--life-neutral-600)] mt-0.5">Choose a theme for your course.</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -1223,12 +1211,12 @@ function ThemePanel({ initialThemeName }: { initialThemeName?: string }) {
               onClick={() => setSelected(theme.id)}
               className={`text-left rounded-xl border-2 p-5 transition-all cursor-pointer focus:outline-none ${
                 isSelected
-                  ? "border-[#2d6fa8] bg-[#f0f7ff] shadow-sm"
-                  : "border-[#e5e7eb] bg-white hover:border-[#93c5fd] hover:shadow-sm"
+                  ? "border-[var(--life-primary-500)] bg-[var(--life-primary-020)] shadow-sm"
+                  : "border-[var(--life-neutral-100)] bg-white hover:border-[var(--life-primary-300)] hover:shadow-sm"
               }`}
             >
-              <p className="font-semibold text-[#111827] text-sm mb-1">{theme.name}</p>
-              <p className="text-xs text-[#6b7280] leading-snug mb-4">{theme.description}</p>
+              <p className="font-semibold text-[var(--life-neutral-850)] text-sm mb-1">{theme.name}</p>
+              <p className="text-xs text-[var(--life-neutral-600)] leading-snug mb-4">{theme.description}</p>
               <div className="flex gap-2">
                 {theme.swatches.map((color) => (
                   <span
@@ -1239,7 +1227,7 @@ function ThemePanel({ initialThemeName }: { initialThemeName?: string }) {
                 ))}
               </div>
               {isSelected && (
-                <div className="mt-3 flex items-center gap-1 text-xs font-medium text-[#2d6fa8]">
+                <div className="mt-3 flex items-center gap-1 text-xs font-medium text-[var(--life-primary-500)]">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
@@ -1312,7 +1300,7 @@ function ThumbLife() {
       </div>
       {/* content */}
       <div className="flex-1 flex flex-col gap-1.5 px-2.5 py-3 bg-[#1b3a4b]/60">
-        <div className="h-2 w-3/4 bg-[#93c5fd]/70 rounded-full" />
+        <div className="h-2 w-3/4 bg-[var(--life-primary-300)]/70 rounded-full" />
         <div className="h-1.5 w-full bg-white/20 rounded-full" />
         <div className="h-1.5 w-5/6 bg-white/20 rounded-full" />
         <div className="h-1.5 w-4/6 bg-white/20 rounded-full" />
@@ -1331,17 +1319,17 @@ function ThumbOverview() {
   return (
     <div className="w-full h-full flex flex-col bg-white overflow-hidden">
       <div className="px-3 pt-3 pb-1">
-        <div className="h-2 w-2/5 bg-[#2d6fa8] rounded-full mb-2" />
-        <div className="h-1.5 w-3/5 bg-[#d1d5db] rounded-full" />
+        <div className="h-2 w-2/5 bg-[var(--life-primary-500)] rounded-full mb-2" />
+        <div className="h-1.5 w-3/5 bg-[var(--life-neutral-200)] rounded-full" />
       </div>
       <div className="flex-1 flex flex-col gap-1.5 px-3 py-2">
         {rows.map((r, i) => (
-          <div key={i} className="flex items-center gap-2 border border-[#e5e7eb] rounded-md px-2 py-1.5">
-            <div className="w-3 h-3 rounded bg-[#dbeeff] border border-[#93c5fd] shrink-0" />
+          <div key={i} className="flex items-center gap-2 border border-[var(--life-neutral-100)] rounded-md px-2 py-1.5">
+            <div className="w-3 h-3 rounded bg-[var(--life-primary-100)] border border-[var(--life-primary-300)] shrink-0" />
             <div className="flex-1 flex flex-col gap-0.5">
-              <div className="h-1 w-3/5 bg-[#374151]/50 rounded-full" />
-              <div className="h-1 w-full bg-[#e5e7eb] rounded-full overflow-hidden">
-                <div className="h-full rounded-full bg-[#2d6fa8]" style={{ width: r.w, backgroundColor: r.accent }} />
+              <div className="h-1 w-3/5 bg-[var(--life-neutral-700)]/50 rounded-full" />
+              <div className="h-1 w-full bg-[var(--life-neutral-100)] rounded-full overflow-hidden">
+                <div className="h-full rounded-full bg-[var(--life-primary-500)]" style={{ width: r.w, backgroundColor: r.accent }} />
               </div>
             </div>
           </div>
@@ -1354,7 +1342,7 @@ function ThumbOverview() {
 function ThumbBox() {
   const colors = ["#3b82f6","#4fb3b3","#7c3aed","#f97316","#16a34a","#dc2626"];
   return (
-    <div className="w-full h-full bg-[#f9fafb] p-2.5 overflow-hidden">
+    <div className="w-full h-full bg-[var(--life-neutral-020)] p-2.5 overflow-hidden">
       <div className="grid grid-cols-3 gap-1.5 h-full">
         {colors.map((c) => (
           <div key={c} className="rounded-md flex flex-col justify-end p-1.5" style={{ backgroundColor: c }}>
@@ -1427,7 +1415,7 @@ function MenuLivePreview({ cfg }: { cfg: MenuConfig }) {
 
   if (cfg.menuStyle === "life") {
     return (
-      <div className="w-full h-full flex flex-col rounded-xl border border-[#e5e7eb] overflow-hidden shadow-sm" style={bgStyle}>
+      <div className="w-full h-full flex flex-col rounded-xl border border-[var(--life-neutral-100)] overflow-hidden shadow-sm" style={bgStyle}>
         {/* top browser-chrome bar */}
         <div className="h-8 bg-black/30 flex items-center gap-2 px-3 shrink-0 backdrop-blur-sm">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1489,7 +1477,7 @@ function MenuLivePreview({ cfg }: { cfg: MenuConfig }) {
 
   if (cfg.menuStyle === "overview") {
     return (
-      <div className="w-full h-full flex flex-col rounded-xl border border-[#e5e7eb] overflow-hidden shadow-sm" style={bgStyle}>
+      <div className="w-full h-full flex flex-col rounded-xl border border-[var(--life-neutral-100)] overflow-hidden shadow-sm" style={bgStyle}>
         {/* header area */}
         <div className={`flex flex-col gap-1.5 px-4 py-4 w-full shrink-0 ${alignClass}`}>
           {menuHeaderContent}
@@ -1518,7 +1506,7 @@ function MenuLivePreview({ cfg }: { cfg: MenuConfig }) {
   if (cfg.menuStyle === "box") {
     const tileColors = ["#3b82f6","#7c3aed","#059669","#f97316","#dc2626","#0891b2"];
     return (
-      <div className="w-full h-full flex flex-col rounded-xl border border-[#e5e7eb] overflow-hidden shadow-sm" style={bgStyle}>
+      <div className="w-full h-full flex flex-col rounded-xl border border-[var(--life-neutral-100)] overflow-hidden shadow-sm" style={bgStyle}>
         {/* header area */}
         <div className={`flex flex-col gap-1.5 px-4 py-4 w-full shrink-0 ${alignClass}`}>
           {menuHeaderContent}
@@ -1540,13 +1528,13 @@ function MenuLivePreview({ cfg }: { cfg: MenuConfig }) {
 
   return (
     <div className="w-full h-full flex flex-col items-center justify-center gap-3">
-      <div className="w-14 h-14 rounded-2xl bg-white border border-[#e5e7eb] flex items-center justify-center shadow-sm">
+      <div className="w-14 h-14 rounded-2xl bg-white border border-[var(--life-neutral-100)] flex items-center justify-center shadow-sm">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
         </svg>
       </div>
-      <p className="text-sm font-medium text-[#6b7280]">Select a menu style</p>
-      <p className="text-xs text-[#9ca3af]">A live preview will appear here</p>
+      <p className="text-sm font-medium text-[var(--life-neutral-600)]">Select a menu style</p>
+      <p className="text-xs text-[var(--life-neutral-400)]">A live preview will appear here</p>
     </div>
   );
 }
@@ -1554,8 +1542,8 @@ function MenuLivePreview({ cfg }: { cfg: MenuConfig }) {
 /* -- Shared helpers -- */
 function MenuFieldLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
   return (
-    <span className="text-xs font-semibold text-[#374151]">
-      {children}{required && <span className="text-[#dc2626] ml-0.5">*</span>}
+    <span className="text-xs font-semibold text-[var(--life-neutral-700)]">
+      {children}{required && <span className="text-[var(--life-critical-600)] ml-0.5">*</span>}
     </span>
   );
 }
@@ -1592,8 +1580,8 @@ function RichTextEditor({
   return (
     <div className="flex flex-col gap-1.5">
       <MenuFieldLabel>{label}</MenuFieldLabel>
-      <div className="border border-[#d1d5db] rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-[#2d6fa8] focus-within:border-transparent">
-        <div className="flex items-center flex-wrap gap-1.5 px-2 py-1.5 border-b border-[#e5e7eb] bg-[#f9fafb]">
+      <div className="border border-[var(--life-neutral-200)] rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-[var(--life-primary-500)] focus-within:border-transparent">
+        <div className="flex items-center flex-wrap gap-1.5 px-2 py-1.5 border-b border-[var(--life-neutral-100)] bg-[var(--life-neutral-020)]">
           <div className="relative">
             <select
               value={fontSize}
@@ -1601,7 +1589,7 @@ function RichTextEditor({
               onChange={(e) => onFontSizeChange(e.target.value)}
               aria-label="Font size"
               title="Font size"
-              className="h-7 pl-2 pr-5 text-xs text-[#374151] bg-white border border-[#d1d5db] rounded appearance-none focus:outline-none focus:ring-1 focus:ring-[#2d6fa8] cursor-pointer"
+              className="h-7 pl-2 pr-5 text-xs text-[var(--life-neutral-700)] bg-white border border-[var(--life-neutral-200)] rounded appearance-none focus:outline-none focus:ring-1 focus:ring-[var(--life-primary-500)] cursor-pointer"
             >
               {FONT_SIZE_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
@@ -1612,11 +1600,11 @@ function RichTextEditor({
             </svg>
           </div>
 
-          <div className="w-px h-4 bg-[#e5e7eb] mx-1 shrink-0" />
+          <div className="w-px h-4 bg-[var(--life-neutral-100)] mx-1 shrink-0" />
 
           <label
             title="Text color"
-            className="relative w-7 h-7 flex flex-col items-center justify-center gap-0.5 rounded hover:bg-[#e5e7eb] transition-colors cursor-pointer"
+            className="relative w-7 h-7 flex flex-col items-center justify-center gap-0.5 rounded hover:bg-[var(--life-neutral-100)] transition-colors cursor-pointer"
             onMouseDown={(e) => e.preventDefault()}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1650,12 +1638,12 @@ function RichTextEditor({
 function MenuUploadZone({ label, onFile }: { label: string; onFile: (url: string) => void }) {
   return (
     <label
-      className="flex flex-col items-center justify-center w-full h-[72px] border-2 border-dashed border-[#d1d5db] rounded-xl cursor-pointer hover:border-[#2d6fa8] hover:bg-[#f0f7ff] transition-colors group"
+      className="flex flex-col items-center justify-center w-full h-[72px] border-2 border-dashed border-[var(--life-neutral-200)] rounded-xl cursor-pointer hover:border-[var(--life-primary-500)] hover:bg-[var(--life-primary-020)] transition-colors group"
     >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="group-hover:stroke-[#2d6fa8] mb-1">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="group-hover:stroke-[var(--life-primary-500)] mb-1">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
       </svg>
-      <span className="text-[11px] text-[#6b7280] group-hover:text-[#2d6fa8]">{label}</span>
+      <span className="text-[11px] text-[var(--life-neutral-600)] group-hover:text-[var(--life-primary-500)]">{label}</span>
       <input
         type="file" accept="image/*" aria-label={label} className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(URL.createObjectURL(f)); e.target.value = ""; }}
@@ -1672,13 +1660,10 @@ function MenuSelect<T extends string>({ label, value, options, onChange }: {
       <MenuFieldLabel>{label}</MenuFieldLabel>
       <div className="relative">
         <select value={value} onChange={(e) => onChange(e.target.value as T)} aria-label={label}
-          className="w-full border border-[#d1d5db] rounded-lg px-3 py-2 text-sm text-[#374151] bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent pr-7"
+          className="life-field"
         >
           {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
-        <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="6 9 12 15 18 9"/>
-        </svg>
       </div>
     </div>
   );
@@ -1735,14 +1720,14 @@ function MenuPanel({ initialMenuName }: { initialMenuName?: string }) {
     <div className="flex h-full w-full overflow-hidden">
 
       {/* -- LEFT: settings (50%) -- */}
-      <div className="w-1/2 h-full overflow-y-auto border-r border-[#e5e7eb] bg-white">
+      <div className="w-1/2 h-full overflow-y-auto border-r border-[var(--life-neutral-100)] bg-white">
 
-        <div className="px-6 py-5 border-b border-[#e5e7eb]">
-          <h2 className="text-xl font-bold text-[#111827]">Menu</h2>
-          <p className="text-sm text-[#6b7280] mt-0.5">Configure how learners will navigate your course.</p>
+        <div className="px-6 py-5 border-b border-[var(--life-neutral-100)]">
+          <h2 className="text-xl font-bold text-[var(--life-neutral-850)]">Menu</h2>
+          <p className="text-sm text-[var(--life-neutral-600)] mt-0.5">Configure how learners will navigate your course.</p>
         </div>
 
-        <div className="flex flex-col divide-y divide-[#f3f4f6]">
+        <div className="flex flex-col divide-y divide-[var(--life-neutral-050)]">
 
           {/* -- 1. Menu Style -- */}
           <section className="px-6 py-5 flex flex-col gap-3">
@@ -1755,26 +1740,26 @@ function MenuPanel({ initialMenuName }: { initialMenuName?: string }) {
                     key={opt.id}
                     type="button"
                     onClick={() => set("menuStyle", opt.id)}
-                    className={`text-left rounded-xl border-2 overflow-hidden transition-all focus:outline-none ${isSel ? "border-[#2d6fa8] shadow-md" : "border-[#e5e7eb] bg-white hover:border-[#93c5fd] hover:shadow-sm"}`}
+                    className={`text-left rounded-xl border-2 overflow-hidden transition-all focus:outline-none ${isSel ? "border-[var(--life-primary-500)] shadow-md" : "border-[var(--life-neutral-100)] bg-white hover:border-[var(--life-primary-300)] hover:shadow-sm"}`}
                   >
                     {/* large thumbnail on top */}
-                    <div className="w-full h-[120px] overflow-hidden relative bg-[#f3f4f6]">
+                    <div className="w-full h-[120px] overflow-hidden relative bg-[var(--life-neutral-050)]">
                       {opt.thumb}
                       {isSel && (
-                        <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-[#2d6fa8] flex items-center justify-center shadow">
+                        <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-[var(--life-primary-500)] flex items-center justify-center shadow">
                           <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                         </div>
                       )}
                     </div>
                     {/* card body */}
-                    <div className={`p-3 ${isSel ? "bg-[#f0f7ff]" : "bg-white"}`}>
+                    <div className={`p-3 ${isSel ? "bg-[var(--life-primary-020)]" : "bg-white"}`}>
                       <div className="flex items-center justify-between mb-1.5">
-                        <p className="font-bold text-[#111827] text-sm">{opt.name}</p>
-                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${isSel ? "border-[#2d6fa8] bg-[#2d6fa8]" : "border-[#d1d5db]"}`}>
+                        <p className="font-bold text-[var(--life-neutral-850)] text-sm">{opt.name}</p>
+                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${isSel ? "border-[var(--life-primary-500)] bg-[var(--life-primary-500)]" : "border-[var(--life-neutral-200)]"}`}>
                           {isSel && <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
                         </div>
                       </div>
-                      <p className="text-[11px] text-[#6b7280] leading-snug">{opt.description}</p>
+                      <p className="text-[11px] text-[var(--life-neutral-600)] leading-snug">{opt.description}</p>
                     </div>
                   </button>
                 );
@@ -1786,15 +1771,15 @@ function MenuPanel({ initialMenuName }: { initialMenuName?: string }) {
           <section className="px-6 py-5 flex flex-col gap-2.5">
             <MenuFieldLabel>Logo</MenuFieldLabel>
             {cfg.logoUrl ? (
-              <div className="flex items-center gap-3 p-3 border border-[#e5e7eb] rounded-xl bg-[#f9fafb]">
+              <div className="flex items-center gap-3 p-3 border border-[var(--life-neutral-100)] rounded-xl bg-[var(--life-neutral-020)]">
                 <img src={cfg.logoUrl} alt="logo" className="h-9 max-w-[72px] object-contain rounded" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-[#374151]">Logo uploaded</p>
-                  <p className="text-[11px] text-[#9ca3af]">PNG, SVG or JPG</p>
+                  <p className="text-xs font-medium text-[var(--life-neutral-700)]">Logo uploaded</p>
+                  <p className="text-[11px] text-[var(--life-neutral-400)]">PNG, SVG or JPG</p>
                 </div>
                 <div className="flex gap-1.5 shrink-0">
-                  <button type="button" onClick={() => pickFile((u) => set("logoUrl", u))} className="text-xs px-2.5 py-1.5 border border-[#d1d5db] rounded-lg text-[#374151] hover:bg-[#f3f4f6] transition-colors">Replace</button>
-                  <button type="button" onClick={() => set("logoUrl", null)} className="text-xs px-2.5 py-1.5 border border-[#fca5a5] rounded-lg text-[#dc2626] hover:bg-[#fef2f2] transition-colors">Remove</button>
+                  <button type="button" onClick={() => pickFile((u) => set("logoUrl", u))} className="text-xs px-2.5 py-1.5 border border-[var(--life-neutral-200)] rounded-lg text-[var(--life-neutral-700)] hover:bg-[var(--life-neutral-050)] transition-colors">Replace</button>
+                  <button type="button" onClick={() => set("logoUrl", null)} className="text-xs px-2.5 py-1.5 border border-[#fca5a5] rounded-lg text-[var(--life-critical-600)] hover:bg-[var(--life-critical-050)] transition-colors">Remove</button>
                 </div>
               </div>
             ) : (
@@ -1804,14 +1789,14 @@ function MenuPanel({ initialMenuName }: { initialMenuName?: string }) {
             {/* Logo Alignment */}
             <div className="flex flex-col gap-2">
               <MenuFieldLabel>Logo Alignment</MenuFieldLabel>
-              <div className="flex rounded-lg border border-[#d1d5db] overflow-hidden">
+              <div className="flex rounded-lg border border-[var(--life-neutral-200)] overflow-hidden">
                 {(["left", "center", "right"] as const).map((align, i) => (
                   <button
                     key={align}
                     type="button"
                     onClick={() => set("titleAlign", align)}
                     aria-label={`Align ${align}`}
-                    className={`flex-1 flex items-center justify-center py-2 transition-colors ${cfg.titleAlign === align ? "bg-[#2d6fa8] text-white" : "bg-white text-[#6b7280] hover:bg-[#f3f4f6]"} ${i > 0 ? "border-l border-[#d1d5db]" : ""}`}
+                    className={`flex-1 flex items-center justify-center py-2 transition-colors ${cfg.titleAlign === align ? "bg-[var(--life-primary-500)] text-white" : "bg-white text-[var(--life-neutral-600)] hover:bg-[var(--life-neutral-050)]"} ${i > 0 ? "border-l border-[var(--life-neutral-200)]" : ""}`}
                   >
                     {align === "left" && (
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1866,7 +1851,7 @@ function MenuPanel({ initialMenuName }: { initialMenuName?: string }) {
           {/* -- 4. Header Image -- */}
           <section className="px-6 py-5 flex flex-col gap-2.5">
             <MenuFieldLabel>Header Image</MenuFieldLabel>
-            <p className="text-[11px] text-[#6b7280] -mt-1">Shown above or below the menu title.</p>
+            <p className="text-[11px] text-[var(--life-neutral-600)] -mt-1">Shown above or below the menu title.</p>
 
             {/* position toggle */}
             <div className="flex gap-2">
@@ -1875,7 +1860,7 @@ function MenuPanel({ initialMenuName }: { initialMenuName?: string }) {
                   key={pos}
                   type="button"
                   onClick={() => set("headerImageOrder", pos)}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border text-xs font-medium transition-colors ${cfg.headerImageOrder === pos ? "border-[#2d6fa8] bg-[#dbeeff] text-[#2d6fa8]" : "border-[#e5e7eb] text-[#6b7280] hover:border-[#93c5fd]"}`}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border text-xs font-medium transition-colors ${cfg.headerImageOrder === pos ? "border-[var(--life-primary-500)] bg-[var(--life-primary-100)] text-[var(--life-primary-500)]" : "border-[var(--life-neutral-100)] text-[var(--life-neutral-600)] hover:border-[var(--life-primary-300)]"}`}
                 >
                   {pos === "above"
                     ? <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
@@ -1887,11 +1872,11 @@ function MenuPanel({ initialMenuName }: { initialMenuName?: string }) {
             </div>
 
             {cfg.headerImageUrl ? (
-              <div className="relative rounded-xl overflow-hidden border border-[#e5e7eb] group">
+              <div className="relative rounded-xl overflow-hidden border border-[var(--life-neutral-100)] group">
                 <img src={cfg.headerImageUrl} alt="header" className="w-full h-24 object-cover" />
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/35 transition-colors flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
-                  <button type="button" onClick={() => pickFile((u) => set("headerImageUrl", u))} className="text-xs px-3 py-1.5 bg-white rounded-lg text-[#374151] font-medium shadow">Replace</button>
-                  <button type="button" onClick={() => set("headerImageUrl", null)} className="text-xs px-3 py-1.5 bg-white rounded-lg text-[#dc2626] font-medium shadow">Remove</button>
+                  <button type="button" onClick={() => pickFile((u) => set("headerImageUrl", u))} className="text-xs px-3 py-1.5 bg-white rounded-lg text-[var(--life-neutral-700)] font-medium shadow">Replace</button>
+                  <button type="button" onClick={() => set("headerImageUrl", null)} className="text-xs px-3 py-1.5 bg-white rounded-lg text-[var(--life-critical-600)] font-medium shadow">Remove</button>
                 </div>
               </div>
             ) : (
@@ -1904,13 +1889,13 @@ function MenuPanel({ initialMenuName }: { initialMenuName?: string }) {
             <MenuFieldLabel>Background</MenuFieldLabel>
 
             {/* color / image toggle */}
-            <div className="flex rounded-lg border border-[#d1d5db] overflow-hidden">
+            <div className="flex rounded-lg border border-[var(--life-neutral-200)] overflow-hidden">
               {(["color","image"] as const).map((t, i) => (
                 <button
                   key={t}
                   type="button"
                   onClick={() => set("bgType", t)}
-                  className={`flex-1 py-2 text-sm font-medium transition-colors ${cfg.bgType === t ? "bg-[#2d6fa8] text-white" : "bg-white text-[#6b7280] hover:bg-[#f3f4f6]"} ${i > 0 ? "border-l border-[#d1d5db]" : ""}`}
+                  className={`flex-1 py-2 text-sm font-medium transition-colors ${cfg.bgType === t ? "bg-[var(--life-primary-500)] text-white" : "bg-white text-[var(--life-neutral-600)] hover:bg-[var(--life-neutral-050)]"} ${i > 0 ? "border-l border-[var(--life-neutral-200)]" : ""}`}
                 >
                   {t === "color" ? "Color" : "Image"}
                 </button>
@@ -1919,23 +1904,23 @@ function MenuPanel({ initialMenuName }: { initialMenuName?: string }) {
 
             {cfg.bgType === "color" ? (
               <div className="flex items-center gap-3">
-                <label className="w-10 h-10 rounded-lg border-2 border-[#e5e7eb] overflow-hidden cursor-pointer hover:border-[#2d6fa8] transition-colors relative block shrink-0">
+                <label className="w-10 h-10 rounded-lg border-2 border-[var(--life-neutral-100)] overflow-hidden cursor-pointer hover:border-[var(--life-primary-500)] transition-colors relative block shrink-0">
                   <input type="color" value={cfg.bgColor} onChange={(e) => set("bgColor", e.target.value)} aria-label="Background color" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
                   <span className="block w-full h-full rounded-md" style={{ backgroundColor: cfg.bgColor }} />
                 </label>
                 <div>
-                  <p className="text-xs font-medium text-[#374151]">Background color</p>
-                  <p className="text-xs text-[#9ca3af] uppercase">{cfg.bgColor}</p>
+                  <p className="text-xs font-medium text-[var(--life-neutral-700)]">Background color</p>
+                  <p className="text-xs text-[var(--life-neutral-400)] uppercase">{cfg.bgColor}</p>
                 </div>
               </div>
             ) : (
               <div className="flex flex-col gap-3">
                 {cfg.bgImageUrl ? (
-                  <div className="relative rounded-xl overflow-hidden border border-[#e5e7eb] group">
+                  <div className="relative rounded-xl overflow-hidden border border-[var(--life-neutral-100)] group">
                     <img src={cfg.bgImageUrl} alt="background" className="w-full h-20 object-cover" />
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/35 transition-colors flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
-                      <button type="button" onClick={() => pickFile((u) => set("bgImageUrl", u))} className="text-xs px-3 py-1.5 bg-white rounded-lg text-[#374151] font-medium shadow">Replace</button>
-                      <button type="button" onClick={() => set("bgImageUrl", null)} className="text-xs px-3 py-1.5 bg-white rounded-lg text-[#dc2626] font-medium shadow">Remove</button>
+                      <button type="button" onClick={() => pickFile((u) => set("bgImageUrl", u))} className="text-xs px-3 py-1.5 bg-white rounded-lg text-[var(--life-neutral-700)] font-medium shadow">Replace</button>
+                      <button type="button" onClick={() => set("bgImageUrl", null)} className="text-xs px-3 py-1.5 bg-white rounded-lg text-[var(--life-critical-600)] font-medium shadow">Remove</button>
                     </div>
                   </div>
                 ) : (
@@ -1957,14 +1942,14 @@ function MenuPanel({ initialMenuName }: { initialMenuName?: string }) {
       </div>
 
       {/* -- RIGHT: live preview (50%) -- */}
-      <div className="w-1/2 h-full bg-[#f3f4f6] flex flex-col overflow-hidden">
-        <div className="h-10 bg-white border-b border-[#e5e7eb] flex items-center px-5 shrink-0 gap-2">
+      <div className="w-1/2 h-full bg-[var(--life-neutral-050)] flex flex-col overflow-hidden">
+        <div className="h-10 bg-white border-b border-[var(--life-neutral-100)] flex items-center px-5 shrink-0 gap-2">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2d6fa8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
           </svg>
-          <span className="text-xs font-semibold text-[#6b7280] tracking-wide uppercase">Live Preview</span>
+          <span className="text-xs font-semibold text-[var(--life-neutral-600)] tracking-wide uppercase">Live Preview</span>
           {cfg.menuStyle && (
-            <span className="ml-auto text-xs text-[#2d6fa8] font-medium">
+            <span className="ml-auto text-xs text-[var(--life-primary-500)] font-medium">
               {MENU_OPTIONS.find((o) => o.id === cfg.menuStyle)?.name}
             </span>
           )}
@@ -1993,11 +1978,11 @@ function CheckboxRow({
   disabled?: boolean;
 }) {
   return (
-    <label className={`flex items-start gap-3 py-2 px-2 rounded-lg cursor-pointer group ${disabled ? "opacity-40 pointer-events-none" : "hover:bg-[#f9fafb]"}`}>
+    <label className={`flex items-start gap-3 py-2 px-2 rounded-lg cursor-pointer group ${disabled ? "opacity-40 pointer-events-none" : "hover:bg-[var(--life-neutral-020)]"}`}>
       <div
         onClick={() => !disabled && onChange(!checked)}
         className={`mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors ${
-          checked ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)]" : "border-[#d1d5db] bg-white group-hover:border-[#93c5fd]"
+          checked ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)]" : "border-[var(--life-neutral-200)] bg-white group-hover:border-[var(--life-primary-300)]"
         }`}
       >
         {checked && (
@@ -2006,7 +1991,7 @@ function CheckboxRow({
           </svg>
         )}
       </div>
-      <span className="text-sm text-[#374151] leading-snug">{label}</span>
+      <span className="text-sm text-[var(--life-neutral-700)] leading-snug">{label}</span>
     </label>
   );
 }
@@ -2078,13 +2063,13 @@ const DEFAULT_TRACKING: TrackingState = {
 
 function TrackingSectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-xs font-semibold uppercase tracking-wider text-[#9ca3af] mb-2 mt-1">{children}</p>
+    <p className="text-xs font-semibold uppercase tracking-wider text-[var(--life-neutral-400)] mb-2 mt-1">{children}</p>
   );
 }
 
 function TrackingSubLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-xs font-semibold text-[#6b7280] mb-2 flex items-center gap-1.5">
+    <p className="text-xs font-semibold text-[var(--life-neutral-600)] mb-2 flex items-center gap-1.5">
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
         <polyline points="9 18 15 12 9 6" />
       </svg>
@@ -2106,13 +2091,13 @@ function TrackingTextInput({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-xs font-semibold text-[#374151]">{label}</span>
+      <span className="text-xs font-semibold text-[var(--life-neutral-700)]">{label}</span>
       <input
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full px-3 py-2 text-sm rounded-lg border border-[#e5e7eb] bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent transition-colors"
+        className="life-field"
       />
     </div>
   );
@@ -2131,21 +2116,18 @@ function TrackingSelect({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-xs font-semibold text-[#374151]">{label}</span>
+      <span className="text-xs font-semibold text-[var(--life-neutral-700)]">{label}</span>
       <div className="relative">
         <select
           value={value}
           onChange={(e) => onChange(e.target.value)}
           aria-label={label}
-          className="w-full border border-[#e5e7eb] rounded-lg px-3 py-2 text-sm text-[#111827] bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent pr-8"
+          className="life-field"
         >
           {options.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
-        <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
       </div>
     </div>
   );
@@ -2156,7 +2138,7 @@ function AddTagButton({ label, onClick }: { label: string; onClick: () => void }
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-[#d1d5db] rounded-lg text-[#374151] hover:border-[#2d6fa8] hover:text-[#2d6fa8] hover:bg-[#f0f7ff] transition-colors"
+      className="life-btn life-btn--secondary"
     >
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
         <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
@@ -2174,25 +2156,25 @@ function AddTagButton({ label, onClick }: { label: string; onClick: () => void }
 /* shared primitives re-used across sub-sections */
 function CpSectionHeading({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="text-base font-bold text-[#111827] mb-0.5">{children}</h2>
+    <h2 className="text-base font-bold text-[var(--life-neutral-850)] mb-0.5">{children}</h2>
   );
 }
 
 function CpSubHeading({ children }: { children: React.ReactNode }) {
   return (
-    <h3 className="text-sm font-semibold text-[#374151] mb-3">{children}</h3>
+    <h3 className="text-sm font-semibold text-[var(--life-neutral-700)] mb-3">{children}</h3>
   );
 }
 
 function CpDivider() {
-  return <div className="border-t border-[#f3f4f6] my-6" />;
+  return <div className="border-t border-[var(--life-neutral-050)] my-6" />;
 }
 
 function CpFieldLabel({ children, hint }: { children: React.ReactNode; hint?: string }) {
   return (
     <div className="mb-1.5">
-      <span className="text-xs font-semibold text-[#374151]">{children}</span>
-      {hint && <p className="text-xs text-[#6b7280] mt-0.5">{hint}</p>}
+      <span className="text-xs font-semibold text-[var(--life-neutral-700)]">{children}</span>
+      {hint && <p className="text-xs text-[var(--life-neutral-600)] mt-0.5">{hint}</p>}
     </div>
   );
 }
@@ -2210,7 +2192,7 @@ function CpTextInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full px-3 py-2 text-sm rounded-lg border border-[#e5e7eb] bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent transition-colors"
+        className="life-field"
       />
     </div>
   );
@@ -2230,13 +2212,10 @@ function CpSelect<T extends string>({
           onChange={(e) => onChange(e.target.value as T)}
           title={label}
           aria-label={label}
-          className="w-full border border-[#e5e7eb] rounded-lg px-3 py-2.5 text-sm text-[#111827] bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent pr-8"
+          className="life-field"
         >
           {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
-        <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
       </div>
     </div>
   );
@@ -2249,22 +2228,14 @@ function CpToggle({
 }) {
   return (
     <label className="flex items-center justify-between gap-4 py-2.5 cursor-pointer group">
-      <span className="text-sm text-[#374151] leading-snug">{label}</span>
+      <span className="text-sm text-[var(--life-neutral-700)] leading-snug">{label}</span>
       <button
         type="button"
         role="switch"
         aria-checked={checked}
         onClick={() => onChange(!checked)}
-        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border-2 transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2d6fa8] ${
-          checked ? "bg-[#2d6fa8] border-[#2d6fa8]" : "bg-[#e5e7eb] border-[#e5e7eb]"
-        }`}
-      >
-        <span
-          className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-150 ${
-            checked ? "translate-x-5" : "translate-x-0.5"
-          }`}
+        className="life-switch"
         />
-      </button>
     </label>
   );
 }
@@ -2281,16 +2252,16 @@ function CpRadioGroup<T extends string>({
         {options.map((opt) => {
           const sel = value === opt.value;
           return (
-            <label key={opt.value} className="flex items-center gap-3 py-2 px-2 rounded-lg cursor-pointer hover:bg-[#f9fafb] transition-colors">
+            <label key={opt.value} className="flex items-center gap-3 py-2 px-2 rounded-lg cursor-pointer hover:bg-[var(--life-neutral-020)] transition-colors">
               <div
                 onClick={() => onChange(opt.value)}
                 className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
-                  sel ? "border-[#2d6fa8] bg-white" : "border-[#d1d5db] bg-white"
+                  sel ? "border-[var(--life-primary-500)] bg-white" : "border-[var(--life-neutral-200)] bg-white"
                 }`}
               >
-                {sel && <div className="w-2 h-2 rounded-full bg-[#2d6fa8]" />}
+                {sel && <div className="w-2 h-2 rounded-full bg-[var(--life-primary-500)]" />}
               </div>
-              <span className="text-sm text-[#374151]">{opt.label}</span>
+              <span className="text-sm text-[var(--life-neutral-700)]">{opt.label}</span>
             </label>
           );
         })}
@@ -2314,11 +2285,11 @@ function CpCheckboxMulti({
         {options.map((opt) => {
           const checked = selected.includes(opt.value);
           return (
-            <label key={opt.value} className="flex items-start gap-3 py-2 px-2 rounded-lg cursor-pointer hover:bg-[#f9fafb] transition-colors group">
+            <label key={opt.value} className="flex items-start gap-3 py-2 px-2 rounded-lg cursor-pointer hover:bg-[var(--life-neutral-020)] transition-colors group">
               <div
                 onClick={() => toggle(opt.value)}
                 className={`mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors cursor-pointer ${
-                  checked ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)]" : "border-[#d1d5db] bg-white group-hover:border-[#93c5fd]"
+                  checked ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)]" : "border-[var(--life-neutral-200)] bg-white group-hover:border-[var(--life-primary-300)]"
                 }`}
               >
                 {checked && (
@@ -2327,7 +2298,7 @@ function CpCheckboxMulti({
                   </svg>
                 )}
               </div>
-              <span className="text-sm text-[#374151] leading-snug">{opt.label}</span>
+              <span className="text-sm text-[var(--life-neutral-700)] leading-snug">{opt.label}</span>
             </label>
           );
         })}
@@ -2338,7 +2309,7 @@ function CpCheckboxMulti({
 
 function CpInfoNote({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-start gap-2 rounded-lg bg-[#f0f7ff] border border-[#bfdbfe] px-3 py-2.5 text-xs text-[#1e40af]">
+    <div className="flex items-start gap-2 rounded-lg bg-[var(--life-primary-020)] border border-[#bfdbfe] px-3 py-2.5 text-xs text-[#1e40af]">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 shrink-0">
         <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
       </svg>
@@ -2411,8 +2382,8 @@ function CompletionProgressPanel() {
 
       {/* -- Page header -- */}
       <div className="mb-6">
-        <h2 className="text-xl font-bold text-[#111827]">Completion &amp; Progress</h2>
-        <p className="text-sm text-[#6b7280] mt-0.5">Configure how course and page completion is tracked and displayed to learners.</p>
+        <h2 className="text-xl font-bold text-[var(--life-neutral-850)]">Completion &amp; Progress</h2>
+        <p className="text-sm text-[var(--life-neutral-600)] mt-0.5">Configure how course and page completion is tracked and displayed to learners.</p>
       </div>
 
       {/* ------------------------------------
@@ -2420,13 +2391,13 @@ function CompletionProgressPanel() {
       ------------------------------------ */}
       <section>
         <CpSectionHeading>Completion Rules</CpSectionHeading>
-        <p className="text-sm text-[#6b7280] mb-5">Define what counts as a completed page and a completed course.</p>
+        <p className="text-sm text-[var(--life-neutral-600)] mb-5">Define what counts as a completed page and a completed course.</p>
 
         {/* Page Completion */}
-        <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden mb-4">
-          <div className="px-4 py-3 border-b border-[#f3f4f6] bg-[#f9fafb]">
+        <div className="rounded-xl border border-[var(--life-neutral-100)] bg-white overflow-hidden mb-4">
+          <div className="px-4 py-3 border-b border-[var(--life-neutral-050)] bg-[var(--life-neutral-020)]">
             <CpSubHeading>Page Completion</CpSubHeading>
-            <p className="text-xs text-[#6b7280] -mt-2">Complete page when:</p>
+            <p className="text-xs text-[var(--life-neutral-600)] -mt-2">Complete page when:</p>
           </div>
           <div className="px-4 py-3">
             <CpRadioGroup<"all-content" | "required-interaction">
@@ -2441,10 +2412,10 @@ function CompletionProgressPanel() {
         </div>
 
         {/* Course Completion */}
-        <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
-          <div className="px-4 py-3 border-b border-[#f3f4f6] bg-[#f9fafb]">
+        <div className="rounded-xl border border-[var(--life-neutral-100)] bg-white overflow-hidden">
+          <div className="px-4 py-3 border-b border-[var(--life-neutral-050)] bg-[var(--life-neutral-020)]">
             <CpSubHeading>Course Completion</CpSubHeading>
-            <p className="text-xs text-[#6b7280] -mt-2">Complete course when:</p>
+            <p className="text-xs text-[var(--life-neutral-600)] -mt-2">Complete course when:</p>
           </div>
           <div className="px-4 py-3">
             <CpRadioGroup<"all-content" | "assessment">
@@ -2466,12 +2437,12 @@ function CompletionProgressPanel() {
       ------------------------------------ */}
       <section>
         <CpSectionHeading>Completion Feedback</CpSectionHeading>
-        <p className="text-sm text-[#6b7280] mb-5">Customise the message shown to learners when they complete the course.</p>
+        <p className="text-sm text-[var(--life-neutral-600)] mb-5">Customise the message shown to learners when they complete the course.</p>
 
-        <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
-          <div className="px-4 py-3 border-b border-[#f3f4f6] bg-[#f9fafb]">
+        <div className="rounded-xl border border-[var(--life-neutral-100)] bg-white overflow-hidden">
+          <div className="px-4 py-3 border-b border-[var(--life-neutral-050)] bg-[var(--life-neutral-020)]">
             <CpSubHeading>Completion Notifier</CpSubHeading>
-            <p className="text-xs text-[#6b7280] -mt-2">Message for the course completion notifier</p>
+            <p className="text-xs text-[var(--life-neutral-600)] -mt-2">Message for the course completion notifier</p>
           </div>
           <div className="px-4 py-4 flex flex-col gap-4">
             <CpTextInput
@@ -2497,11 +2468,11 @@ function CompletionProgressPanel() {
       ------------------------------------ */}
       <section>
         <CpSectionHeading>Resume and Bookmarking</CpSectionHeading>
-        <p className="text-sm text-[#6b7280] mb-5">Control where learners return to when they re-enter the course.</p>
+        <p className="text-sm text-[var(--life-neutral-600)] mb-5">Control where learners return to when they re-enter the course.</p>
 
         {/* Bookmarking */}
-        <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden mb-4">
-          <div className="px-4 py-3 border-b border-[#f3f4f6] bg-[#f9fafb]">
+        <div className="rounded-xl border border-[var(--life-neutral-100)] bg-white overflow-hidden mb-4">
+          <div className="px-4 py-3 border-b border-[var(--life-neutral-050)] bg-[var(--life-neutral-020)]">
             <CpToggle
               label="Enable Bookmarking"
               checked={cfg.bookmarkingEnabled}
@@ -2541,8 +2512,8 @@ function CompletionProgressPanel() {
         </div>
 
         {/* Resume */}
-        <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
-          <div className="px-4 py-3 border-b border-[#f3f4f6] bg-[#f9fafb]">
+        <div className="rounded-xl border border-[var(--life-neutral-100)] bg-white overflow-hidden">
+          <div className="px-4 py-3 border-b border-[var(--life-neutral-050)] bg-[var(--life-neutral-020)]">
             <CpToggle
               label="Enable Resume"
               checked={cfg.resumeEnabled}
@@ -2576,12 +2547,12 @@ function CompletionProgressPanel() {
       ------------------------------------ */}
       <section>
         <CpSectionHeading>Progress Indicators</CpSectionHeading>
-        <p className="text-sm text-[#6b7280] mb-5">Choose which progress elements are visible to learners.</p>
+        <p className="text-sm text-[var(--life-neutral-600)] mb-5">Choose which progress elements are visible to learners.</p>
 
-        <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden mb-4">
-          <div className="px-4 py-3 border-b border-[#f3f4f6] bg-[#f9fafb]">
-            <span className="text-xs font-semibold text-[#374151]">Show progress indicators</span>
-            <p className="text-xs text-[#6b7280] mt-0.5">Select all that apply</p>
+        <div className="rounded-xl border border-[var(--life-neutral-100)] bg-white overflow-hidden mb-4">
+          <div className="px-4 py-3 border-b border-[var(--life-neutral-050)] bg-[var(--life-neutral-020)]">
+            <span className="text-xs font-semibold text-[var(--life-neutral-700)]">Show progress indicators</span>
+            <p className="text-xs text-[var(--life-neutral-600)] mt-0.5">Select all that apply</p>
           </div>
           <div className="px-4 py-3">
             <CpCheckboxMulti
@@ -2628,9 +2599,9 @@ function CompletionProgressPanel() {
       ------------------------------------ */}
       <section>
         <CpSectionHeading>Time Estimate</CpSectionHeading>
-        <p className="text-sm text-[#6b7280] mb-5">Configure the time estimate display shown to learners.</p>
+        <p className="text-sm text-[var(--life-neutral-600)] mb-5">Configure the time estimate display shown to learners.</p>
 
-        <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
+        <div className="rounded-xl border border-[var(--life-neutral-100)] bg-white overflow-hidden">
           <div className="px-4 py-4 flex flex-col gap-4">
             <CpTextInput
               label="Icon class"
@@ -2660,14 +2631,14 @@ function CompletionProgressPanel() {
         </div>
 
         {/* Live preview chip */}
-        <div className="mt-4 flex items-center gap-2 px-4 py-3 rounded-xl bg-[#f9fafb] border border-[#e5e7eb]">
+        <div className="mt-4 flex items-center gap-2 px-4 py-3 rounded-xl bg-[var(--life-neutral-020)] border border-[var(--life-neutral-100)]">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
           </svg>
-          <span className="text-xs text-[#374151]">
+          <span className="text-xs text-[var(--life-neutral-700)]">
             <span className="font-medium">{cfg.timeTextBefore || "Remaining time to complete module"}</span>
             {" "}
-            <span className="text-[#2d6fa8] font-semibold">15</span>
+            <span className="text-[var(--life-primary-500)] font-semibold">15</span>
             {" "}
             {cfg.timeTextAfter || "minutes"}
           </span>
@@ -2684,13 +2655,13 @@ function CompletionProgressPanel() {
 function ComingSoonPanel({ label }: { label: string }) {
   return (
     <div className="max-w-2xl w-full flex flex-col items-center justify-center py-24 text-center">
-      <div className="w-16 h-16 rounded-2xl bg-[#f3f4f6] border border-[#e5e7eb] flex items-center justify-center mb-4">
+      <div className="w-16 h-16 rounded-2xl bg-[var(--life-neutral-050)] border border-[var(--life-neutral-100)] flex items-center justify-center mb-4">
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
         </svg>
       </div>
-      <h2 className="text-base font-semibold text-[#374151]">{label}</h2>
-      <p className="text-sm text-[#9ca3af] mt-1">This section is coming soon.</p>
+      <h2 className="text-base font-semibold text-[var(--life-neutral-700)]">{label}</h2>
+      <p className="text-sm text-[var(--life-neutral-400)] mt-1">This section is coming soon.</p>
     </div>
   );
 }
@@ -3056,9 +3027,9 @@ function CourseCreationCenterContent() {
   }, [activeNav]);
 
   return (
-    <div className="flex flex-col h-screen bg-[#f8fafc] overflow-hidden">
+    <div className="flex flex-col h-screen bg-[var(--life-neutral-020)] overflow-hidden">
       {!courseId && (
-        <div className="mx-4 mt-4 rounded-xl border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm text-[#991b1b]">
+        <div className="mx-4 mt-4 rounded-xl border border-[var(--life-critical-100)] bg-[var(--life-critical-050)] px-4 py-3 text-sm text-[var(--life-critical-600)]">
           No backend course was initialized for this setup flow. Start from Create New Course on the dashboard.
         </div>
       )}
@@ -3094,8 +3065,8 @@ function CourseCreationCenterContent() {
           (activeItem resolves to nothing there) and StoryboardTopBar already
           provides its own Export/Publish-equivalent actions. */}
       {activeNav !== "storyboarding" && !assetPickerRequest && (
-        <div className="h-[56px] bg-white border-b border-[#d8dde6] flex items-center px-4 md:px-6 gap-3 shrink-0 relative z-10">
-          <div className="flex items-center gap-2 text-[#111827] min-w-0">
+        <div className="h-[56px] bg-white border-b border-[var(--life-neutral-200)] flex items-center px-4 md:px-6 gap-3 shrink-0 relative z-10">
+          <div className="flex items-center gap-2 text-[var(--life-neutral-850)] min-w-0">
             <span className="shrink-0 opacity-80">{panelIcon}</span>
             <span className="text-base font-semibold truncate">{panelHeading}</span>
           </div>
@@ -3119,7 +3090,7 @@ function CourseCreationCenterContent() {
             <button
               type="button"
               onClick={() => setIsCourseGuideOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-[8px] px-2.5 py-2 text-[13px] font-medium text-[#40515e] transition-colors hover:bg-[#f1f5f8] hover:text-[#1d3547] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2d6fa8]"
+              className="life-btn life-btn--ghost !px-3"
               aria-haspopup="dialog"
               aria-expanded={isCourseGuideOpen}
             >
@@ -3141,21 +3112,23 @@ function CourseCreationCenterContent() {
             Course Configuration itself is unaffected on every other tab. */}
         {activeNav !== "storyboarding" && !assetPickerRequest && (
         <aside
-          className={`h-full bg-white border-r border-[#d8dde6] flex flex-col shrink-0 transition-all duration-200 ${collapsed ? "w-16" : "w-[256px]"}`}
+          className={`h-full bg-white border-r border-[var(--life-neutral-200)] flex flex-col shrink-0 transition-all duration-200 ${collapsed ? "w-16" : "w-[256px]"}`}
         >
           {/* Collapse toggle */}
-          <div className={`flex items-center h-14 border-b border-[#d8dde6] px-4 shrink-0 ${collapsed ? "justify-center" : "justify-between"}`}>
+          <div className={`flex items-center h-14 border-b border-[var(--life-neutral-200)] px-4 shrink-0 ${collapsed ? "justify-center" : "justify-between"}`}>
             {!collapsed && (
               <div>
                 <p className="text-[13px] leading-none font-bold text-[#1f1f1f] tracking-tight">Course Configuration</p>
               </div>
             )}
-            <div className="relative group">
+            <div className="relative">
               <button
                 type="button"
                 onClick={() => setCollapsed((c) => !c)}
                 aria-label={collapsed ? "Expand panel" : "Collapse panel"}
-                className="w-9 h-9 rounded-lg text-[#9ca3af] hover:bg-[var(--life-neutral-100)] transition-colors flex items-center justify-center cursor-pointer"
+                aria-expanded={!collapsed}
+                data-tooltip={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                className="life-icon-btn life-tooltip--right"
               >
                 <svg
                   width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
@@ -3164,9 +3137,6 @@ function CourseCreationCenterContent() {
                   <path d="M15 18l-6-6 6-6" />
                 </svg>
               </button>
-              <span className="pointer-events-none absolute left-full top-1/2 z-20 ml-2 -translate-y-1/2 whitespace-nowrap rounded-[8px] bg-[#215369] px-3 py-1 text-[11px] font-medium text-[#ffffff] opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
-                {collapsed ? "Expand sidebar" : "Collapse sidebar"}
-              </span>
             </div>
           </div>
 
@@ -3175,7 +3145,7 @@ function CourseCreationCenterContent() {
             {collapsed ? (
               NAV_GROUPS.map((group) => (
                 <div key={group.id}>
-                  <div className="mx-3 my-2 border-t border-[#e5e7eb]" />
+                  <div className="mx-3 my-2 border-t border-[var(--life-neutral-100)]" />
                   {group.items.map((item) => {
                     const isActive = activeNav === item.id;
                     return (
@@ -3183,12 +3153,14 @@ function CourseCreationCenterContent() {
                         key={item.id}
                         type="button"
                         onClick={() => handleNavigation(item.id)}
-                        title={item.label}
-                        className="relative flex items-center justify-center w-full py-1.5 transition-colors cursor-pointer"
+                        aria-label={item.label}
+                        aria-current={isActive ? "page" : undefined}
+                        data-tooltip={item.label}
+                        className="relative flex items-center justify-center w-full py-1.5 cursor-pointer life-tooltip--right"
                       >
                         <span
-                          className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${
-                            isActive ? "bg-[var(--life-primary-100)] text-[#236585]" : "text-[#6b7280] hover:bg-[var(--life-neutral-100)]"
+                          className={`life-icon-btn ${
+                            isActive ? "!bg-[var(--life-primary-100)] !text-[var(--life-primary-700)]" : ""
                           }`}
                         >
                           <span className="shrink-0">{item.icon}</span>
@@ -3207,8 +3179,9 @@ function CourseCreationCenterContent() {
                     <button
                       type="button"
                       onClick={() => toggleGroup(group.id)}
-                      className={`w-full px-5 py-2 flex items-center justify-between text-left font-[var(--font-family-primary)] text-[11px] leading-none font-[700] uppercase tracking-[0.08em] transition-colors cursor-pointer ${groupIsActive ? "text-[#2e7fa1]" : "text-[#6b7280]"}`}
-                      style={{ fontWeight: 700 }}
+                      aria-expanded={groupExpanded}
+                      data-active={groupIsActive}
+                      className="life-navrail-group"
                     >
                       <span>{group.label}</span>
                       <svg
@@ -3233,16 +3206,9 @@ function CourseCreationCenterContent() {
                           key={item.id}
                           type="button"
                           onClick={() => handleNavigation(item.id)}
-                          className={`relative flex items-center gap-3 px-5 py-2 text-left w-full font-[var(--font-family-primary)] font-[400] transition-colors cursor-pointer ${
-                            isActive
-                              ? "bg-[var(--life-primary-100)] text-[#236585]"
-                              : "text-[#5b6674] hover:bg-[var(--life-neutral-100)] hover:text-[#374151]"
-                          }`}
+                          aria-current={isActive ? "page" : undefined}
+                          className="life-navrail-item"
                         >
-                          <span
-                            aria-hidden="true"
-                            className={`absolute left-0 top-0 h-full w-[3px] rounded-r-sm transition-opacity ${isActive ? "bg-[var(--life-primary-500)] opacity-100" : "opacity-0"}`}
-                          />
                           <span className="shrink-0">{item.icon}</span>
                           <span className="font-[var(--font-family-primary)] text-[var(--text-p)] font-[var(--font-weight-regular)] leading-[1.5] whitespace-nowrap overflow-hidden text-ellipsis">{item.label}</span>
                         </button>
@@ -3258,7 +3224,7 @@ function CourseCreationCenterContent() {
         )}
 
         {/* -- Right content panel -- */}
-        <main ref={contentScrollRef} className={`flex-1 min-h-0 min-w-0 bg-[#f7f9fb] ${fullCanvasPanels.has(activeNav) || activeNav === "storyboarding" || activeNav === "translation" ? "flex flex-col overflow-hidden" : "overflow-y-auto px-8 py-8"}`}>
+        <main ref={contentScrollRef} data-studio-settings-view={activeNav} className={`flex-1 min-h-0 min-w-0 bg-[var(--life-neutral-020)] ${fullCanvasPanels.has(activeNav) || activeNav === "storyboarding" || activeNav === "translation" ? "flex flex-col overflow-hidden" : "overflow-y-auto px-8 py-8"}`}>
           <PageTransitionBoundary key={activeNav}>
             {renderPanel()}
           </PageTransitionBoundary>
@@ -3266,7 +3232,7 @@ function CourseCreationCenterContent() {
       </div>
 
       {assetPickerRequest ? (
-        <div className="fixed inset-0 z-[90] bg-[#f8fafc]">
+        <div className="fixed inset-0 z-[90] bg-[var(--life-neutral-020)]">
           <AssetManagementWorkspace
             pickerMode
             pickerAssetType={assetPickerRequest.assetType}

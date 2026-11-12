@@ -8,7 +8,7 @@ export default function CourseStructureDemoPage() {
       <div className="flex flex-col flex-1">
         <Header onMenuToggle={() => {}} />
         <main className="flex-1 overflow-auto p-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-6">Course Structure Demo</h1>
+          <h1 className="text-3xl font-bold text-[var(--life-neutral-850)] mb-6">Course Structure Demo</h1>
           <CourseStructureMap />
         </main>
       </div>

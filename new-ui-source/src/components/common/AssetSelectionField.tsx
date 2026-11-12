@@ -79,7 +79,7 @@ export default function AssetSelectionField({
     <div className={compact ? "flex flex-col gap-1.5" : "flex flex-col gap-2"}>
       {showLabel ? (
         <div className="text-[12px] text-[var(--life-base-black)]">
-          {label}{required && <span className="ml-0.5 text-[#dc2626]">*</span>}
+          {label}{required && <span className="ml-0.5 text-[var(--life-critical-600)]">*</span>}
         </div>
       ) : null}
       {previewUrl ? (
@@ -102,21 +102,21 @@ export default function AssetSelectionField({
         </div>
       ) : null}
       {value ? (
-        <div className="flex min-w-0 flex-nowrap gap-1.5">
-          <button type="button" onClick={onPickAsset} className="flex-1 min-w-0 px-2 py-1.5 text-[11px] leading-tight font-semibold rounded-md border border-[var(--life-primary-500)] text-[var(--life-primary-500)] bg-white hover:bg-[var(--life-primary-020)] transition-colors cursor-pointer whitespace-nowrap truncate">
+        <div className="flex min-w-0 flex-wrap gap-1.5">
+          <button type="button" onClick={onPickAsset} className="life-btn life-btn--secondary flex-1 min-w-[96px]">
             Change Asset
           </button>
-          <button type="button" onClick={onClear} className="flex-1 min-w-0 px-2 py-1.5 text-[11px] leading-tight font-semibold rounded-md border border-[var(--life-critical-500)] text-[var(--life-critical-500)] bg-white hover:bg-[var(--life-critical-050)] transition-colors cursor-pointer whitespace-nowrap truncate">
+          <button type="button" onClick={onClear} className="life-btn life-btn--secondary !text-[var(--life-critical-600)] !border-[var(--life-critical-500)] hover:!bg-[var(--life-critical-050)] flex-1 min-w-[96px]">
             Remove Asset
           </button>
         </div>
       ) : (
-        <div className="flex min-w-0 flex-nowrap gap-1.5">
-          <button type="button" onClick={onPickAsset} className="flex-1 min-w-0 px-2 py-1.5 text-[11px] leading-tight font-semibold rounded-md bg-[var(--life-primary-500)] text-white hover:bg-[var(--life-primary-700)] transition-colors cursor-pointer whitespace-nowrap truncate">
+        <div className="flex min-w-0 flex-wrap gap-1.5">
+          <button type="button" onClick={onPickAsset} className="life-btn life-btn--primary flex-1 min-w-[96px]">
             Select Asset
           </button>
           {onPickExternal ? (
-            <button type="button" onClick={onPickExternal} className="flex-1 min-w-0 px-2 py-1.5 text-[11px] leading-tight font-semibold rounded-md border border-[var(--life-primary-500)] text-[var(--life-primary-500)] hover:bg-[var(--life-primary-020)] transition-colors cursor-pointer whitespace-nowrap truncate">
+            <button type="button" onClick={onPickExternal} className="life-btn life-btn--secondary flex-1 min-w-[96px]">
               External Asset
             </button>
           ) : null}

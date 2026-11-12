@@ -35,6 +35,10 @@ import { UnsavedChangesModal } from "../setup/unsavedChangesModal";
 import PublishCourseDialog, { type PublishCoursePhase } from "../../components/publish/PublishCourseDialog";
 import PageEditorTopBar from "./pageEditorTopBar";
 import PageEditorNavigation from "./pageEditorNavigation";
+// Samaritan workspace - see its own file header for why selection state
+// is passed as props rather than the (non-functional, in embedded mode)
+// studio:selected postMessage event.
+import SamaritanWorkspace from "../../components/samaritan/SamaritanWorkspace";
 import { getEditorDeletionError, projectEditorStructure, structureWithCanvasOrder, type EditorDeletionError } from "./editorStructureMoves";
 import { flattenStructure, moveCourseStructure } from "../../hooks/useCourseStructure";
 import type { StructureLevel } from "../../types/structure";
@@ -845,7 +849,7 @@ function BehaviourField({
     if (hasEnabledToggle) {
       return (
         <TopicEnabledNestedAccordion
-          title={<span className="inline-flex items-center gap-1.5">{label}{hint ? <InfoIcon label={label} hint={hint} /> : null}{isRequired && <span className="text-[#dc2626] ml-0.5">*</span>}</span>}
+          title={<span className="inline-flex items-center gap-1.5">{label}{hint ? <InfoIcon label={label} hint={hint} /> : null}{isRequired && <span className="text-[var(--life-critical-600)] ml-0.5">*</span>}</span>}
           enabled={objectValue._isEnabled !== false}
           onEnabledChange={(enabled) => onChange(`${path}._isEnabled`, enabled)}
         >
@@ -854,7 +858,7 @@ function BehaviourField({
       );
     }
     return (
-      <TopicNestedAccordion title={<span className="inline-flex items-center gap-1.5">{label}{hint ? <InfoIcon label={label} hint={hint} /> : null}{isRequired && <span className="text-[#dc2626] ml-0.5">*</span>}</span>}>
+      <TopicNestedAccordion title={<span className="inline-flex items-center gap-1.5">{label}{hint ? <InfoIcon label={label} hint={hint} /> : null}{isRequired && <span className="text-[var(--life-critical-600)] ml-0.5">*</span>}</span>}>
         {fields}
       </TopicNestedAccordion>
     );
@@ -891,7 +895,7 @@ function BehaviourField({
           const isOpen = openItemIndex === index;
           const itemTitle = pickBehaviourItemTitle(item, itemSchema, index);
           return (
-            <div key={`${path}[${index}]`} className="w-full rounded-[8px] border border-[#d8dee6] bg-white overflow-hidden">
+            <div key={`${path}[${index}]`} className="w-full rounded-[8px] border border-[var(--life-neutral-200)] bg-white overflow-hidden">
               <div className="w-full flex items-center gap-2 px-3 py-2 bg-white hover:bg-[var(--life-neutral-020)] transition-colors">
                 <button
                   type="button"
@@ -900,7 +904,7 @@ function BehaviourField({
                   className="flex-1 min-w-0 flex items-center gap-1.5 text-left"
                 >
                   <svg
-                    className={`shrink-0 transition-transform duration-200 text-[#6b7280] ${isOpen ? "rotate-90" : ""}`}
+                    className={`shrink-0 transition-transform duration-200 text-[var(--life-neutral-600)] ${isOpen ? "rotate-90" : ""}`}
                     width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
                   >
                     <polyline points="9 18 15 12 9 6" />
@@ -914,7 +918,7 @@ function BehaviourField({
                     title="Duplicate"
                     disabled={!canAddMore}
                     onClick={() => handleCopyItem(index)}
-                    className="w-6 h-6 flex items-center justify-center rounded-md text-[#6b7280] hover:bg-[var(--life-primary-020)] hover:text-[var(--life-primary-500)] transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[#6b7280] disabled:cursor-not-allowed"
+                    className="life-icon-btn life-icon-btn--xs"
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
@@ -926,7 +930,7 @@ function BehaviourField({
                     aria-label="Delete item"
                     title="Delete"
                     onClick={() => handleDeleteItem(index)}
-                    className="w-6 h-6 flex items-center justify-center rounded-md text-[#6b7280] hover:bg-[#fee2e2] hover:text-[#b42318] transition-colors"
+                    className="life-icon-btn life-icon-btn--xs life-icon-btn--critical"
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <polyline points="3 6 5 6 21 6" />
@@ -936,7 +940,7 @@ function BehaviourField({
                 </div>
               </div>
               {isOpen && (
-                <div className="px-3 pb-3 pt-2.5 border-t border-[#eef2f6] flex flex-col gap-2.5">
+                <div className="px-3 pb-3 pt-2.5 border-t border-[var(--life-neutral-050)] flex flex-col gap-2.5">
                   {isObjectItems ? (() => {
                     const itemRecord = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
                     // Fresh flattened scope per item: a button's own fields
@@ -975,7 +979,7 @@ function BehaviourField({
         {canAddMore && (
           <button
             type="button"
-            className="text-[12px] font-semibold text-[#2d6fa8] hover:underline self-start"
+            className="text-[12px] font-semibold text-[var(--life-primary-500)] hover:underline self-start"
             onClick={handleAddItem}
           >
             + Add {label}
@@ -1072,7 +1076,7 @@ function BehaviourField({
             }
           }}
           rows={6}
-          className="w-full px-2.5 py-1.5 text-[13px] rounded-md border border-[#e5e7eb] text-[#111827] bg-white focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent transition-colors resize-y font-mono"
+          className="life-field"
         />
       </div>
     );
@@ -1364,7 +1368,7 @@ function ExtensionListItem({
   );
 
   return (
-    <div className="w-full rounded-[8px] border border-[#d8dee6] bg-white overflow-hidden">
+    <div className="w-full rounded-[8px] border border-[var(--life-neutral-200)] bg-white overflow-hidden">
       <div className="w-full flex items-center gap-1.5 px-2 py-1.5">
         {enableControl.kind === "checkbox" && (
           <TopicToggle
@@ -1382,7 +1386,7 @@ function ExtensionListItem({
         >
           {!!settingsKeys.length && (
             <svg
-              className={`shrink-0 transition-transform duration-200 text-[#6b7280] ${open ? "rotate-90" : ""}`}
+              className={`shrink-0 transition-transform duration-200 text-[var(--life-neutral-600)] ${open ? "rotate-90" : ""}`}
               width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
             >
               <polyline points="9 18 15 12 9 6" />
@@ -1401,7 +1405,7 @@ function ExtensionListItem({
           aria-label={`Remove ${displayName}`}
           title="Remove"
           onClick={onRemove}
-          className="w-5 h-5 shrink-0 flex items-center justify-center rounded-md text-[#6b7280] hover:bg-[#fee2e2] hover:text-[#b42318] transition-colors"
+          className="w-5 h-5 shrink-0 flex items-center justify-center rounded-md text-[var(--life-neutral-600)] hover:bg-[var(--life-critical-100)] hover:text-[var(--life-critical-600)] transition-colors"
         >
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <line x1="18" y1="6" x2="6" y2="18" />
@@ -1410,7 +1414,7 @@ function ExtensionListItem({
         </button>
       </div>
       {open && !!settingsKeys.length && (
-        <div className="extension-settings-content px-3 pb-3 pt-2.5 border-t border-[#eef2f6] flex flex-col gap-2.5 text-[12px]">
+        <div className="extension-settings-content px-3 pb-3 pt-2.5 border-t border-[var(--life-neutral-050)] flex flex-col gap-2.5 text-[12px]">
           {settingsKeys.map((fieldKey) => {
             const childSchema = settingsFields[fieldKey] as BehaviourFieldSchema;
             if (!childSchema || typeof childSchema !== "object") return null;
@@ -1539,14 +1543,14 @@ function ExtensionsAccordionBody({
           <p className="text-[13px] text-[var(--life-neutral-300)]">No additional extensions are available for this {levelLabel}.</p>
         )}
         {availableKeys.map((key) => (
-          <div key={key} className="w-full flex items-center gap-2 px-3 py-2 rounded-[8px] border border-[#d8dee6] bg-white">
+          <div key={key} className="w-full flex items-center gap-2 px-3 py-2 rounded-[8px] border border-[var(--life-neutral-200)] bg-white">
             <span className="flex-1 min-w-0 truncate text-[13px] font-semibold text-[var(--life-base-black)]">
               {extensionDisplayName(key, schemasForLevel[key], extensionTypeOptions)}
             </span>
             <button
               type="button"
               onClick={() => handleAdd(key)}
-              className="shrink-0 px-2.5 py-1 text-[12px] font-semibold rounded-md border border-[#2d6fa8] text-[#2d6fa8] hover:bg-[var(--life-primary-020)] transition-colors"
+              className="life-btn life-btn--secondary"
             >
               + Add
             </button>
@@ -1685,18 +1689,17 @@ function NavigationFooterButtonsField({
         const isHomeButton = buttonKey === "_home";
 
         return (
-          <div key={buttonKey} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-[8px] border border-[#d8dee6] bg-white">
+          <div key={buttonKey} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-[8px] border border-[var(--life-neutral-200)] bg-white">
             <label className="shrink-0 inline-flex items-center cursor-pointer group">
               <input
                 type="checkbox"
                 checked={checked}
                 onChange={(event) => onChange(`_buttons.${buttonKey}._enableOverride`, event.target.checked ? "enable" : "disable")}
                 aria-label={`${label} button enabled`}
-                className="sr-only peer"
+                className="life-check mt-0.5"
               />
-              <CheckboxIndicator checked={checked} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
             </label>
-            <span className={`shrink-0 ${checked ? "text-[var(--life-primary-500)]" : "text-[#9ca3af]"}`}>{NAV_FOOTER_BUTTON_ICONS[buttonKey]}</span>
+            <span className={`shrink-0 ${checked ? "text-[var(--life-primary-500)]" : "text-[var(--life-neutral-400)]"}`}>{NAV_FOOTER_BUTTON_ICONS[buttonKey]}</span>
             <input
               type="text"
               value={displayText}
@@ -1706,8 +1709,8 @@ function NavigationFooterButtonsField({
               aria-label={`${label} button text`}
               className={`flex-1 min-w-0 px-2 py-1 text-[13px] rounded-md border border-transparent transition-colors ${
                 isHomeButton
-                  ? "bg-[#f8fafc] text-[#6b7280] cursor-default"
-                  : "hover:border-[#e5e7eb] bg-transparent focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent"
+                  ? "bg-[var(--life-neutral-020)] text-[var(--life-neutral-600)] cursor-default"
+                  : "hover:border-[var(--life-neutral-100)] bg-transparent focus:bg-white focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] focus:border-transparent"
               }`}
             />
           </div>
@@ -1818,22 +1821,12 @@ function TopicAccordion({
   children: React.ReactNode;
 }) {
   return (
-    <div
-      className={`w-full rounded-[8px] border bg-white overflow-hidden transition-colors ${
-        open
-          ? "border-[var(--life-primary-200)]"
-          : "border-[#d8dee6] hover:border-[var(--life-primary-100)]"
-      }`}
-    >
+    <div className="life-accordion w-full">
       <button
         type="button"
         onClick={(event) => onToggle(event.currentTarget)}
         aria-expanded={open}
-        className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 text-left transition-colors ${
-          open
-            ? "bg-[var(--life-primary-020)]"
-            : "bg-white hover:bg-[var(--life-neutral-020)]"
-        }`}
+        className="life-accordion-trigger !px-3"
       >
         <h3 className="text-[13px] font-semibold text-[var(--life-base-black)]">{title}</h3>
         <svg
@@ -1843,7 +1836,7 @@ function TopicAccordion({
           <polyline points="9 18 15 12 9 6" />
         </svg>
       </button>
-      {open ? <div className="px-3 pb-3 pt-2.5 border-t border-[#eef2f6] flex flex-col gap-2.5">{children}</div> : null}
+      {open ? <div className="px-3 pb-3 pt-2.5 border-t border-[var(--life-neutral-050)] flex flex-col gap-2.5">{children}</div> : null}
     </div>
   );
 }
@@ -1860,16 +1853,16 @@ function TopicNestedAccordion({
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <div className="w-full rounded-[8px] border border-[#d8dee6] bg-white overflow-hidden">
+    <div className="life-accordion w-full">
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
         aria-expanded={open}
-        className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-[var(--life-neutral-020)] transition-colors"
+        className="life-accordion-trigger !px-3 !min-h-[40px]"
       >
-        <span className="text-[13px] font-semibold text-[#21436b] underline underline-offset-[2px]">{title}</span>
+        <span className="text-[13px] font-semibold text-[var(--life-primary-800)] underline underline-offset-[2px]">{title}</span>
         <svg
-          className={`shrink-0 transition-transform duration-200 text-[#21436b] ${open ? "rotate-90" : ""}`}
+          className={`shrink-0 transition-transform duration-200 text-[var(--life-primary-800)] ${open ? "rotate-90" : ""}`}
           width="16"
           height="16"
           viewBox="0 0 24 24"
@@ -1882,7 +1875,7 @@ function TopicNestedAccordion({
           <polyline points="9 18 15 12 9 6" />
         </svg>
       </button>
-      {open ? <div className="px-3 pb-2.5 pt-1.5 border-t border-[#eef2f6] flex flex-col gap-2">{children}</div> : null}
+      {open ? <div className="px-3 pb-2.5 pt-1.5 border-t border-[var(--life-neutral-050)] flex flex-col gap-2">{children}</div> : null}
     </div>
   );
 }
@@ -1903,14 +1896,8 @@ function TopicToggle({
       aria-checked={checked}
       aria-label={label}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full border-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--life-primary-500)] ${
-        checked
-          ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)]"
-          : "bg-[#e5e7eb] border-[#e5e7eb]"
-      }`}
-    >
-      <span className={`inline-block h-2.5 w-2.5 rounded-full bg-white shadow-sm transition-transform ${checked ? "translate-x-3" : "translate-x-0.5"}`} />
-    </button>
+      className="life-switch"
+        />
   );
 }
 
@@ -1934,8 +1921,8 @@ function TopicEnabledNestedAccordion({
   };
 
   return (
-    <div className="w-full rounded-[8px] border border-[#d8dee6] bg-white overflow-hidden">
-      <div className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[var(--life-neutral-020)] transition-colors">
+    <div className="life-accordion w-full">
+      <div className="w-full flex items-center gap-2 px-3 min-h-[40px] hover:bg-[var(--life-neutral-020)] transition-colors">
         <button
           type="button"
           onClick={() => enabled && setOpen((previous) => !previous)}
@@ -1943,9 +1930,9 @@ function TopicEnabledNestedAccordion({
           disabled={!enabled}
           className="flex-1 min-w-0 flex items-center gap-1.5 text-left disabled:cursor-default"
         >
-          <span className="text-[13px] font-semibold text-[#21436b] underline underline-offset-[2px]">{title}</span>
+          <span className="text-[13px] font-semibold text-[var(--life-primary-800)] underline underline-offset-[2px]">{title}</span>
           <svg
-            className={`shrink-0 ml-auto transition-transform duration-200 text-[#21436b] ${enabled && open ? "rotate-90" : ""}`}
+            className={`shrink-0 ml-auto transition-transform duration-200 text-[var(--life-primary-800)] ${enabled && open ? "rotate-90" : ""}`}
             width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
           >
             <polyline points="9 18 15 12 9 6" />
@@ -1953,17 +1940,17 @@ function TopicEnabledNestedAccordion({
         </button>
         <TopicToggle checked={enabled} onChange={handleEnabledChange} label="Enabled" />
       </div>
-      {enabled && open ? <div className="px-3 pb-2.5 pt-1.5 border-t border-[#eef2f6] flex flex-col gap-2">{children}</div> : null}
+      {enabled && open ? <div className="px-3 pb-2.5 pt-1.5 border-t border-[var(--life-neutral-050)] flex flex-col gap-2">{children}</div> : null}
     </div>
   );
 }
 
 function TopicFieldLabel({ children, required, hint }: { children: React.ReactNode; required?: boolean; hint?: string }) {
   return (
-    <span className="text-[11px] font-semibold text-[#374151] inline-flex items-center gap-1.5">
+    <span className="text-[11px] font-semibold text-[var(--life-neutral-700)] inline-flex items-center gap-1.5">
       {children}
       {hint ? <InfoIcon label={typeof children === "string" ? children : "field"} hint={hint} /> : null}
-      {required && <span className="text-[#dc2626] ml-0.5">*</span>}
+      {required && <span className="text-[var(--life-critical-600)] ml-0.5">*</span>}
     </span>
   );
 }
@@ -1996,7 +1983,8 @@ function TopicTextInput({
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         readOnly={readOnly}
-        className={`w-full px-2.5 py-1.5 text-[13px] rounded-md border border-[#e5e7eb] text-[#111827] transition-colors ${readOnly ? "bg-[#f8fafc]" : "bg-white focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent"}`}
+        aria-label={label}
+        className="life-field read-only:bg-[var(--life-neutral-020)] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
       />
     </div>
   );
@@ -2110,10 +2098,10 @@ function TopicTitleField({
         onKeyDown={(event) => {
           if (event.key === "Enter") (event.target as HTMLInputElement).blur();
         }}
-        className="w-full px-2.5 py-1.5 text-[13px] rounded-md border border-[#e5e7eb] text-[#111827] bg-white transition-colors focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent"
+        className="life-field"
       />
       {showWarning && (
-        <p className="text-[11px] text-[#b42318]">{TITLE_MANDATORY_MESSAGE}</p>
+        <p className="text-[11px] text-[var(--life-critical-600)]">{TITLE_MANDATORY_MESSAGE}</p>
       )}
     </div>
   );
@@ -2151,14 +2139,14 @@ function TopicNumberStepper({
           type="number"
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className="w-full px-2.5 py-1.5 pr-7 text-[13px] rounded-md border border-[#e5e7eb] text-[#111827] bg-white transition-colors focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+          className="life-field pr-9 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
         />
-        <div className="absolute right-1 top-1/2 -translate-y-1/2 flex flex-col">
+        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col">
           <button
             type="button"
             aria-label="Increment"
             onClick={() => step(1)}
-            className="flex items-center justify-center w-4 h-3 text-[#6b7280] hover:text-[#2d6fa8]"
+            className="flex items-center justify-center w-4 h-3 text-[var(--life-neutral-600)] hover:text-[var(--life-primary-500)]"
           >
             <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15" /></svg>
           </button>
@@ -2166,7 +2154,7 @@ function TopicNumberStepper({
             type="button"
             aria-label="Decrement"
             onClick={() => step(-1)}
-            className="flex items-center justify-center w-4 h-3 text-[#6b7280] hover:text-[#2d6fa8]"
+            className="flex items-center justify-center w-4 h-3 text-[var(--life-neutral-600)] hover:text-[var(--life-primary-500)]"
           >
             <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
           </button>
@@ -2205,16 +2193,13 @@ function TopicSelect({
         <select
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className="w-full border border-[#e5e7eb] rounded-md px-2.5 py-2 text-[13px] text-[var(--life-base-black)] bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] focus:border-transparent pr-8"
+          className="life-field"
         >
           {needsBlankOption && <option value={value}>{emptyOptionLabel}</option>}
           {options.map((option) => (
             <option key={option} value={option}>{option || emptyOptionLabel}</option>
           ))}
         </select>
-        <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
       </div>
     </div>
   );
@@ -2234,19 +2219,18 @@ function TopicCheckbox({
   required?: boolean;
 }) {
   return (
-    <label className="flex items-start gap-2 text-[13px] text-[#111827] cursor-pointer group">
+    <label className="flex items-start gap-2 text-[13px] text-[var(--life-neutral-850)] cursor-pointer group">
       <input
         type="checkbox"
         checked={checked}
         onChange={(event) => onChange(event.target.checked)}
         aria-label={label}
-        className="sr-only peer"
+        className="life-check mt-0.5"
       />
-      <CheckboxIndicator checked={checked} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
       <span className="min-w-0 leading-snug">
         {label}
         {hint ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}
-        {required && <span className="text-[#dc2626] ml-0.5">*</span>}
+        {required && <span className="text-[var(--life-critical-600)] ml-0.5">*</span>}
       </span>
     </label>
   );
@@ -2273,13 +2257,13 @@ function TopicRadioGroup({
       <TopicFieldLabel required={required} hint={hint}>{label}</TopicFieldLabel>
       <div className="flex flex-col gap-1.5">
         {options.map((option) => (
-          <label key={option.value} className="flex items-center gap-1.5 text-[13px] text-[#111827] cursor-pointer">
+          <label key={option.value} className="flex items-center gap-1.5 text-[13px] text-[var(--life-neutral-850)] cursor-pointer">
             <input
               type="radio"
               name={groupName}
               checked={value === option.value}
               onChange={() => onChange(option.value)}
-              className="h-3.5 w-3.5 shrink-0 border-[#cbd5e1] text-[#2d6fa8] focus:ring-[#2d6fa8]"
+              className="life-radio"
             />
             <span>{option.label}</span>
           </label>
@@ -2476,11 +2460,11 @@ function TopicColorField({
         type="button"
         onClick={openPicker}
         aria-label={`Pick ${label}`}
-        className="w-10 h-10 rounded-md border-2 border-[#e5e7eb] hover:border-[var(--life-primary-500)] transition-colors relative overflow-hidden focus:outline-none focus:ring-2 focus:ring-[#2d6fa8]"
+        className="w-10 h-10 rounded-md border-2 border-[var(--life-neutral-100)] hover:border-[var(--life-primary-500)] transition-colors relative overflow-hidden focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)]"
         style={isEmpty ? checkerStyle : { backgroundColor: value }}
       >
         {isEmpty && (
-          <svg className="absolute inset-0 m-auto text-[#9ca3af]" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg className="absolute inset-0 m-auto text-[var(--life-neutral-400)]" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
           </svg>
         )}
@@ -2489,7 +2473,7 @@ function TopicColorField({
       {open && createPortal(
         <div
           ref={popoverRef}
-          className="fixed z-[100] bg-white border border-[#d1d5db] rounded-lg shadow-xl overflow-hidden"
+          className="fixed z-[100] bg-white border border-[var(--life-neutral-200)] rounded-lg shadow-xl overflow-hidden"
           style={{ ...popoverPos, maxWidth: "calc(100vw - 16px)" }}
         >
           <div className="flex">
@@ -2560,7 +2544,7 @@ function TopicColorField({
                         type="button"
                         title={colour}
                         onClick={() => { onChange(colour); setOpen(false); }}
-                        className="w-8 h-8 hover:scale-110 transition-transform focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] rounded-full border border-[#e5e7eb]"
+                        className="w-8 h-8 hover:scale-110 transition-transform focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] rounded-full border border-[var(--life-neutral-100)]"
                         style={{ backgroundColor: colour }}
                         aria-label={colour}
                       />
@@ -2570,7 +2554,7 @@ function TopicColorField({
                 <button
                   type="button"
                   onClick={() => setShowMore((v) => !v)}
-                  className="w-full text-right px-1 pt-1 text-xs text-[#374151] hover:text-[#111827] transition-colors"
+                  className="w-full text-right px-1 pt-1 text-xs text-[var(--life-neutral-700)] hover:text-[var(--life-neutral-850)] transition-colors"
                 >
                   {showMore ? "less" : "more"}
                 </button>
@@ -2579,19 +2563,19 @@ function TopicColorField({
           </div>
 
           {showMore && (
-            <div className="p-2 flex flex-col gap-2 border-t border-[#e5e7eb]">
+            <div className="p-2 flex flex-col gap-2 border-t border-[var(--life-neutral-100)]">
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   title={originalValueRef.current || "none"}
                   onClick={() => commitHexDraft(originalValueRef.current || "#000000")}
-                  className="w-7 h-7 rounded border border-[#e5e7eb] shrink-0 relative overflow-hidden"
+                  className="w-7 h-7 rounded border border-[var(--life-neutral-100)] shrink-0 relative overflow-hidden"
                   style={originalValueRef.current ? { backgroundColor: originalValueRef.current } : checkerStyle}
                   aria-label="Revert to previous colour"
                 />
                 <button
                   type="button"
-                  className="w-7 h-7 rounded border border-[#e5e7eb] shrink-0 relative overflow-hidden"
+                  className="w-7 h-7 rounded border border-[var(--life-neutral-100)] shrink-0 relative overflow-hidden"
                   style={value ? { backgroundColor: value } : checkerStyle}
                   aria-label="Current colour"
                 />
@@ -2603,13 +2587,13 @@ function TopicColorField({
                   onKeyDown={(e) => { if (e.key === "Enter") commitHexDraft((e.target as HTMLInputElement).value); }}
                   maxLength={7}
                   placeholder="#000000"
-                  className="flex-1 border border-[#e5e7eb] rounded px-1.5 py-1 text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-[#2d6fa8]"
+                  className="life-field"
                 />
               </div>
               <button
                 type="button"
                 onClick={cancelSelection}
-                className="w-full px-2 py-1 text-[11px] border border-[#e5e7eb] rounded text-[#374151] hover:bg-[#f9fafb] transition-colors"
+                className="w-full px-2 py-1 text-[11px] border border-[var(--life-neutral-100)] rounded text-[var(--life-neutral-700)] hover:bg-[var(--life-neutral-020)] transition-colors"
               >
                 Cancel selection
               </button>
@@ -2654,7 +2638,7 @@ function ExternalAssetModal({
           <button
             type="button"
             onClick={onCancel}
-            className="w-7 h-7 rounded-md border border-[var(--life-neutral-200)] text-[var(--life-neutral-500)] hover:bg-[var(--life-neutral-050)] flex items-center justify-center cursor-pointer"
+            className="life-icon-btn life-icon-btn--xs"
             aria-label="Close external asset dialog"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -2664,19 +2648,19 @@ function ExternalAssetModal({
           </button>
         </div>
         <div className="px-5 py-4 flex flex-col gap-3">
-          <label className="text-sm font-semibold text-[#374151]">External asset URL</label>
+          <label className="text-sm font-semibold text-[var(--life-neutral-700)]">External asset URL</label>
           <input
             type="url"
             value={value}
             onChange={(event) => setValue(event.target.value)}
             placeholder="https://example.com/image.png"
-            className="w-full border border-[#d1d5db] rounded-[8px] px-3 py-2 text-sm text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent"
+            className="life-field"
           />
           <p className="text-[13px] text-[var(--life-neutral-300)]">Paste an absolute URL to use an externally hosted image.</p>
         </div>
         <div className="px-5 py-4 border-t border-[var(--life-neutral-200)] flex items-center justify-end gap-2.5">
-          <button type="button" onClick={onCancel} className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors cursor-pointer">Cancel</button>
-          <button type="button" onClick={() => onSave(value.trim())} className="px-4 py-2 text-sm font-medium text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors cursor-pointer">Save External Asset</button>
+          <button type="button" onClick={onCancel} className="life-btn life-btn--secondary">Cancel</button>
+          <button type="button" onClick={() => onSave(value.trim())} className="life-btn life-btn--primary">Save External Asset</button>
         </div>
       </div>
     </div>,
@@ -2742,7 +2726,7 @@ function SaveAsTemplateModal({
           <button
             type="button"
             onClick={onCancel}
-            className="w-7 h-7 rounded-md border border-[var(--life-neutral-200)] text-[var(--life-neutral-500)] hover:bg-[var(--life-neutral-050)] flex items-center justify-center cursor-pointer"
+            className="life-icon-btn life-icon-btn--xs"
             aria-label="Close save template dialog"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -2753,23 +2737,23 @@ function SaveAsTemplateModal({
         </div>
         <div className="px-5 py-4 flex flex-col gap-3 max-h-[65vh] overflow-y-auto">
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-semibold text-[#374151]">Name of template</label>
+            <label className="text-sm font-semibold text-[var(--life-neutral-700)]">Name of template</label>
             <input
               type="text"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
               placeholder={`Name for the ${levelLabel} template`}
-              className="w-full border border-[#d1d5db] rounded-[8px] px-3 py-2 text-sm text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent"
+              className="life-field"
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-semibold text-[#374151]">Description</label>
+            <label className="text-sm font-semibold text-[var(--life-neutral-700)]">Description</label>
             <input
               type="text"
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               placeholder={`Description for the ${levelLabel} template`}
-              className="w-full border border-[#d1d5db] rounded-[8px] px-3 py-2 text-sm text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent"
+              className="life-field"
             />
           </div>
           <label className="flex items-center gap-2 cursor-pointer select-none group">
@@ -2778,32 +2762,31 @@ function SaveAsTemplateModal({
               checked={isShared}
               onChange={(event) => setIsShared(event.target.checked)}
               aria-label="Share with all users"
-              className="sr-only peer"
+              className="life-check mt-0.5"
             />
-            <CheckboxIndicator checked={isShared} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
-            <span className="text-sm font-semibold text-[#374151]">Share with all users</span>
+            <span className="text-sm font-semibold text-[var(--life-neutral-700)]">Share with all users</span>
           </label>
           <p className="text-[12px] text-[var(--life-neutral-300)] -mt-1">
             Controls whether colleagues can see this template from the "Shared Templates" filter.
           </p>
           {!isShared && (
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-semibold text-[#374151]">Share with specific users</label>
+              <label className="text-sm font-semibold text-[var(--life-neutral-700)]">Share with specific users</label>
               <input
                 type="text"
                 value={emailInput}
                 onChange={(event) => setEmailInput(event.target.value)}
                 placeholder="Search by email"
-                className="w-full border border-[#d1d5db] rounded-[8px] px-3 py-2 text-sm text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent"
+                className="life-field"
               />
               {emailSuggestions.length > 0 && (
-                <div className="border border-[#d1d5db] rounded-[8px] divide-y divide-[#e5e7eb] max-h-32 overflow-y-auto">
+                <div className="border border-[var(--life-neutral-200)] rounded-[8px] divide-y divide-[var(--life-neutral-100)] max-h-32 overflow-y-auto">
                   {emailSuggestions.map((user) => (
                     <button
                       key={user._id}
                       type="button"
                       onClick={() => addCollaborator(user)}
-                      className="w-full text-left px-3 py-1.5 text-[13px] text-[#374151] hover:bg-[#f9fafb] cursor-pointer"
+                      className="w-full text-left px-3 py-1.5 text-[13px] text-[var(--life-neutral-700)] hover:bg-[var(--life-neutral-020)] cursor-pointer"
                     >
                       {user.email}
                     </button>
@@ -2815,13 +2798,13 @@ function SaveAsTemplateModal({
                   {collaborators.map((collaborator) => (
                     <span
                       key={collaborator.userId}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#eef2f6] text-[12px] text-[#374151]"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--life-neutral-050)] text-[12px] text-[var(--life-neutral-700)]"
                     >
                       {collaborator.email}
                       <button
                         type="button"
                         onClick={() => removeCollaborator(collaborator.userId)}
-                        className="text-[#9ca3af] hover:text-[#374151] cursor-pointer"
+                        className="text-[var(--life-neutral-400)] hover:text-[var(--life-neutral-700)] cursor-pointer"
                         aria-label={`Remove ${collaborator.email}`}
                       >
                         ×
@@ -2832,17 +2815,17 @@ function SaveAsTemplateModal({
               )}
             </div>
           )}
-          {errorMessage && <p className="text-[13px] text-[#b42318]">{errorMessage}</p>}
+          {errorMessage && <p className="text-[13px] text-[var(--life-critical-600)]">{errorMessage}</p>}
         </div>
         <div className="px-5 py-4 border-t border-[var(--life-neutral-200)] flex items-center justify-end gap-2.5">
-          <button type="button" onClick={onCancel} className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors cursor-pointer">
+          <button type="button" onClick={onCancel} className="life-btn life-btn--secondary">
             Cancel
           </button>
           <button
             type="button"
             disabled={isSaving || !title.trim()}
             onClick={() => onDone({ title, description, isShared, shareWithUsers: collaborators.map((c) => c.userId) })}
-            className="px-4 py-2 text-sm font-medium text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            className="life-btn life-btn--primary"
           >
             {isSaving ? "Saving…" : "Done"}
           </button>
@@ -3359,6 +3342,7 @@ interface CourseEditorProps {
   initialTheme?: string;
   initialMenu?: string;
   initialPageId?: string;
+  initialAiTopic?: string;
 }
 
 export default function CourseEditor({
@@ -3368,9 +3352,21 @@ export default function CourseEditor({
   initialTheme = "LIFE Theme",
   initialMenu = "LIFE Menu",
   initialPageId,
+  initialAiTopic,
 }: CourseEditorProps) {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [isSamaritanOpen, setIsSamaritanOpen] = useState(!!initialAiTopic);
+  // While Samaritan applies an approved change the whole editor is inert: nothing
+  // can be typed or saved until the reload has put Samaritan's changes on screen,
+  // so that reload can never replace edits made in the meantime. (The panel itself
+  // is portaled to <body>, outside this element, and stays usable.)
+  const [isSamaritanApplying, setIsSamaritanApplying] = useState(false);
+  const editorRootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = editorRootRef.current as (HTMLDivElement & { inert?: boolean }) | null;
+    if (el) el.inert = isSamaritanApplying;
+  }, [isSamaritanApplying]);
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
   const [leftPanelWidth, setLeftPanelWidth] = useState(LEFT_PANEL_DEFAULT_WIDTH);
   const [isResizingLeftPanel, setIsResizingLeftPanel] = useState(false);
@@ -3978,6 +3974,7 @@ export default function CourseEditor({
                 ? "page"
                 : "menu"
       );
+      return true;
     } catch (error) {
       if (!isCurrentRequest()) return;
 
@@ -3997,6 +3994,7 @@ export default function CourseEditor({
       setStructureLoadError(
         error instanceof Error ? error.message : "Failed to load course structure"
       );
+      return false;
     } finally {
       if (isCurrentRequest()) {
         setIsLoadingStructure(false);
@@ -5010,12 +5008,12 @@ export default function CourseEditor({
          spaced from the border. */
       .adapt-authoring-level-actions {
         position: absolute;
-        top: 0.5rem;
+        top: 4px;
         right: 8px;
         display: flex;
         align-items: center;
-        gap: 2px;
-        height: 15px;
+        gap: 4px;
+        height: 24px;
         z-index: 6;
       }
 
@@ -5023,32 +5021,51 @@ export default function CourseEditor({
          permanent .block__header-inner padding rule above) — match it so
          the icons still land level with the label text, not the border. */
       .adapt-authoring-editing-active .block__header-inner .adapt-authoring-level-actions {
-        top: 10px;
+        top: 6px;
       }
 
+      /* LIFE icon button (24px overlay size). The preview frame does not load
+         the Studio stylesheet, so values are the LIFE tokens as literals:
+         neutral-600 #5E5E5E, neutral-850 #262626, primary-050 #E3F5FC,
+         primary-100 #D4E9F2, primary-400 #519DBD, critical-050 #FEECF1,
+         critical-100 #FDDEE2, critical-600 #B42536. */
       .adapt-authoring-level-action-btn {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 18px;
-        height: 18px;
+        width: 24px;
+        height: 24px;
         margin: 0;
         padding: 0;
         border: none;
-        border-radius: 3px;
+        border-radius: 4px;
         background: transparent;
-        color: #9ca3af;
+        color: #5E5E5E;
         cursor: pointer;
+        transition: background-color 120ms ease, color 120ms ease;
       }
 
       .adapt-authoring-level-action-btn:hover {
-        background: var(--life-primary-100, #dbeafe);
-        color: #111827;
+        background: #E3F5FC;
+        color: #262626;
+      }
+
+      .adapt-authoring-level-action-btn:active {
+        background: #D4E9F2;
+      }
+
+      .adapt-authoring-level-action-btn:focus-visible {
+        outline: 2px solid #519DBD;
+        outline-offset: 1px;
       }
 
       .adapt-authoring-level-action-btn--danger:hover {
-        background: #fef2f2;
-        color: #ef4444;
+        background: #FEECF1;
+        color: #B42536;
+      }
+
+      .adapt-authoring-level-action-btn--danger:active {
+        background: #FDDEE2;
       }
 
       /* Hover-only preview (level not actually SELECTED yet) — icons show
@@ -5434,6 +5451,7 @@ export default function CourseEditor({
           actions.insertBefore(colorBtn, actions.firstChild);
         }
         colorBtn.title = "Set Color Label";
+        colorBtn.setAttribute("aria-label", "Set Color Label");
         const colorLabelValue = getColorLabelForLevel(level, ids);
         colorBtn.setAttribute("data-preview-color-label-current", colorLabelValue);
         colorBtn.style.color = colorLabelValue ? (COLOR_LABEL_HEX[colorLabelValue] || "") : "";
@@ -5452,6 +5470,7 @@ export default function CourseEditor({
           actions.appendChild(copyBtn);
         }
         copyBtn.title = `Copy ${toBadgeLabel(level)}`;
+        copyBtn.setAttribute("aria-label", copyBtn.title);
       } else if (copyBtn) {
         copyBtn.remove();
       }
@@ -5483,6 +5502,7 @@ export default function CourseEditor({
         actions.appendChild(templateBtn);
       }
       templateBtn.title = `Save ${toBadgeLabel(level)} as template`;
+      templateBtn.setAttribute("aria-label", templateBtn.title);
 
       let deleteBtn = actions.querySelector<HTMLButtonElement>("[data-preview-delete-node-btn]");
       if (!deleteBtn) {
@@ -5494,6 +5514,7 @@ export default function CourseEditor({
         actions.appendChild(deleteBtn);
       }
       deleteBtn.title = `Delete ${toBadgeLabel(level)}`;
+      deleteBtn.setAttribute("aria-label", deleteBtn.title);
 
       return actions;
     };
@@ -12500,8 +12521,41 @@ export default function CourseEditor({
   const loginName = user?.username || user?.email || "Not signed in";
 
   return (
-    <div className="flex flex-col h-screen bg-white overflow-hidden">
+    <div ref={editorRootRef} aria-busy={isSamaritanApplying} className="flex flex-col h-screen bg-white overflow-hidden">
+      {courseId && courseId !== "new-course" && (
+        <SamaritanWorkspace
+          courseId={courseId}
+          selectedBlockId={selectedBlockId}
+          selectedComponentId={selectedComponentId}
+          hasCanvasSelection={hasCanvasSelection}
+          autoSendMessage={initialAiTopic}
+          open={isSamaritanOpen}
+          onOpenChange={setIsSamaritanOpen}
+          onApplyingChange={setIsSamaritanApplying}
+          anchorId="page-editor-top-bar"
+          writeBlockedReason={
+            hasUnsavedChanges ? "You have unsaved changes. Save them first, so edits made by Samaritan do not replace them." : null
+          }
+          // A reload that reports failure must reach the panel: the editor then stays
+          // locked (and offers a retry) instead of unlocking on stale content.
+          onExecuted={async (componentId) => {
+            const ok = await loadStructureFromDatabase({
+              pageId: selectedPageId,
+              articleId: selectedArticleId,
+              blockId: selectedBlockId,
+              componentId
+            });
+            if (ok === false) throw new Error("Failed to reload the course structure");
+          }}
+          onStructureChanged={async () => {
+            const ok = await loadStructureFromDatabase({ pageId: selectedPageId, articleId: selectedArticleId, blockId: selectedBlockId });
+            if (ok === false) throw new Error("Failed to reload the course structure");
+          }}
+        />
+      )}
       <PageEditorTopBar
+        isSamaritanOpen={isSamaritanOpen}
+        onToggleSamaritan={courseId && courseId !== "new-course" ? () => setIsSamaritanOpen((o) => !o) : undefined}
         courseTitle={courseTitle}
         onCourseTitleChange={setCourseTitle}
         onToggleLeftPanel={() => setLeftPanelOpen((o) => !o)}
@@ -12586,22 +12640,22 @@ export default function CourseEditor({
         {/* Canvas */}
         <main
           ref={canvasRef}
-          className="flex-1 min-w-0 bg-[#F2F2F2] overflow-y-auto overflow-x-hidden relative"
+          className="flex-1 min-w-0 bg-[var(--life-neutral-050)] overflow-y-auto overflow-x-hidden relative"
           onClick={handleCanvasClick}
         >
           {isLoadingStructure && !menuPageCreated ? (
             <div className="flex items-center justify-center h-full">
-              <div className="text-sm text-[#6b7280]">Loading course structure...</div>
+              <div className="text-sm text-[var(--life-neutral-600)]">Loading course structure...</div>
             </div>
           ) : !menuPageCreated ? (
             <div className="flex items-center justify-center h-full">
               <div className="flex flex-col items-center gap-5 text-center px-6 select-none">
                 <div className="w-20 h-20 rounded-2xl bg-white border border-[#E5E5E5] flex items-center justify-center shadow-sm">
-                  <MaskIcon file="add-icon.svg" className="block w-[24px] h-[24px] shrink-0 bg-[#ababab]" />
+                  <MaskIcon file="add-icon.svg" className="block w-[24px] h-[24px] shrink-0 bg-[var(--life-neutral-300)]" />
                 </div>
                 <div className="space-y-2">
-                  <h2 className="text-2xl font-bold text-[#1A1A1A] font-[Lato]">Create Your Menu Page</h2>
-                  <p className="text-sm text-[#ABABAB] max-w-xs leading-relaxed font-[Lato]">
+                  <h2 className="text-2xl font-bold text-[var(--life-base-black)] font-[Lato]">Create Your Menu Page</h2>
+                  <p className="text-sm text-[var(--life-neutral-300)] max-w-xs leading-relaxed font-[Lato]">
                     Start by creating a menu page for your course. This will be the landing
                     page where learners navigate through your content.
                   </p>
@@ -12609,7 +12663,7 @@ export default function CourseEditor({
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); handleMenuPageCreate(); }}
-                  className="flex items-center gap-2.5 px-6 py-3 bg-[#2E7FA1] hover:bg-[#266580] active:bg-[#1D4C60] text-white text-base font-bold rounded-lg transition-colors font-[Lato]"
+                  className="life-btn life-btn--primary"
                 >
                   <MaskIcon file="add-icon.svg" className="block w-[16px] h-[16px] shrink-0 bg-current" />
                   Create Menu Page
@@ -12618,7 +12672,7 @@ export default function CourseEditor({
             </div>
           ) : (
             <div className="h-full flex flex-col min-h-0 p-2">
-              <div className="relative flex-1 min-h-0 overflow-hidden rounded-[18px] border border-[#d8dee6] bg-white">
+              <div className="relative flex-1 min-h-0 overflow-hidden rounded-[18px] border border-[var(--life-neutral-200)] bg-white">
                 <div className="h-full w-full box-border p-2">
                   {previewSrc ? (
                     <iframe
@@ -12631,7 +12685,7 @@ export default function CourseEditor({
                       className="block h-full w-full border-0 bg-white"
                     />
                   ) : (
-                    <div className="flex h-full items-center justify-center px-6 text-center text-sm text-[#6b7280]">
+                    <div className="flex h-full items-center justify-center px-6 text-center text-sm text-[var(--life-neutral-600)]">
                       Preview is not available until this course and tenant are loaded.
                     </div>
                   )}
@@ -12639,20 +12693,20 @@ export default function CourseEditor({
 
                 {isPreviewLoading && (
                   <div className="absolute inset-0 flex items-center justify-center bg-white/85 backdrop-blur-[2px]">
-                    <div className="rounded-xl border border-[#d8dee6] bg-white px-5 py-4 text-center shadow-sm">
-                      <p className="text-sm font-semibold text-[#1f2937]">{isPreviewBuilding ? "Building course preview..." : "Refreshing course preview..."}</p>
-                      <p className="mt-1 text-xs text-[#6b7280]">{isPreviewBuilding ? "The real preview will update when generation completes." : "The preview will update with the latest course content."}</p>
+                    <div className="rounded-xl border border-[var(--life-neutral-200)] bg-white px-5 py-4 text-center shadow-sm">
+                      <p className="text-sm font-semibold text-[var(--life-neutral-850)]">{isPreviewBuilding ? "Building course preview..." : "Refreshing course preview..."}</p>
+                      <p className="mt-1 text-xs text-[var(--life-neutral-600)]">{isPreviewBuilding ? "The real preview will update when generation completes." : "The preview will update with the latest course content."}</p>
                     </div>
                   </div>
                 )}
 
                 {titleValidationWarning && (
-                  <div className="absolute inset-x-4 top-4 rounded-xl border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm text-[#991b1b] shadow-sm flex items-start justify-between gap-3">
+                  <div className="absolute inset-x-4 top-4 rounded-xl border border-[var(--life-critical-100)] bg-[var(--life-critical-050)] px-4 py-3 text-sm text-[var(--life-critical-600)] shadow-sm flex items-start justify-between gap-3">
                     <span>{titleValidationWarning}</span>
                     <button
                       type="button"
                       onClick={() => setTitleValidationWarning(null)}
-                      className="shrink-0 text-[#991b1b] hover:opacity-70"
+                      className="shrink-0 text-[var(--life-critical-600)] hover:opacity-70"
                       aria-label="Dismiss"
                     >
                       ×
@@ -12669,11 +12723,11 @@ export default function CourseEditor({
           <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
             <div className="bg-white rounded-lg max-w-4xl max-h-[90vh] overflow-auto w-full shadow-xl">
               <div className="flex items-center justify-between p-6 border-b border-[#E5E5E5] sticky top-0 bg-white">
-                <h2 className="text-lg font-semibold text-[#1A1A1A]">Course Structure Map</h2>
+                <h2 className="text-lg font-semibold text-[var(--life-base-black)]">Course Structure Map</h2>
                 <button
                   type="button"
                   onClick={() => setShowStructureMap(false)}
-                  className="text-[#ABABAB] hover:text-[#1A1A1A] text-xl font-semibold"
+                  className="text-[var(--life-neutral-300)] hover:text-[var(--life-base-black)] text-xl font-semibold"
                 >
                   ✕
                 </button>
@@ -12718,7 +12772,7 @@ export default function CourseEditor({
             {rightPanelOpen ? (
               <aside
                 ref={rightPanelContainerRef}
-                className="fixed md:relative inset-y-0 right-0 z-40 md:z-auto h-full w-[min(300px,100vw)] md:w-[var(--properties-panel-width)] min-w-0 bg-white border-l border-[#d8dee6] overflow-hidden shrink-0 flex flex-col"
+                className="fixed md:relative inset-y-0 right-0 z-40 md:z-auto h-full w-[min(300px,100vw)] md:w-[var(--properties-panel-width)] min-w-0 bg-white border-l border-[var(--life-neutral-200)] overflow-hidden shrink-0 flex flex-col"
                 style={{ "--properties-panel-width": `${rightPanelWidth}px` } as CSSProperties}
               >
                 <div
@@ -12744,14 +12798,14 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                       setRightPanelWidth(RIGHT_PANEL_MIN_WIDTH);
                     }
                   }}
-                  className={`group hidden md:flex absolute inset-y-0 left-0 z-30 w-2 cursor-col-resize touch-none items-center justify-center outline-none ${isResizingRightPanel ? "bg-[#2e7fa1]/10" : ""}`}
+                  className={`group hidden md:flex absolute inset-y-0 left-0 z-30 w-2 cursor-col-resize touch-none items-center justify-center outline-none ${isResizingRightPanel ? "bg-[var(--life-primary-500)]/10" : ""}`}
                 >
-                  <span className={`h-12 w-1 rounded-full transition-colors ${isResizingRightPanel ? "bg-[#2e7fa1]" : "bg-[#94a3b8] group-hover:bg-[#2e7fa1] group-focus-visible:bg-[#2e7fa1]"}`} />
+                  <span className={`h-12 w-1 rounded-full transition-colors ${isResizingRightPanel ? "bg-[var(--life-primary-500)]" : "bg-[#94a3b8] group-hover:bg-[var(--life-primary-500)] group-focus-visible:bg-[var(--life-primary-500)]"}`} />
                 </div>
                 <button
                   type="button"
                   onClick={() => setRightPanelOpen(false)}
-                  className="w-full h-[56px] shrink-0 border-b border-[#d8dee6] bg-white px-3.5 flex items-center gap-2 text-[#3b4753]"
+                  className="w-full h-[56px] shrink-0 border-b border-[var(--life-neutral-200)] bg-white px-3.5 flex items-center gap-2 text-[#3b4753]"
                   aria-label="Collapse properties"
                   title="Collapse properties"
                 >
@@ -12789,7 +12843,7 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                 const rowClass = (active: boolean) =>
                   `w-full flex items-center gap-2 px-3.5 h-12 border-b border-[#e6ebf0] transition-colors ${
                     active
-                      ? "bg-[#f2f8fc] text-[#1f2937]"
+                      ? "bg-[#f2f8fc] text-[var(--life-neutral-850)]"
                       : "bg-white text-[#9aa7b2] opacity-40 cursor-not-allowed"
                   }`;
 
@@ -12800,7 +12854,7 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                   active ? null : (
                     <span
                       role="tooltip"
-                      className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 z-[70] w-max max-w-[220px] rounded-[8px] bg-[#215369] px-3 py-1 text-[11px] font-medium text-[#ffffff] opacity-0 shadow-lg transition-opacity group-hover:opacity-100"
+                      className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 z-[70] w-max max-w-[220px] rounded-[8px] bg-[#215369] px-3 py-1 text-[11px] font-medium text-[var(--life-base-white)] opacity-0 shadow-lg transition-opacity group-hover:opacity-100"
                     >
                       Use left/middle panel to change selection
                     </span>
@@ -12860,7 +12914,7 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                       aria-label="Copy topic id"
                                       title="Copy topic id"
                                       onClick={() => handleCopyTopicId(page.id)}
-                                      className={`w-full px-3 py-2 text-sm rounded-lg border transition-colors flex items-center justify-between gap-2 cursor-pointer ${isCopied ? "bg-[var(--life-positive-050)] border-[var(--life-positive-500)] text-[var(--life-positive-500)]" : "bg-white border-[var(--life-neutral-300)] text-[var(--life-base-black)] hover:bg-[#f8fafc] hover:border-[var(--life-primary-500)] hover:text-[var(--life-primary-500)]"}`}
+                                      className={`w-full px-3 py-2 text-sm rounded-lg border transition-colors flex items-center justify-between gap-2 cursor-pointer ${isCopied ? "bg-[var(--life-positive-050)] border-[var(--life-positive-500)] text-[var(--life-positive-500)]" : "bg-white border-[var(--life-neutral-300)] text-[var(--life-base-black)] hover:bg-[var(--life-neutral-020)] hover:border-[var(--life-primary-500)] hover:text-[var(--life-primary-500)]"}`}
                                     >
                                       <span className="truncate text-left">{page.id}</span>
                                       {isCopied ? (
@@ -12882,7 +12936,7 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                   </div>
                                 );
                               })()}
-                              <p className="text-xs text-[#6b7280]">Unique identifier for this topic. Click to copy.</p>
+                              <p className="text-xs text-[var(--life-neutral-600)]">Unique identifier for this topic. Click to copy.</p>
                             </div>
                             <TopicTitleField
                                   hint={getSchemaHint(getContentFieldSchema("contentobject", "title"))}
@@ -12899,7 +12953,7 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                             <button
                               type="button"
                               onClick={() => handleOpenSaveAsTemplate("topic", page.id)}
-                              className="mt-1 inline-flex items-center gap-2 px-3 py-1.5 text-[13px] font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-md hover:bg-[#f9fafb] transition-colors cursor-pointer self-start"
+                              className="life-btn life-btn--secondary"
                             >
                               <MaskIcon file="template-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
                               Save as template
@@ -12959,7 +13013,7 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                       checked={Boolean(value)}
                                       onChange={(checked) => onChange(fieldKey, checked)}
                                     />
-                                    <p className="pl-6 text-[11px] leading-relaxed text-[#6b7280]">
+                                    <p className="pl-6 text-[11px] leading-relaxed text-[var(--life-neutral-600)]">
                                       Enable pulsing animation on both navigator buttons (runs for a limited time).
                                     </p>
                                   </div>
@@ -13195,7 +13249,7 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                       aria-label="Copy section id"
                                       title="Copy section id"
                                       onClick={() => handleCopySectionId(article.id)}
-                                      className={`w-full px-3 py-2 text-sm rounded-lg border transition-colors flex items-center justify-between gap-2 cursor-pointer ${isCopied ? "bg-[var(--life-positive-050)] border-[var(--life-positive-500)] text-[var(--life-positive-500)]" : "bg-white border-[var(--life-neutral-300)] text-[var(--life-base-black)] hover:bg-[#f8fafc] hover:border-[var(--life-primary-500)] hover:text-[var(--life-primary-500)]"}`}
+                                      className={`w-full px-3 py-2 text-sm rounded-lg border transition-colors flex items-center justify-between gap-2 cursor-pointer ${isCopied ? "bg-[var(--life-positive-050)] border-[var(--life-positive-500)] text-[var(--life-positive-500)]" : "bg-white border-[var(--life-neutral-300)] text-[var(--life-base-black)] hover:bg-[var(--life-neutral-020)] hover:border-[var(--life-primary-500)] hover:text-[var(--life-primary-500)]"}`}
                                     >
                                       <span className="truncate text-left">{article.id}</span>
                                       {isCopied ? (
@@ -13210,7 +13264,7 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                       </div>
                                     )}
                                   </div>
-                                  <p className="text-xs text-[#6b7280]">Unique identifier for this section. Click to copy.</p>
+                                  <p className="text-xs text-[var(--life-neutral-600)]">Unique identifier for this section. Click to copy.</p>
                                 </div>
                                 <TopicTitleField
                                   hint={getSchemaHint(getContentFieldSchema("article", "title"))}
@@ -13227,7 +13281,7 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                 <button
                                   type="button"
                                   onClick={() => handleOpenSaveAsTemplate("section", article.id)}
-                                  className="mt-1 inline-flex items-center gap-2 px-3 py-1.5 text-[13px] font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-md hover:bg-[#f9fafb] transition-colors cursor-pointer self-start"
+                                  className="life-btn life-btn--secondary"
                                 >
                                   <MaskIcon file="template-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
                                   Save as template
@@ -13409,7 +13463,7 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                       aria-label="Copy content group id"
                                       title="Copy content group id"
                                       onClick={() => handleCopyBlockId(block.id)}
-                                      className={`w-full px-3 py-2 text-sm rounded-lg border transition-colors flex items-center justify-between gap-2 cursor-pointer ${isCopied ? "bg-[var(--life-positive-050)] border-[var(--life-positive-500)] text-[var(--life-positive-500)]" : "bg-white border-[var(--life-neutral-300)] text-[var(--life-base-black)] hover:bg-[#f8fafc] hover:border-[var(--life-primary-500)] hover:text-[var(--life-primary-500)]"}`}
+                                      className={`w-full px-3 py-2 text-sm rounded-lg border transition-colors flex items-center justify-between gap-2 cursor-pointer ${isCopied ? "bg-[var(--life-positive-050)] border-[var(--life-positive-500)] text-[var(--life-positive-500)]" : "bg-white border-[var(--life-neutral-300)] text-[var(--life-base-black)] hover:bg-[var(--life-neutral-020)] hover:border-[var(--life-primary-500)] hover:text-[var(--life-primary-500)]"}`}
                                     >
                                       <span className="truncate text-left">{block.id}</span>
                                       {isCopied ? (
@@ -13424,7 +13478,7 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                       </div>
                                     )}
                                   </div>
-                                  <p className="text-xs text-[#6b7280]">Unique identifier for this content group. Click to copy.</p>
+                                  <p className="text-xs text-[var(--life-neutral-600)]">Unique identifier for this content group. Click to copy.</p>
                                 </div>
                                 <TopicTitleField
                                   hint={getSchemaHint(getContentFieldSchema("block", "title"))}
@@ -13441,7 +13495,7 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                 <button
                                   type="button"
                                   onClick={() => handleOpenSaveAsTemplate("group", block.id)}
-                                  className="mt-1 inline-flex items-center gap-2 px-3 py-1.5 text-[13px] font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-md hover:bg-[#f9fafb] transition-colors cursor-pointer self-start"
+                                  className="life-btn life-btn--secondary"
                                 >
                                   <MaskIcon file="template-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
                                   Save as template
@@ -13643,7 +13697,7 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                       aria-label="Copy component id"
                                       title="Copy component id"
                                       onClick={() => handleCopyComponentId(component.id)}
-                                      className={`w-full px-3 py-2 text-sm rounded-lg border transition-colors flex items-center justify-between gap-2 cursor-pointer ${isCopied ? "bg-[var(--life-positive-050)] border-[var(--life-positive-500)] text-[var(--life-positive-500)]" : "bg-white border-[var(--life-neutral-300)] text-[var(--life-base-black)] hover:bg-[#f8fafc] hover:border-[var(--life-primary-500)] hover:text-[var(--life-primary-500)]"}`}
+                                      className={`w-full px-3 py-2 text-sm rounded-lg border transition-colors flex items-center justify-between gap-2 cursor-pointer ${isCopied ? "bg-[var(--life-positive-050)] border-[var(--life-positive-500)] text-[var(--life-positive-500)]" : "bg-white border-[var(--life-neutral-300)] text-[var(--life-base-black)] hover:bg-[var(--life-neutral-020)] hover:border-[var(--life-primary-500)] hover:text-[var(--life-primary-500)]"}`}
                                     >
                                       <span className="truncate text-left">{component.id}</span>
                                       {isCopied ? (
@@ -13658,7 +13712,7 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                       </div>
                                     )}
                                   </div>
-                                  <p className="text-xs text-[#6b7280]">Unique identifier for this component. Click to copy.</p>
+                                  <p className="text-xs text-[var(--life-neutral-600)]">Unique identifier for this component. Click to copy.</p>
                                 </div>
                                 <TopicTitleField
                                   hint={getSchemaHint(getContentFieldSchema("component", "title"))}
@@ -13675,7 +13729,7 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                 <button
                                   type="button"
                                   onClick={() => handleOpenSaveAsTemplate("component", component.id)}
-                                  className="mt-1 inline-flex items-center gap-2 px-3 py-1.5 text-[13px] font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-md hover:bg-[#f9fafb] transition-colors cursor-pointer self-start"
+                                  className="life-btn life-btn--secondary"
                                 >
                                   <MaskIcon file="template-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
                                   Save as template
@@ -13837,12 +13891,12 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
               </div>
               </aside>
             ) : (
-              <aside className="hidden md:flex h-full w-[56px] bg-white border-l border-[#d8dee6] shrink-0 flex-col items-center py-3">
-                <div className="w-full flex flex-col items-center pb-3 border-b border-[#d8dee6]">
+              <aside className="hidden md:flex h-full w-[56px] bg-white border-l border-[var(--life-neutral-200)] shrink-0 flex-col items-center py-3">
+                <div className="w-full flex flex-col items-center pb-3 border-b border-[var(--life-neutral-200)]">
                   <button
                     type="button"
                     onClick={() => setRightPanelOpen(true)}
-                    className="w-8 h-8 rounded-[6px] flex items-center justify-center text-[#5f6d79] hover:bg-[#f1f5f9] transition-colors"
+                    className="life-icon-btn life-icon-btn--sm"
                     aria-label="Expand properties"
                     title="Expand properties"
                   >

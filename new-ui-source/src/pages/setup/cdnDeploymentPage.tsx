@@ -56,15 +56,15 @@ function Section({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
+    <div className="rounded-xl border border-[var(--life-neutral-100)] bg-white overflow-hidden">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="group w-full flex items-center justify-between gap-3 px-5 py-4 text-left bg-white text-[#111827] hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] transition-colors"
+        className="life-accordion-trigger group !px-5 !min-h-[64px]"
       >
         <div className="flex items-center gap-2.5">
-          <span className="text-[#6b7280]">{icon}</span>
+          <span className="text-[var(--life-neutral-600)]">{icon}</span>
           <h3 className="text-sm font-bold text-current flex items-center gap-1.5">{title}{hint ? <InfoIcon label={title} hint={hint} /> : null}</h3>
         </div>
         <svg
@@ -74,7 +74,7 @@ function Section({
           <polyline points={open ? "6 9 12 15 18 9" : "9 6 15 12 9 18"} />
         </svg>
       </button>
-      {open && <div className="px-5 pb-5 pt-1 border-t border-[#f3f4f6] bg-white flex flex-col gap-3">{children}</div>}
+      {open && <div className="px-5 pb-5 pt-1 border-t border-[var(--life-neutral-050)] bg-white flex flex-col gap-3">{children}</div>}
     </div>
   );
 }
@@ -109,12 +109,8 @@ function ToggleSwitch({ checked, onChange, label, hint, disabled = false, ariaLa
         aria-labelledby={ariaLabel || stringLabel ? undefined : labelId}
         disabled={disabled}
         onClick={() => !disabled && onChange(!checked)}
-        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] focus:ring-offset-1 ${checked ? "bg-[var(--life-primary-500)]" : "bg-[#d1d5db]"} ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
-      >
-        <span
-          className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${checked ? "translate-x-5" : "translate-x-1"}`}
+        className="life-switch"
         />
-      </button>
     </div>
   );
 }
@@ -132,7 +128,7 @@ function TextField({
         onChange={(e) => onChange(sanitize ? sanitize(e.target.value) : e.target.value)}
         placeholder={placeholder}
         aria-invalid={!!error}
-        className={`w-full px-3 py-2 text-sm rounded-lg border bg-white text-[#111827] focus:outline-none focus:ring-2 focus:border-transparent transition-colors ${error ? "border-[var(--life-error-500)] focus:ring-[var(--life-error-500)]" : "border-[#e5e7eb] focus:ring-[var(--life-primary-500)]"}`}
+        className={`life-field ${error ? "!border-[var(--life-critical-500)]" : ""}`}
       />
       {error ? (
         <p className="text-[11px] text-[var(--life-error-500)] leading-snug">{error}</p>
@@ -154,13 +150,10 @@ function SelectField({
         <select
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full border border-[#e5e7eb] rounded-lg px-3 py-2.5 text-sm text-[#111827] bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] focus:border-transparent pr-8"
+          className="life-field"
         >
           {options.map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
-        <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
       </div>
       {hint && <p className="text-[11px] text-[var(--life-neutral-300)] leading-snug">{hint}</p>}
     
@@ -229,7 +222,7 @@ const STATUS_BADGE: Record<LinkStatus, { label: string; className: string }> = {
   active: { label: "Active", className: "text-[var(--life-positive-500)]" },
   "not-found": { label: "Not found", className: "text-[var(--life-critical-500)]" },
   "network-error": { label: "Network error", className: "text-[var(--life-warning-500)]" },
-  inactive: { label: "Inactive", className: "text-[#9ca3af]" },
+  inactive: { label: "Inactive", className: "text-[var(--life-neutral-400)]" },
 };
 
 // Both the "specific" and "latest" deploy links always end in `<versionfolder>/index.html`
@@ -614,14 +607,14 @@ export function CdnDeploymentPage({
   const courseDeploymentSchema = getSchemaNode(cdnSchema, "_courseDeployment");
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#f7f9fb]">
+    <div className="flex flex-col h-full w-full bg-[var(--life-neutral-020)]">
       {/* Header */}
-      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-start gap-4">
+      <div className="shrink-0 px-6 py-5 bg-white border-b border-[var(--life-neutral-100)] flex items-start gap-4">
         <div>
           <h2 className="text-xl font-bold text-[var(--life-base-black)]">CDN Deployment</h2>
-          <p className="text-sm text-[#6b7280] mt-0.5">Configure where your course is deployed, trigger deployment to publish new versions to the CDN, and restore previous versions when needed.</p>
+          <p className="text-sm text-[var(--life-neutral-600)] mt-0.5">Configure where your course is deployed, trigger deployment to publish new versions to the CDN, and restore previous versions when needed.</p>
           {cdnCliVersion && (
-            <p className="text-xs text-[#9ca3af] mt-2">NPM <span className="font-mono">cdndeploy</span> version: {cdnCliVersion}</p>
+            <p className="text-xs text-[var(--life-neutral-400)] mt-2">NPM <span className="font-mono">cdndeploy</span> version: {cdnCliVersion}</p>
           )}
         </div>
         <div className="ml-auto pt-1">
@@ -632,7 +625,7 @@ export function CdnDeploymentPage({
       <div className="flex-1 overflow-y-auto min-h-0">
         <div className="max-w-2xl px-6 py-6 flex flex-col gap-3">
           {loading || !cfg ? (
-            <div className="flex items-center justify-center py-16 text-sm text-[#6b7280] gap-2">
+            <div className="flex items-center justify-center py-16 text-sm text-[var(--life-neutral-600)] gap-2">
               <Spinner /> Loading CDN deployment settings…
             </div>
           ) : (
@@ -714,7 +707,7 @@ export function CdnDeploymentPage({
                 }
               >
                 {identityMatchesDefault && (
-                  <p className="text-[11px] text-[#9ca3af] leading-snug">
+                  <p className="text-[11px] text-[var(--life-neutral-400)] leading-snug">
                     Before deploying, replace the default Project ID and Course ID with values specific to this
                     course. Trigger CDN Build will remain disabled until both fields are updated.
                   </p>
@@ -726,10 +719,9 @@ export function CdnDeploymentPage({
                     checked={includeExport}
                     onChange={(e) => setIncludeExport(e.target.checked)}
                     aria-label="Include the source code as part of the CDN deployment"
-                    className="sr-only peer"
+                    className="life-check mt-0.5"
                   />
-                  <CheckboxIndicator checked={includeExport} className="mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
-                  <span className="text-sm text-[#374151] flex items-center gap-1.5">
+                  <span className="text-sm text-[var(--life-neutral-700)] flex items-center gap-1.5">
                     Include the <strong>source code</strong> as part of the CDN deployment.
                     <InfoIcon
                       label="Include the source code as part of the CDN deployment"
@@ -745,7 +737,7 @@ export function CdnDeploymentPage({
                     type="button"
                     onClick={() => void loadPreviousLinks(cfg)}
                     disabled={!cfg.isEnabled || linksLoading}
-                    className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold text-[var(--life-base-black)] bg-white border border-[#e5e7eb] hover:bg-[#f9fafb] disabled:opacity-50 transition-colors"
+                    className="life-btn life-btn--secondary"
                   >
                     {linksLoading ? (
                       <Spinner />
@@ -760,24 +752,24 @@ export function CdnDeploymentPage({
                     type="button"
                     onClick={handleTriggerBuild}
                     disabled={!canTrigger}
-                    className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold text-white bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] disabled:opacity-50 transition-colors"
+                    className="life-btn life-btn--primary"
                   >
                     {building && <Spinner />}
                     {building ? "Building…" : "Trigger CDN Build"}
                   </button>
                 </div>
-                {!cfg.isEnabled && <p className="text-xs text-[#9ca3af] -mt-1">Enable the CDN config above to deploy.</p>}
+                {!cfg.isEnabled && <p className="text-xs text-[var(--life-neutral-400)] -mt-1">Enable the CDN config above to deploy.</p>}
 
                 {/* Build output */}
                 {logEntries.length > 0 && (
-                  <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-3 py-2.5 flex flex-col gap-2.5 max-h-64 overflow-y-auto">
+                  <div className="rounded-lg border border-[var(--life-neutral-100)] bg-[var(--life-neutral-020)] px-3 py-2.5 flex flex-col gap-2.5 max-h-64 overflow-y-auto">
                     {logEntries.map((entry) => (
-                      <div key={entry.id} className="text-xs text-[#374151] border-b border-[#f3f4f6] pb-2 last:border-b-0 last:pb-0">
-                        <span className="text-[#9ca3af] mr-2">{entry.timestamp}</span>
+                      <div key={entry.id} className="text-xs text-[var(--life-neutral-700)] border-b border-[var(--life-neutral-050)] pb-2 last:border-b-0 last:pb-0">
+                        <span className="text-[var(--life-neutral-400)] mr-2">{entry.timestamp}</span>
                         {entry.eventType === "link" ? (
                           <div className="mt-1 flex flex-col gap-1">
-                            {entry.triggeredBy && <p className="text-[#6b7280]">Triggered by: {entry.triggeredBy}</p>}
-                            {entry.comment && <p className="italic text-[#6b7280]">Comment: {entry.comment}</p>}
+                            {entry.triggeredBy && <p className="text-[var(--life-neutral-600)]">Triggered by: {entry.triggeredBy}</p>}
+                            {entry.comment && <p className="italic text-[var(--life-neutral-600)]">Comment: {entry.comment}</p>}
                             {entry.specificLink && (
                               <a href={entry.specificLink.href} target="_blank" rel="noreferrer" className="font-semibold text-[var(--life-primary-500)] underline">
                                 {entry.specificLink.label}
@@ -801,21 +793,21 @@ export function CdnDeploymentPage({
                     a completed build; stays hidden (links === null) until then, and is
                     never auto-populated just by saving the config or starting a build. */}
                 {cfg.isEnabled && (linksLoading || links !== null) && (
-                  <div className="rounded-lg border border-[#e5e7eb] overflow-hidden">
+                  <div className="rounded-lg border border-[var(--life-neutral-100)] overflow-hidden">
                     <table className="w-full text-xs">
-                      <thead className="bg-[#f9fafb] text-left">
+                      <thead className="bg-[var(--life-neutral-020)] text-left">
                         <tr>
-                          <th className="px-3 py-2 font-semibold text-[#374151]">Version</th>
-                          <th className="px-3 py-2 font-semibold text-[#374151]">Date of build</th>
-                          <th className="px-3 py-2 font-semibold text-[#374151]">Link Status</th>
-                          <th className="px-3 py-2 font-semibold text-[#374151]">Actions</th>
+                          <th className="px-3 py-2 font-semibold text-[var(--life-neutral-700)]">Version</th>
+                          <th className="px-3 py-2 font-semibold text-[var(--life-neutral-700)]">Date of build</th>
+                          <th className="px-3 py-2 font-semibold text-[var(--life-neutral-700)]">Link Status</th>
+                          <th className="px-3 py-2 font-semibold text-[var(--life-neutral-700)]">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
                         {linksLoading ? (
-                          <tr><td colSpan={4} className="px-3 py-4 text-center text-[#6b7280]"><Spinner className="inline mr-2" />Loading previous versions…</td></tr>
+                          <tr><td colSpan={4} className="px-3 py-4 text-center text-[var(--life-neutral-600)]"><Spinner className="inline mr-2" />Loading previous versions…</td></tr>
                         ) : !links || links.length === 0 ? (
-                          <tr><td colSpan={4} className="px-3 py-4 text-center text-[#6b7280]">No previous versions found.</td></tr>
+                          <tr><td colSpan={4} className="px-3 py-4 text-center text-[var(--life-neutral-600)]">No previous versions found.</td></tr>
                         ) : (
                           links.map((entry) => {
                             const isLatest = entry.entry === "latest";
@@ -828,13 +820,13 @@ export function CdnDeploymentPage({
                             const isExpired = status === "not-found" || status === "inactive";
                             const canRestore = !isLatest && isExpired;
                             return (
-                              <tr key={entry.entry} className={`border-t border-[#f3f4f6] ${isExpired ? "bg-[#fff7e6]" : ""}`}>
+                              <tr key={entry.entry} className={`border-t border-[var(--life-neutral-050)] ${isExpired ? "bg-[#fff7e6]" : ""}`}>
                                 <td className="px-3 py-2">
                                   <a
                                     href={entry.href}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className={isExpired ? "line-through text-[#6b7280]" : "underline text-[var(--life-primary-500)]"}
+                                    className={isExpired ? "line-through text-[var(--life-neutral-600)]" : "underline text-[var(--life-primary-500)]"}
                                   >
                                     {/* Full version-folder name (e.g. "0.0.1.1755500064000"), not the
                                         CLI's truncated 3-part semver (entry.version) — matches what
@@ -842,7 +834,7 @@ export function CdnDeploymentPage({
                                     {entry.entry}
                                   </a>
                                 </td>
-                                <td className="px-3 py-2 text-[#6b7280]">{entry.timestampPretty ?? "—"}</td>
+                                <td className="px-3 py-2 text-[var(--life-neutral-600)]">{entry.timestampPretty ?? "—"}</td>
                                 <td className="px-3 py-2">
                                   <span className={`inline-flex items-center gap-1 font-semibold ${badge.className}`}>
                                     {status === "active" && (
@@ -859,7 +851,7 @@ export function CdnDeploymentPage({
                                       type="button"
                                       disabled={!canRestore || restoringEntry === entry.entry}
                                       onClick={() => void handleRestore(entry)}
-                                      className="inline-flex items-center gap-1 rounded border border-[#d1d5db] px-2 py-0.5 text-[11px] text-[#374151] hover:bg-[#f9fafb] disabled:opacity-40 transition-colors"
+                                      className="inline-flex items-center gap-1 rounded border border-[var(--life-neutral-200)] px-2 py-0.5 text-[11px] text-[var(--life-neutral-700)] hover:bg-[var(--life-neutral-020)] disabled:opacity-40 transition-colors"
                                     >
                                       {restoringEntry === entry.entry && <Spinner />}
                                       Restore
@@ -868,7 +860,7 @@ export function CdnDeploymentPage({
                                       type="button"
                                       disabled={isLatest}
                                       onClick={() => setExpiryTarget((t) => (t === entry.entry ? null : entry.entry))}
-                                      className="inline-flex items-center gap-1 rounded border border-[#d1d5db] px-2 py-0.5 text-[11px] text-[#374151] hover:bg-[#f9fafb] disabled:opacity-40 transition-colors"
+                                      className="inline-flex items-center gap-1 rounded border border-[var(--life-neutral-200)] px-2 py-0.5 text-[11px] text-[var(--life-neutral-700)] hover:bg-[var(--life-neutral-020)] disabled:opacity-40 transition-colors"
                                     >
                                       Set Expiry
                                     </button>
@@ -879,13 +871,13 @@ export function CdnDeploymentPage({
                                         type="date"
                                         value={expiryDate}
                                         onChange={(e) => setExpiryDate(e.target.value)}
-                                        className="px-2 py-1 text-[11px] rounded border border-[#e5e7eb]"
+                                        className="life-field"
                                       />
                                       <button
                                         type="button"
                                         disabled={!expiryDate || expirySaving}
                                         onClick={() => void handleSetExpiry(entry)}
-                                        className="rounded bg-[var(--life-primary-500)] text-white px-2 py-1 text-[11px] disabled:opacity-50"
+                                        className="life-btn life-btn--primary"
                                       >
                                         {expirySaving ? "Saving…" : "Save"}
                                       </button>

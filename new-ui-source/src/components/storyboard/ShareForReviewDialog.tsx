@@ -161,13 +161,7 @@ export default function ShareForReviewDialog({
             }}
             placeholder={loading ? 'Loading users…' : 'Search by name or email…'}
             disabled={loading}
-            className="w-full rounded px-2.5 py-1.5 outline-none"
-            style={{
-              fontSize: 13,
-              border: '1px solid var(--life-color-border-subtle)',
-              background: 'var(--life-color-bg-surface-default)',
-              color: 'var(--life-color-text-default)',
-            }}
+            className="life-field"
           />
           {showSuggestions && !loading && (query.trim().length > 0 || suggestions.length > 0) && (
             <div
@@ -258,14 +252,14 @@ export default function ShareForReviewDialog({
         </div>
 
         <div className="flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="sb-toolbar-btn">
+          <button type="button" onClick={onClose} className="life-btn life-btn--secondary">
             Cancel
           </button>
           <button
             type="button"
             onClick={() => void handleShare()}
             disabled={sharing || loading}
-            className="sb-toolbar-btn sb-toolbar-btn-primary"
+            className="life-btn life-btn--primary"
           >
             {sharing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
             Share

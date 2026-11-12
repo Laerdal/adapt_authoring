@@ -1,4 +1,4 @@
-//   Single row: Add Heading · Add Content · (Ask Samaritan, right-aligned)
+//   Single row: Add Heading · Add Content · (Enrich with AI, right-aligned)
 
 import type { StoryboardInsertKind } from '@/types/storyboard';
 import AddContentMenu from './AddContentMenu';
@@ -9,10 +9,12 @@ export default function DocumentToolbar({
   onInsert,
   onInsertHeading,
   onEnrichAI,
+  enrichOpen = false,
 }: {
   onInsert: (kind: StoryboardInsertKind) => void;
   onInsertHeading: (level: number) => void;
   onEnrichAI: () => void;
+  enrichOpen?: boolean;
 }) {
   return (
     <div
@@ -31,9 +33,10 @@ export default function DocumentToolbar({
           <button
             type="button"
             onClick={onEnrichAI}
-            className="sb-toolbar-btn sb-toolbar-btn-samaritan"
+            aria-pressed={enrichOpen}
+            className="life-btn life-btn--secondary sb-toolbar-btn-samaritan"
           >
-            <SamaritanIcon className="h-3.5 w-3.5" /> Ask Samaritan
+            <SamaritanIcon className="h-3.5 w-3.5" /> Enrich with AI
           </button>
         </div>
       </div>

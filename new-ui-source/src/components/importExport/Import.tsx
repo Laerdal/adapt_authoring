@@ -61,7 +61,7 @@ function CloseButton({ onClick }: { onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center justify-center w-8 h-8 rounded-md text-[#9ca3af] hover:text-[#374151] hover:bg-[#f3f4f6] transition-colors shrink-0"
+      className="flex items-center justify-center w-8 h-8 rounded-md text-[var(--life-neutral-400)] hover:text-[var(--life-neutral-700)] hover:bg-[var(--life-neutral-050)] transition-colors shrink-0"
       aria-label="Close"
     >
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -92,10 +92,10 @@ const CATEGORY_LABELS: Record<string, { label: string; color: string }> = {
 function PluginRow({ name, info, category }: { name: string; info: PluginInfo; category: string }) {
   const cat = CATEGORY_LABELS[category]
   return (
-    <tr className="border-b border-[#f3f4f6] last:border-0">
-      <td className="py-3 pr-4 text-sm text-[#374151]">{info.displayName || name}</td>
-      <td className="py-3 pr-4 text-sm font-semibold text-[#111827] text-center">{info.importVersion}</td>
-      <td className="py-3 pr-4 text-sm text-[#6b7280] text-center">
+    <tr className="border-b border-[var(--life-neutral-050)] last:border-0">
+      <td className="py-3 pr-4 text-sm text-[var(--life-neutral-700)]">{info.displayName || name}</td>
+      <td className="py-3 pr-4 text-sm font-semibold text-[var(--life-neutral-850)] text-center">{info.importVersion}</td>
+      <td className="py-3 pr-4 text-sm text-[var(--life-neutral-600)] text-center">
         {info.authoringToolVersion === 'none' || !info.authoringToolVersion ? '–' : info.authoringToolVersion}
       </td>
       <td className="py-3 text-sm font-semibold text-center" style={{ color: cat?.color ?? '#6b7280' }}>
@@ -375,8 +375,8 @@ export default function ImportCourseModal({ isOpen, onClose, onSuccess }: Import
         onClick={(e) => e.stopPropagation()}
       >
         {/* ── Header ── */}
-        <div className="flex items-center justify-between px-6 py-5 border-b border-[#e5e7eb] shrink-0">
-          <h2 className="text-base font-bold text-[#111827]">Import framework source</h2>
+        <div className="flex items-center justify-between px-6 py-5 border-b border-[var(--life-neutral-100)] shrink-0">
+          <h2 className="text-base font-bold text-[var(--life-neutral-850)]">Import framework source</h2>
           {(step === 'form' || step === 'results') && <CloseButton onClick={resetAndClose} />}
         </div>
 
@@ -389,7 +389,7 @@ export default function ImportCourseModal({ isOpen, onClose, onSuccess }: Import
 
               {/* Error banner */}
               {errorMsg && (
-                <div className="flex items-start gap-3 p-4 bg-[#fef2f2] border border-[#fecaca] rounded-lg text-sm text-[#b91c1c]">
+                <div className="flex items-start gap-3 p-4 bg-[var(--life-critical-050)] border border-[var(--life-critical-100)] rounded-lg text-sm text-[var(--life-critical-600)]">
                   <svg className="shrink-0 mt-0.5" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
                   </svg>
@@ -399,17 +399,17 @@ export default function ImportCourseModal({ isOpen, onClose, onSuccess }: Import
 
               {/* File */}
               <div>
-                <p className="text-sm text-[#111827] mb-3">
+                <p className="text-sm text-[var(--life-neutral-850)] mb-3">
                   <strong>File</strong>{' '}
-                  <span className="text-[#ef4444]">*</span>{' '}
-                  <span className="text-[#6b7280]">Select a framework zip for import. Tags will be added to the course and all new assets.</span>
+                  <span className="text-[var(--life-critical-500)]">*</span>{' '}
+                  <span className="text-[var(--life-neutral-600)]">Select a framework zip for import. Tags will be added to the course and all new assets.</span>
                 </p>
                 <div className="flex items-center gap-3">
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={step === 'checking'}
-                    className="flex items-center gap-2 px-4 h-9 bg-white border border-[#d1d5db] hover:bg-[#f9fafb] disabled:opacity-50 disabled:cursor-not-allowed text-[#374151] text-sm font-medium rounded-lg transition-colors shrink-0"
+                    className="flex items-center gap-2 px-4 h-9 bg-white border border-[var(--life-neutral-200)] hover:bg-[var(--life-neutral-020)] disabled:opacity-50 disabled:cursor-not-allowed text-[var(--life-neutral-700)] text-sm font-medium rounded-lg transition-colors shrink-0"
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -418,7 +418,7 @@ export default function ImportCourseModal({ isOpen, onClose, onSuccess }: Import
                     </svg>
                     Choose File
                   </button>
-                  <span className={`text-sm truncate ${selectedFile ? 'text-[#111827]' : 'text-[#9ca3af]'}`}>
+                  <span className={`text-sm truncate ${selectedFile ? 'text-[var(--life-neutral-850)]' : 'text-[var(--life-neutral-400)]'}`}>
                     {selectedFile ? selectedFile.name : 'No file chosen'}
                   </span>
                   <input
@@ -429,13 +429,13 @@ export default function ImportCourseModal({ isOpen, onClose, onSuccess }: Import
                     onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
                   />
                 </div>
-                <p className="text-xs text-[#9ca3af] mt-2">Maximum upload file size: 600MB.</p>
+                <p className="text-xs text-[var(--life-neutral-400)] mt-2">Maximum upload file size: 600MB.</p>
               </div>
 
               {/* Asset Folders */}
               <div>
-                <p className="text-sm font-bold text-[#111827] mb-1.5">Asset Folders</p>
-                <p className="text-xs text-[#6b7280] mb-2.5 leading-relaxed">
+                <p className="text-sm font-bold text-[var(--life-neutral-850)] mb-1.5">Asset Folders</p>
+                <p className="text-xs text-[var(--life-neutral-600)] mb-2.5 leading-relaxed">
                   Enter the names of folders that contain assets. If there are multiple folders enter a comma separated list.
                   Automatically checks for the following folders if no value is entered: assets, images, video, audio.
                 </p>
@@ -445,15 +445,15 @@ export default function ImportCourseModal({ isOpen, onClose, onSuccess }: Import
                   onChange={(e) => setAssetFolders(e.target.value)}
                   disabled={step === 'checking'}
                   placeholder="assets, images, video, audio"
-                  className="w-full h-[42px] border border-[#d1d5db] rounded-lg px-3.5 text-sm text-[#111827] placeholder:text-[#9ca3af] bg-white outline-none focus:border-[#2d6fa8] disabled:opacity-50 transition-colors"
+                  className="life-field"
                 />
               </div>
 
               {/* Tags */}
               <div>
-                <p className="text-sm font-bold text-[#111827] mb-2.5">Tags</p>
+                <p className="text-sm font-bold text-[var(--life-neutral-850)] mb-2.5">Tags</p>
                 <div className="relative">
-                  <div className="w-full min-h-[44px] border border-[#d1d5db] rounded-lg px-2 py-2 bg-white focus-within:border-[#2d6fa8] transition-colors">
+                  <div className="w-full min-h-[44px] border border-[var(--life-neutral-200)] rounded-lg px-2 py-2 bg-white focus-within:border-[var(--life-primary-500)] transition-colors">
                     <div className="flex flex-wrap gap-2 items-center">
                       {tags.map((tag) => (
                         <span
@@ -497,13 +497,13 @@ export default function ImportCourseModal({ isOpen, onClose, onSuccess }: Import
                         }}
                         disabled={step === 'checking'}
                         placeholder={tags.length ? 'Type and press comma or Enter' : 'Add tags'}
-                        className="flex-1 min-w-[180px] h-7 px-1 text-sm text-[#111827] placeholder:text-[#9ca3af] bg-transparent outline-none disabled:opacity-50"
+                        className="flex-1 min-w-[180px] h-7 px-1 text-sm text-[var(--life-neutral-850)] placeholder:text-[var(--life-neutral-400)] bg-transparent outline-none disabled:opacity-50"
                       />
                     </div>
                   </div>
 
                   {showTagSuggestions && tagSuggestions.length > 0 && (
-                    <div className="absolute z-20 mt-1 w-full bg-white border border-[#e5e7eb] rounded-lg shadow-lg max-h-52 overflow-y-auto">
+                    <div className="absolute z-20 mt-1 w-full bg-white border border-[var(--life-neutral-100)] rounded-lg shadow-lg max-h-52 overflow-y-auto">
                       {tagSuggestions.map((suggestion) => (
                         <button
                           key={suggestion._id}
@@ -515,7 +515,7 @@ export default function ImportCourseModal({ isOpen, onClose, onSuccess }: Import
                             setTagInput('')
                             setShowTagSuggestions(false)
                           }}
-                          className="w-full text-left px-3 py-2 text-sm text-[#111827] hover:bg-[#f3f4f6]"
+                          className="w-full text-left px-3 py-2 text-sm text-[var(--life-neutral-850)] hover:bg-[var(--life-neutral-050)]"
                         >
                           {suggestion.title}
                         </button>
@@ -523,7 +523,7 @@ export default function ImportCourseModal({ isOpen, onClose, onSuccess }: Import
                     </div>
                   )}
                 </div>
-                <p className="text-xs text-[#6b7280] mt-2">Type at least 3 characters for suggestions. Press comma or Enter to add a tag.</p>
+                <p className="text-xs text-[var(--life-neutral-600)] mt-2">Type at least 3 characters for suggestions. Press comma or Enter to add a tag.</p>
               </div>
             </div>
           )}
@@ -534,7 +534,7 @@ export default function ImportCourseModal({ isOpen, onClose, onSuccess }: Import
 
               {/* Error banner */}
               {errorMsg && (
-                <div className="flex items-start gap-3 p-4 bg-[#fef2f2] border border-[#fecaca] rounded-lg text-sm text-[#b91c1c]">
+                <div className="flex items-start gap-3 p-4 bg-[var(--life-critical-050)] border border-[var(--life-critical-100)] rounded-lg text-sm text-[var(--life-critical-600)]">
                   <svg className="shrink-0 mt-0.5" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
                   </svg>
@@ -544,7 +544,7 @@ export default function ImportCourseModal({ isOpen, onClose, onSuccess }: Import
 
               {/* Framework versions panel */}
               {checkResult.frameworkVersions.imported !== checkResult.frameworkVersions.installed && !downgrade && (
-                <div className="p-4 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg text-sm text-[#374151] leading-relaxed">
+                <div className="p-4 bg-[var(--life-neutral-020)] border border-[var(--life-neutral-100)] rounded-lg text-sm text-[var(--life-neutral-700)] leading-relaxed">
                   <p>Import framework version: <strong>{checkResult.frameworkVersions.imported}</strong></p>
                   <p>Installed framework version: <strong>{checkResult.frameworkVersions.installed}</strong></p>
                   <p className="mt-2">
@@ -558,8 +558,8 @@ export default function ImportCourseModal({ isOpen, onClose, onSuccess }: Import
               <div className="p-4 border rounded-lg">
                 {!canProceed ? (
                   <>
-                    <p className="text-base font-bold text-[#dc2626] mb-2">Course cannot be imported</p>
-                    <p className="text-sm text-[#374151] leading-relaxed">
+                    <p className="text-base font-bold text-[var(--life-critical-600)] mb-2">Course cannot be imported</p>
+                    <p className="text-sm text-[var(--life-neutral-700)] leading-relaxed">
                       {downgrade
                         ? 'The framework version used in this course is newer than the framework version that is used by this authoring tool. You cannot import this course because the framework version cannot be downgraded.'
                         : 'One or more of the plugins used in this course are not compatible with the version of the framework that is used by this authoring tool. Please remove or update these plugins and try again.'}
@@ -567,10 +567,10 @@ export default function ImportCourseModal({ isOpen, onClose, onSuccess }: Import
                   </>
                 ) : (
                   <>
-                    <p className={`text-base font-bold mb-2 ${allIdentical ? 'text-[#059669]' : 'text-[#d97706]'}`}>
+                    <p className={`text-base font-bold mb-2 ${allIdentical ? 'text-[var(--life-positive-500)]' : 'text-[#d97706]'}`}>
                       Course can be imported
                     </p>
-                    <p className="text-sm text-[#374151] leading-relaxed font-semibold">
+                    <p className="text-sm text-[var(--life-neutral-700)] leading-relaxed font-semibold">
                       {allIdentical
                         ? 'All of the plugins used in this course are identical to those in this authoring tool.'
                         : 'One or more of the plugins used in this course will be updated as part of the import process. You should test the course after the import has completed.'}
@@ -581,15 +581,15 @@ export default function ImportCourseModal({ isOpen, onClose, onSuccess }: Import
 
               {/* Plugin list */}
               {(hasRed || hasAmber || hasAnyGreen) && (
-                <div className="border border-[#e5e7eb] rounded-lg overflow-hidden">
+                <div className="border border-[var(--life-neutral-100)] rounded-lg overflow-hidden">
                   {/* Legend keys */}
-                  <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#e5e7eb] flex flex-col gap-1">
+                  <div className="px-4 py-3 bg-[var(--life-neutral-020)] border-b border-[var(--life-neutral-100)] flex flex-col gap-1">
                     {PLUGIN_ORDER.map((cat) => {
                       const catPlugins = checkResult.pluginVersions[cat]
                       if (isEmpty(catPlugins)) return null
                       const c = CATEGORY_LABELS[cat]
                       return (
-                        <p key={cat} className="text-xs text-[#6b7280] leading-relaxed">
+                        <p key={cat} className="text-xs text-[var(--life-neutral-600)] leading-relaxed">
                           <span className="font-semibold" style={{ color: c.color }}>{c.label}</span>
                           {' – '}{CATEGORY_KEY_DESC[cat]}
                         </p>
@@ -601,14 +601,14 @@ export default function ImportCourseModal({ isOpen, onClose, onSuccess }: Import
                   <div className="overflow-x-auto">
                     <table className="w-full">
                       <thead>
-                        <tr className="border-b border-[#e5e7eb] bg-[#f9fafb]">
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-[#6b7280] uppercase tracking-wide">Name</th>
-                          <th className="px-4 py-3 text-center text-xs font-semibold text-[#6b7280] uppercase tracking-wide">Import Version</th>
-                          <th className="px-4 py-3 text-center text-xs font-semibold text-[#6b7280] uppercase tracking-wide">Installed Version</th>
-                          <th className="px-4 py-3 text-center text-xs font-semibold text-[#6b7280] uppercase tracking-wide">Action</th>
+                        <tr className="border-b border-[var(--life-neutral-100)] bg-[var(--life-neutral-020)]">
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--life-neutral-600)] uppercase tracking-wide">Name</th>
+                          <th className="px-4 py-3 text-center text-xs font-semibold text-[var(--life-neutral-600)] uppercase tracking-wide">Import Version</th>
+                          <th className="px-4 py-3 text-center text-xs font-semibold text-[var(--life-neutral-600)] uppercase tracking-wide">Installed Version</th>
+                          <th className="px-4 py-3 text-center text-xs font-semibold text-[var(--life-neutral-600)] uppercase tracking-wide">Action</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-[#f3f4f6]">
+                      <tbody className="divide-y divide-[var(--life-neutral-050)]">
                         {PLUGIN_ORDER.map((cat) => {
                           const catPlugins = checkResult.pluginVersions[cat]
                           if (isEmpty(catPlugins)) return null
@@ -628,7 +628,7 @@ export default function ImportCourseModal({ isOpen, onClose, onSuccess }: Import
         </div>
 
         {/* ── Footer ── */}
-        <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[#e5e7eb] shrink-0">
+        <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[var(--life-neutral-100)] shrink-0">
 
           {/* FORM step buttons */}
           {(step === 'form' || step === 'checking') && (
@@ -637,7 +637,7 @@ export default function ImportCourseModal({ isOpen, onClose, onSuccess }: Import
                 type="button"
                 onClick={resetAndClose}
                 disabled={step === 'checking'}
-                className="h-[38px] px-[18px] bg-white border border-[#d1d5db] hover:bg-[#f9fafb] disabled:opacity-50 disabled:cursor-not-allowed text-[#374151] text-sm font-semibold rounded-lg transition-colors"
+                className="h-[38px] px-[18px] bg-white border border-[var(--life-neutral-200)] hover:bg-[var(--life-neutral-020)] disabled:opacity-50 disabled:cursor-not-allowed text-[var(--life-neutral-700)] text-sm font-semibold rounded-lg transition-colors"
               >
                 Cancel
               </button>
@@ -645,7 +645,7 @@ export default function ImportCourseModal({ isOpen, onClose, onSuccess }: Import
                 type="button"
                 onClick={handleCheckVersions}
                 disabled={!selectedFile || step === 'checking'}
-                className="flex items-center gap-2 h-[38px] px-[18px] bg-[#2d6fa8] hover:bg-[#245c8f] disabled:bg-[#d1d5db] disabled:text-[#9ca3af] text-white text-sm font-semibold rounded-lg transition-colors disabled:cursor-not-allowed"
+                className="flex items-center gap-2 h-[38px] px-[18px] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-600)] disabled:bg-[var(--life-neutral-200)] disabled:text-[var(--life-neutral-400)] text-white text-sm font-semibold rounded-lg transition-colors disabled:cursor-not-allowed"
               >
                 {step === 'checking' && <Spinner />}
                 {step === 'checking' ? 'Checking…' : 'Import source'}
@@ -660,7 +660,7 @@ export default function ImportCourseModal({ isOpen, onClose, onSuccess }: Import
                 type="button"
                 onClick={() => { setStep('form'); setCheckResult(null); setErrorMsg(null) }}
                 disabled={step === 'importing'}
-                className="h-[38px] px-[18px] bg-white border border-[#d1d5db] hover:bg-[#f9fafb] disabled:opacity-50 disabled:cursor-not-allowed text-[#374151] text-sm font-semibold rounded-lg transition-colors"
+                className="h-[38px] px-[18px] bg-white border border-[var(--life-neutral-200)] hover:bg-[var(--life-neutral-020)] disabled:opacity-50 disabled:cursor-not-allowed text-[var(--life-neutral-700)] text-sm font-semibold rounded-lg transition-colors"
               >
                 Back
               </button>
@@ -668,7 +668,7 @@ export default function ImportCourseModal({ isOpen, onClose, onSuccess }: Import
                 type="button"
                 onClick={resetAndClose}
                 disabled={step === 'importing'}
-                className="h-[38px] px-[18px] bg-white border border-[#d1d5db] hover:bg-[#f9fafb] disabled:opacity-50 disabled:cursor-not-allowed text-[#374151] text-sm font-semibold rounded-lg transition-colors"
+                className="h-[38px] px-[18px] bg-white border border-[var(--life-neutral-200)] hover:bg-[var(--life-neutral-020)] disabled:opacity-50 disabled:cursor-not-allowed text-[var(--life-neutral-700)] text-sm font-semibold rounded-lg transition-colors"
               >
                 Cancel
               </button>
@@ -677,7 +677,7 @@ export default function ImportCourseModal({ isOpen, onClose, onSuccess }: Import
                   type="button"
                   onClick={handleConfirmImport}
                   disabled={step === 'importing'}
-                  className="flex items-center gap-2 h-[38px] px-[18px] bg-[#2d6fa8] hover:bg-[#245c8f] disabled:bg-[#d1d5db] disabled:text-[#9ca3af] text-white text-sm font-semibold rounded-lg transition-colors disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 h-[38px] px-[18px] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-600)] disabled:bg-[var(--life-neutral-200)] disabled:text-[var(--life-neutral-400)] text-white text-sm font-semibold rounded-lg transition-colors disabled:cursor-not-allowed"
                 >
                   {step === 'importing' && <Spinner />}
                   {step === 'importing' ? 'Importing…' : 'Import source'}

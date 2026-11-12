@@ -6,7 +6,10 @@ import PermissionDeniedModal from '@/components/common/PermissionDeniedModal'
 import { useAuth, isSuperAdmin, canManageCourses } from '@/context/AuthContext'
 import { usePageLoader } from '@/hooks'
 import { createCourse, deleteCourse, duplicateCourse, fetchDashboardCourses, fetchDashboardTags, getAuthoringMenuOptions, getAuthoringThemeOptions, updateCourse, type CourseSort } from '@/api/adaptAuthoring'
+import BuildMethodPickerModal from '@/components/dashboard/BuildMethodPickerModal'
+import BuildWithAiWizard from '@/components/dashboard/BuildWithAiWizard'
 import ImportCourseModal from '@/components/importExport/Import'
+import { lifeButtonClass } from '@/components/common/Button'
 
 
 type Theme = string
@@ -250,6 +253,8 @@ export default function HomePage() {
   }, []);
 
   // Create modal
+  const [isBuildPickerOpen, setIsBuildPickerOpen] = useState(false)
+  const [isAiWizardOpen, setIsAiWizardOpen] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [newTitle, setNewTitle]     = useState('')
   const [newDesc, setNewDesc]       = useState('')
@@ -431,8 +436,8 @@ export default function HomePage() {
           {/* Page heading */}
           <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
             <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-[#111827] leading-tight">{location.pathname === '/shared' ? 'Shared with Me' : 'My Courses'}</h1>
-              <p className="text-sm text-[#6b7280] mt-1">{location.pathname === '/shared' ? 'View and access courses shared with you' : 'Manage and organize your courses'}</p>
+              <h1 className="text-2xl md:text-3xl font-bold text-[var(--life-neutral-850)] leading-tight">{location.pathname === '/shared' ? 'Shared with Me' : 'My Courses'}</h1>
+              <p className="text-sm text-[var(--life-neutral-600)] mt-1">{location.pathname === '/shared' ? 'View and access courses shared with you' : 'Manage and organize your courses'}</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               {/* Import */}
@@ -449,7 +454,7 @@ export default function HomePage() {
                 <button
                   type="button"
                   onClick={() => setImportModalOpen(true)}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-white border border-[#d1d5db] hover:bg-[#f9fafb] text-[#374151] text-sm font-semibold rounded-lg transition-colors"
+                  className={lifeButtonClass('secondary')}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -470,9 +475,9 @@ export default function HomePage() {
                     showPermissionDenied('Create Course', 'You do not have permission to create a new course.');
                     return;
                   }
-                  openCreateModal();
+                  setIsBuildPickerOpen(true);
                 }}
-                className="flex items-center gap-2 px-4 py-2.5 bg-[#2d6fa8] hover:bg-[#245c8f] text-white text-sm font-semibold rounded-lg transition-colors"
+                className={lifeButtonClass('primary')}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="12" y1="5" x2="12" y2="19" />
@@ -489,7 +494,7 @@ export default function HomePage() {
             {/* Search */}
             <div className="w-full sm:flex-1 sm:max-w-xl flex items-center gap-2">
               <div className="relative flex-1">
-                <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9ca3af]" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--life-neutral-400)]" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
                 <input
@@ -498,10 +503,10 @@ export default function HomePage() {
                   onChange={(e) => setSearch(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Escape') clearSearch() }}
                   placeholder="Search by name"
-                  className="w-full pl-9 pr-8 py-2.5 text-sm bg-white border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent placeholder-[#9ca3af] text-[#111827]"
+                  className="life-field pl-9 pr-8"
                 />
                 {search && (
-                  <button type="button" onClick={clearSearch} title="Clear search" className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#9ca3af] hover:text-[#374151] transition-colors">
+                  <button type="button" onClick={clearSearch} title="Clear search" className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--life-neutral-400)] hover:text-[var(--life-neutral-700)] transition-colors">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
                       <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                     </svg>
@@ -513,15 +518,15 @@ export default function HomePage() {
                 <button
                   type="button"
                   onClick={() => { setTagFilterOpen((open) => !open); setSortOpen(false); setTagSearch('') }}
-                  className={`flex items-center gap-1.5 px-3 py-2.5 text-sm border rounded-lg transition-colors whitespace-nowrap ${
-                    selectedTags.length > 0
-                      ? 'border-[#2d6fa8] bg-[#dbeeff] text-[#2d6fa8] font-medium'
-                      : 'bg-white border-[#e5e7eb] text-[#374151] hover:bg-[#f9fafb]'
+                  aria-haspopup="listbox"
+                  aria-expanded={tagFilterOpen}
+                  className={`life-field w-auto cursor-pointer whitespace-nowrap ${
+                    selectedTags.length > 0 ? 'life-field--active font-medium' : tagFilterOpen ? 'life-field--open' : ''
                   }`}
                 >
                   Search by tag
                   {selectedTags.length > 0 && (
-                    <span className="w-4 h-4 rounded-full bg-[#2d6fa8] text-white text-[10px] font-bold flex items-center justify-center">{selectedTags.length}</span>
+                    <span className="w-4 h-4 rounded-full bg-[var(--life-primary-500)] text-white text-[10px] font-bold flex items-center justify-center">{selectedTags.length}</span>
                   )}
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${tagFilterOpen ? 'rotate-180' : ''}`}>
                     <path d="M6 9l6 6 6-6" />
@@ -529,11 +534,11 @@ export default function HomePage() {
                 </button>
 
                 {tagFilterOpen && (
-                  <div className="absolute left-0 mt-1 w-64 bg-white border border-[#e5e7eb] rounded-lg shadow-lg z-20 py-1">
+                  <div role="listbox" aria-multiselectable="true" className="life-menu absolute left-0 mt-1 w-64 z-20">
                     {/* Search input */}
                     <div className="px-2 pt-1.5 pb-1">
                       <div className="relative">
-                        <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9ca3af]" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--life-neutral-400)]" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
                         </svg>
                         <input
@@ -541,14 +546,14 @@ export default function HomePage() {
                           value={tagSearch}
                           onChange={(e) => setTagSearch(e.target.value)}
                           placeholder="Search tags…"
-                          className="w-full pl-7 pr-2 py-1.5 text-xs border border-[#e5e7eb] rounded-md focus:outline-none focus:ring-1 focus:ring-[#2d6fa8] focus:border-transparent text-[#111827] bg-[#f9fafb]"
+                          className="life-field h-8 pl-7 pr-2 text-xs"
                           onClick={(e) => e.stopPropagation()}
                         />
                       </div>
                     </div>
                     <div className="max-h-56 overflow-y-auto">
                     {availableTags.filter((t) => !tagSearch.trim() || t.toLowerCase().includes(tagSearch.trim().toLowerCase())).length === 0 && (
-                      <p className="px-3 py-2 text-sm text-[#9ca3af]">No matching tags</p>
+                      <p className="px-3 py-2 text-sm text-[var(--life-neutral-400)]">No matching tags</p>
                     )}
                     {availableTags.filter((t) => !tagSearch.trim() || t.toLowerCase().includes(tagSearch.trim().toLowerCase())).map((tag) => {
                       const isSelected = selectedTags.some((selectedTag) => selectedTag.toLowerCase() === tag.toLowerCase())
@@ -557,9 +562,9 @@ export default function HomePage() {
                           key={tag}
                           type="button"
                           onClick={() => toggleTag(tag)}
-                          className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center justify-between ${
-                            isSelected ? 'bg-[#dbeeff] text-[#2d6fa8] font-medium' : 'text-[#374151] hover:bg-[#f9fafb]'
-                          }`}
+                          role="option"
+                          aria-selected={isSelected}
+                          className="life-menu-item justify-between"
                         >
                           <span>{tag}</span>
                           {isSelected && (
@@ -573,8 +578,8 @@ export default function HomePage() {
                     </div>
                     {selectedTags.length > 0 && (
                       <>
-                        <div className="border-t border-[#f3f4f6] my-1" />
-                        <button type="button" onClick={() => { clearTags(); setTagFilterOpen(false); setTagSearch('') }} className="w-full text-left px-3 py-2 text-sm text-[#ef4444] hover:bg-[#fef2f2] transition-colors">
+                        <div className="life-menu-divider" />
+                        <button type="button" onClick={() => { clearTags(); setTagFilterOpen(false); setTagSearch('') }} className="life-menu-item life-menu-item--critical">
                           Clear tags
                         </button>
                       </>
@@ -590,7 +595,9 @@ export default function HomePage() {
                 <button
                   type="button"
                   onClick={() => { setSortOpen((o) => !o); setTagFilterOpen(false) }}
-                  className="flex items-center gap-1.5 px-3 py-2.5 text-sm text-[#374151] bg-white border border-[#e5e7eb] rounded-lg hover:bg-[#f9fafb] transition-colors whitespace-nowrap"
+                  aria-haspopup="listbox"
+                  aria-expanded={sortOpen}
+                  className={`life-field w-auto cursor-pointer whitespace-nowrap ${sortOpen ? 'life-field--open' : ''}`}
                 >
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M3 6h18M7 12h10M11 18h2" />
@@ -601,16 +608,16 @@ export default function HomePage() {
                   </svg>
                 </button>
                 {sortOpen && (
-                  <div className="absolute right-0 mt-1 w-48 bg-white border border-[#e5e7eb] rounded-lg shadow-lg z-20 py-1">
-                    <p className="px-3 py-1.5 text-xs font-semibold text-[#9ca3af] uppercase tracking-wide">Sort by</p>
+                  <div role="listbox" className="life-menu absolute right-0 mt-1 w-48 z-20">
+                    <p className="life-menu-heading">Sort by</p>
                     {SORT_OPTIONS.map((opt) => (
                       <button
                         type="button"
                         key={opt.value}
                         onClick={() => { setSort(opt.value); setSortOpen(false) }}
-                        className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center justify-between ${
-                          sort === opt.value ? 'bg-[#dbeeff] text-[#2d6fa8] font-medium' : 'text-[#374151] hover:bg-[#f9fafb]'
-                        }`}
+                        role="option"
+                        aria-selected={sort === opt.value}
+                        className="life-menu-item justify-between"
                       >
                         {opt.label}
                         {sort === opt.value && (
@@ -625,12 +632,13 @@ export default function HomePage() {
               </div>
 
               {/* View toggle */}
-              <div className="flex items-center border border-[#e5e7eb] rounded-lg overflow-hidden">
+              <div className="flex items-center border border-[var(--life-neutral-300)] rounded-lg overflow-hidden">
                 <button
                   type="button"
                   aria-label="Grid view"
+                  aria-pressed={view === 'grid'}
                   onClick={() => setView('grid')}
-                  className={`p-2.5 transition-colors ${view === 'grid' ? 'bg-[#2d6fa8] text-white' : 'bg-white text-[#9ca3af] hover:bg-[#f9fafb]'}`}
+                  className={`life-icon-btn rounded-none ${view === 'grid' ? 'bg-[var(--life-primary-500)] text-white hover:bg-[var(--life-primary-600)] hover:text-white' : ''}`}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
@@ -640,8 +648,9 @@ export default function HomePage() {
                 <button
                   type="button"
                   aria-label="List view"
+                  aria-pressed={view === 'list'}
                   onClick={() => setView('list')}
-                  className={`p-2.5 transition-colors border-l border-[#e5e7eb] ${view === 'list' ? 'bg-[#2d6fa8] text-white' : 'bg-white text-[#9ca3af] hover:bg-[#f9fafb]'}`}
+                  className={`life-icon-btn rounded-none border-l border-l-[var(--life-neutral-300)] ${view === 'list' ? 'bg-[var(--life-primary-500)] text-white hover:bg-[var(--life-primary-600)] hover:text-white' : ''}`}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" />
@@ -656,9 +665,9 @@ export default function HomePage() {
           {hasFilters && (
             <div className="flex flex-wrap items-center gap-2 mb-4">
               {search.trim() && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#f3f4f6] text-xs text-[#374151] font-medium">
-                  Search: <span className="text-[#2d6fa8]">"{search.trim()}"</span>
-                  <button type="button" onClick={clearSearch} aria-label="Remove search filter" className="text-[#9ca3af] hover:text-[#374151] ml-0.5">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--life-neutral-050)] text-xs text-[var(--life-neutral-700)] font-medium">
+                  Search: <span className="text-[var(--life-primary-500)]">"{search.trim()}"</span>
+                  <button type="button" onClick={clearSearch} aria-label="Remove search filter" className="text-[var(--life-neutral-400)] hover:text-[var(--life-neutral-700)] ml-0.5">
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
                       <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                     </svg>
@@ -680,20 +689,20 @@ export default function HomePage() {
                   </button>
                 </span>
               ))}
-              <button type="button" onClick={clearAll} className="text-xs text-[#9ca3af] hover:text-[#374151] underline underline-offset-2 transition-colors">
+              <button type="button" onClick={clearAll} className="text-xs text-[var(--life-neutral-400)] hover:text-[var(--life-neutral-700)] underline underline-offset-2 transition-colors">
                 Clear all
               </button>
-              <span className="ml-auto text-xs text-[#9ca3af]">{displayed.length} course{displayed.length !== 1 ? 's' : ''}</span>
+              <span className="ml-auto text-xs text-[var(--life-neutral-400)]">{displayed.length} course{displayed.length !== 1 ? 's' : ''}</span>
             </div>
           )}
 
           {/* Courses */}
           {isLoadingCourses ? (
-            <div className="flex flex-col items-center justify-center py-24 text-[#9ca3af]">
+            <div className="flex flex-col items-center justify-center py-24 text-[var(--life-neutral-400)]">
               <p className="text-sm">Loading courses...</p>
             </div>
           ) : displayed.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-24 text-[#9ca3af]">
+            <div className="flex flex-col items-center justify-center py-24 text-[var(--life-neutral-400)]">
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" className="mb-3">
                 <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
                 <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
@@ -703,7 +712,7 @@ export default function HomePage() {
           ) : (
             <div className={
               view === 'grid'
-                ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-[repeat(auto-fit,minmax(max(280px,calc((100%_-_5rem)/5)),minmax(280px,1fr)))] gap-4 md:gap-5'
+                ? 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 2xl:grid-cols-4 items-start gap-4 md:gap-5'
                 : 'flex flex-col gap-2'
             }>
               {displayed.map((course) => (
@@ -731,7 +740,7 @@ export default function HomePage() {
 
           {/* Infinite-scroll sentinel — pulls the next server page as it nears view */}
           {hasMore && (
-            <div ref={sentinelRef} className="flex justify-center py-8 text-sm text-[#9ca3af]">
+            <div ref={sentinelRef} className="flex justify-center py-8 text-sm text-[var(--life-neutral-400)]">
               {isLoadingMore ? 'Loading more…' : ''}
             </div>
           )}
@@ -744,6 +753,33 @@ export default function HomePage() {
         onClose={() => setPermissionDialog(null)}
       />
 
+      {/* Create New Course: method picker (scratch vs. AI) */}
+      {isBuildPickerOpen && (
+        <BuildMethodPickerModal
+          onClose={() => setIsBuildPickerOpen(false)}
+          onBuildFromScratch={() => {
+            setIsBuildPickerOpen(false)
+            openCreateModal()
+          }}
+          onBuildWithAI={() => {
+            setIsBuildPickerOpen(false)
+            setIsAiWizardOpen(true)
+          }}
+        />
+      )}
+
+      {isAiWizardOpen && (
+        <BuildWithAiWizard
+          defaultTheme={pickPreferredTheme(themeOptions)}
+          defaultMenu={pickPreferredMenu(menuOptions)}
+          onClose={() => setIsAiWizardOpen(false)}
+          onComplete={(courseId) => {
+            setIsAiWizardOpen(false)
+            navigate(`/course/${courseId}`)
+          }}
+        />
+      )}
+
       {/* Create Course Modal */}
       {createOpen && (
         <div
@@ -752,16 +788,16 @@ export default function HomePage() {
         >
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg flex flex-col overflow-visible">
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[#e5e7eb]">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--life-neutral-100)]">
               <div>
-                <h2 className="font-semibold text-[#111827] text-base">Create New Course</h2>
-                <p className="text-xs text-[#6b7280] mt-0.5">Set up the course basics to get started.</p>
+                <h2 className="font-semibold text-[var(--life-neutral-850)] text-base">Create New Course</h2>
+                <p className="text-xs text-[var(--life-neutral-600)] mt-0.5">Set up the course basics to get started.</p>
               </div>
               <button
                 type="button"
                 onClick={() => setCreateOpen(false)}
                 aria-label="Close"
-                className="p-1.5 rounded-lg hover:bg-[#f3f4f6] text-[#6b7280] transition-colors"
+                className="p-1.5 rounded-lg hover:bg-[var(--life-neutral-050)] text-[var(--life-neutral-600)] transition-colors"
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -773,28 +809,28 @@ export default function HomePage() {
             <div className="px-6 py-5 flex flex-col gap-5">
               {/* Course Title */}
               <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1.5">
-                  Course Title <span className="text-[#ef4444]">*</span>
+                <label className="life-label">
+                  Course Title <span className="text-[var(--life-critical-500)]">*</span>
                 </label>
                 <input
                   type="text"
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
                   placeholder="e.g. Introduction to Digital Marketing"
-                  className="w-full px-3 py-2.5 text-sm border border-[#d1d5db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent text-[#111827] placeholder-[#9ca3af]"
+                  className="life-field"
                   autoFocus
                 />
               </div>
 
               {/* Description */}
               <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
+                <label className="life-label">Description</label>
                 <textarea
                   value={newDesc}
                   onChange={(e) => setNewDesc(e.target.value)}
                   rows={3}
                   placeholder="Briefly describe what this course covers…"
-                  className="w-full px-3 py-2.5 text-sm border border-[#d1d5db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent text-[#111827] placeholder-[#9ca3af] resize-none"
+                  className="life-field"
                 />
               </div>
 
@@ -802,12 +838,14 @@ export default function HomePage() {
               <div className="grid grid-cols-2 gap-4">
                 {/* Theme selector */}
                 <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Theme</label>
+                  <label className="life-label">Theme</label>
                   <div className="relative">
                     <button
                       type="button"
                       onClick={() => { setThemeOpen((o) => !o); setMenuOpen(false); }}
-                      className="w-full flex items-center justify-between px-3 py-2.5 text-sm border border-[#d1d5db] rounded-lg bg-white hover:border-[#2d6fa8] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] text-[#111827] transition-colors"
+                      aria-haspopup="listbox"
+                      aria-expanded={themeOpen}
+                      className={`life-field justify-between cursor-pointer ${themeOpen ? 'life-field--open' : ''}`}
                     >
                       <span>{newTheme}</span>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${themeOpen ? 'rotate-180' : ''}`}>
@@ -815,7 +853,7 @@ export default function HomePage() {
                       </svg>
                     </button>
                     {themeOpen && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#e5e7eb] rounded-lg shadow-lg z-10 py-1">
+                      <div role="listbox" className="life-menu absolute top-full left-0 right-0 mt-1 z-10">
                         {themeOptions.map((opt) => (
                           <button
                             key={opt}
@@ -827,7 +865,9 @@ export default function HomePage() {
                                 setNewMenu(pickBoxMenu(menuOptions))
                               }
                             }}
-                            className={`w-full text-left px-3 py-2 text-sm transition-colors ${newTheme === opt ? 'bg-[#dbeeff] text-[#2d6fa8] font-medium' : 'text-[#374151] hover:bg-[#f9fafb]'}`}
+                            role="option"
+                            aria-selected={newTheme === opt}
+                            className="life-menu-item"
                           >
                             {opt}
                           </button>
@@ -839,12 +879,14 @@ export default function HomePage() {
 
                 {/* Menu selector */}
                 <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Menu Style</label>
+                  <label className="life-label">Menu Style</label>
                   <div className="relative">
                     <button
                       type="button"
                       onClick={() => { setMenuOpen((o) => !o); setThemeOpen(false); }}
-                      className="w-full flex items-center justify-between px-3 py-2.5 text-sm border border-[#d1d5db] rounded-lg bg-white hover:border-[#2d6fa8] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] text-[#111827] transition-colors"
+                      aria-haspopup="listbox"
+                      aria-expanded={menuOpen}
+                      className={`life-field justify-between cursor-pointer ${menuOpen ? 'life-field--open' : ''}`}
                     >
                       <span>{newMenu}</span>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${menuOpen ? 'rotate-180' : ''}`}>
@@ -852,7 +894,7 @@ export default function HomePage() {
                       </svg>
                     </button>
                     {menuOpen && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#e5e7eb] rounded-lg shadow-lg z-10 py-1">
+                      <div role="listbox" className="life-menu absolute top-full left-0 right-0 mt-1 z-10">
                         {menuOptions.map((opt) => {
                             const isBoxOpt = /box/i.test(opt)
                             const isDisabled = isVanillaSelected && !isBoxOpt
@@ -862,13 +904,9 @@ export default function HomePage() {
                                 type="button"
                                 disabled={isDisabled}
                                 onClick={() => { if (!isDisabled) { setNewMenu(opt); setMenuOpen(false) } }}
-                                className={`w-full text-left px-3 py-2 text-sm transition-colors ${
-                                  isDisabled
-                                    ? 'text-[#d1d5db] cursor-not-allowed'
-                                    : newMenu === opt
-                                    ? 'bg-[#dbeeff] text-[#2d6fa8] font-medium'
-                                    : 'text-[#374151] hover:bg-[#f9fafb]'
-                                }`}
+                                role="option"
+                                aria-selected={newMenu === opt}
+                                className="life-menu-item"
                               >
                                 {opt}
                               </button>
@@ -882,11 +920,11 @@ export default function HomePage() {
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[#e5e7eb]">
+            <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[var(--life-neutral-100)]">
               <button
                 type="button"
                 onClick={() => setCreateOpen(false)}
-                className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors"
+                className={lifeButtonClass('secondary')}
               >
                 Cancel
               </button>
@@ -894,7 +932,7 @@ export default function HomePage() {
                 type="button"
                 onClick={handleNext}
                 disabled={!newTitle.trim() || isCreatingCourse || (isVanillaSelected && !/box/i.test(newMenu))}
-                className="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors"
+                className={lifeButtonClass('primary')}
               >
                 {isCreatingCourse ? 'Creating...' : 'Next'}
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -913,8 +951,8 @@ export default function HomePage() {
             key={toast.id}
             className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium pointer-events-auto animate-fade-in-down min-w-[260px] max-w-sm ${
               toast.type === 'success'
-                ? 'bg-[#111827] text-white'
-                : 'bg-[#1e4d73] text-white'
+                ? 'bg-[var(--life-neutral-850)] text-white'
+                : 'bg-[var(--life-primary-800)] text-white'
             }`}
           >
             {toast.type === 'success' ? (

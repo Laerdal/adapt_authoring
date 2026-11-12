@@ -5,7 +5,7 @@
 // toast + phase note until their respective phases land; Share for Review is
 // fully wired (opens ShareForReviewDialog). Visual language is
 // the LIFE design system (font-family-primary, --life-color-* tokens, the
-// `.sb-toolbar-btn` and `.sb-status-pill` utilities in index.css) so the port
+// `.life-btn` and `.sb-status-pill` utilities in index.css) so the port
 // from the Figma "Course Creation Center" prototype is 1:1.
 //
 // AI is no longer a top-bar action — it lives under Add Content → AI Assistance
@@ -27,6 +27,7 @@ import {
 import { createPortal } from 'react-dom';
 import { REVIEW_STATUS_LABEL, type ReviewStatus } from '@/types/storyboard';
 import GuideDialog, { type GuidePanel, type GuideSection } from '@/components/common/GuideDialog';
+import { useExclusiveMenu } from './useExclusiveMenu';
 
 const STORYBOARD_GUIDE_PANELS: GuidePanel[] = [
   {
@@ -190,13 +191,15 @@ function Dropdown({
     };
   }, [open]);
 
+  useExclusiveMenu(open, setOpen, btnRef);
+
   return (
     <>
       <button
         ref={btnRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="sb-toolbar-btn"
+        className="life-btn life-btn--secondary"
         aria-haspopup="menu"
         aria-expanded={open}
       >
@@ -273,7 +276,7 @@ export default function StoryboardTopBar({
       }}
     >
       {showBack && (
-        <button type="button" onClick={onBack} className="sb-toolbar-btn" title="Back">
+        <button type="button" onClick={onBack} className="life-btn life-btn--secondary" title="Back">
           <ArrowLeft className="h-3.5 w-3.5" /> Back
         </button>
       )}
@@ -296,7 +299,7 @@ export default function StoryboardTopBar({
           type="button"
           onClick={onSave}
           disabled={!dirty || saving}
-          className="sb-toolbar-btn"
+          className="life-btn life-btn--secondary"
           title="Save storyboard"
         >
           {saving ? (
@@ -311,7 +314,7 @@ export default function StoryboardTopBar({
           type="button"
           onClick={onImport}
           title="Import Word, PDF or PowerPoint"
-          className="sb-toolbar-btn"
+          className="life-btn life-btn--secondary"
         >
           <Upload className="h-3.5 w-3.5" /> Import
         </button>
@@ -326,7 +329,7 @@ export default function StoryboardTopBar({
         <button
           type="button"
           onClick={onShareForReview}
-          className="sb-toolbar-btn"
+          className="life-btn life-btn--secondary"
         >
           <Users className="h-3.5 w-3.5" /> Share for Review
         </button>
@@ -334,27 +337,19 @@ export default function StoryboardTopBar({
         <button
           type="button"
           onClick={onGenerate}
-          className="sb-toolbar-btn sb-toolbar-btn-primary"
+          className="life-btn life-btn--primary"
           title="Generate the Adapt course from this storyboard"
         >
           Generate Course <ArrowRight className="h-3.5 w-3.5" />
         </button>
-
         <button
           type="button"
-          onClick={onShareForReview}
-          className="sb-toolbar-btn"
+          onClick={() => setIsGuideOpen(true)}
+          className="life-btn life-btn--ghost"
+          aria-haspopup="dialog"
+          aria-expanded={isGuideOpen}
         >
-          <Users className="h-3.5 w-3.5" /> Share for Review
-        </button>
-
-        <button
-          type="button"
-          onClick={onGenerate}
-          className="sb-toolbar-btn sb-toolbar-btn-primary"
-          title="Generate the Adapt course from this storyboard"
-        >
-          Generate Course <ArrowRight className="h-3.5 w-3.5" />
+          <Lightbulb className="h-3.5 w-3.5" /> How-To Guide
         </button>
       </div>
 

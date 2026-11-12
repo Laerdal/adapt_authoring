@@ -50,7 +50,7 @@ export default function ContentPageCanvas({
                 type="button"
                 aria-label="Copy page"
                 onClick={(e) => { e.stopPropagation(); onCopy?.(); }}
-                className="w-6 h-6 flex items-center justify-center rounded text-[#ABABAB] hover:text-[#474747] hover:bg-[#F2F2F2] transition-colors"
+                className="life-icon-btn life-icon-btn--xs"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
@@ -61,7 +61,7 @@ export default function ContentPageCanvas({
                 type="button"
                 aria-label="Delete page"
                 onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete this page?")) onDelete?.(); }}
-                className="w-6 h-6 flex items-center justify-center rounded text-[#ABABAB] hover:text-[#DC3449] hover:bg-[#FDDEE2] transition-colors"
+                className="life-icon-btn life-icon-btn--xs life-icon-btn--critical"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6h16zM10 11v6M14 11v6" />
@@ -82,7 +82,7 @@ export default function ContentPageCanvas({
             value={page.title}
             onChange={(e) => onUpdate({ title: e.target.value })}
             placeholder="Topic Title"
-            className="menu-canvas-title w-full bg-transparent border-none outline-none text-4xl font-bold placeholder-[#ABABAB] focus:ring-0 cursor-text leading-tight font-[Lato]"
+            className="menu-canvas-title w-full bg-transparent border-none outline-none text-4xl font-bold placeholder-[var(--life-neutral-300)] focus:ring-0 cursor-text leading-tight font-[Lato]"
             aria-label="Topic title"
           />
         )}

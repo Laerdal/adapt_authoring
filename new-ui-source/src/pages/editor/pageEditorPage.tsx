@@ -15,6 +15,7 @@ type EditorNavigationState = {
   theme?: string
   menu?: string
   pageId?: string
+  aiTopic?: string
 }
 
 export default function PageEditorPage() {
@@ -31,6 +32,7 @@ export default function PageEditorPage() {
         initialTheme={state?.theme}
         initialMenu={state?.menu}
         initialPageId={state?.pageId}
+        initialAiTopic={state?.aiTopic}
       />
       <AiAssistant context="Course Editor" suggestions={EDITOR_SUGGESTIONS} />
     </>

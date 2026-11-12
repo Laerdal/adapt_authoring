@@ -7,5 +7,7 @@
   "adapt-output-cdn": { "backend": "plugins/output/cdn", "dest": "output", "frontend": "frontend/src/plugins/cdn" },
   "adapt-output-storyboard": { "backend": "plugins/output/storyboard", "dest": "output", "frontend": "frontend/src/plugins/storyboard" },
   "adapt-services-ai-tutor": { "backend": "plugins/services/ai-tutor", "dest": "services", "frontend": "frontend/src/plugins/ai-tutor" },
-  "adapt-content-templating": { "backend": "plugins/content/templating", "dest": "content", "frontend": "frontend/src/plugins/templating" }
+  "adapt-content-templating": { "backend": "plugins/content/templating", "dest": "content", "frontend": "frontend/src/plugins/templating" },
+  "adapt-services-samaritan": { "backend": "plugins/services/samaritan", "dest": "services", "frontend": null },
+  "adapt-content-samaritanaction": { "backend": "plugins/content/samaritanaction", "dest": "content", "frontend": null }
 }

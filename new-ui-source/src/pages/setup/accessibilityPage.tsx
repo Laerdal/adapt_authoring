@@ -128,7 +128,7 @@ function A11yLeafInput({ leaf, onChange, hint }: { leaf: A11yLeaf; onChange: (pa
         aria-label={leaf.label}
         value={leaf.value}
         onChange={(e) => onChange(leaf.path, e.target.value)}
-        className="w-full px-3 py-2 text-sm rounded-lg border border-[#e5e7eb] bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent transition-colors"
+        className="life-field"
       />
     </div>
   );
@@ -164,17 +164,17 @@ function Accordion({
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div
-      className="rounded-xl border border-[#e5e7eb] overflow-hidden bg-white"
+      className="rounded-xl border border-[var(--life-neutral-100)] overflow-hidden bg-white"
     >
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="group w-full flex items-center justify-between gap-3 px-5 py-4 text-left bg-white text-[#111827] hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] transition-colors"
+        className="life-accordion-trigger group !px-5 !min-h-[64px]"
       >
         <div className="min-w-0">
           <h3 className="font-bold text-current text-sm flex items-center gap-1.5">{title}{hint ? <InfoIcon label={title} hint={hint} /> : null}</h3>
-          {subtitle && <p className="text-xs text-[#6b7280] mt-0.5 leading-snug group-hover:text-[#0f5f75]">{subtitle}</p>}
+          {subtitle && <p className="text-xs text-[var(--life-neutral-600)] mt-0.5 leading-snug">{subtitle}</p>}
         </div>
         <svg
           className="shrink-0 ml-auto text-current"
@@ -191,7 +191,7 @@ function Accordion({
         </svg>
       </button>
       {open && (
-        <div className="border-t border-[#f3f4f6] flex flex-col gap-3 px-5 pb-5 pt-3">
+        <div className="border-t border-[var(--life-neutral-050)] flex flex-col gap-3 px-5 pb-5 pt-3">
           {children}
         </div>
       )}
@@ -283,12 +283,11 @@ function A11yToggle({
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
         aria-label={label}
-        className="sr-only peer"
+        className="life-check mt-0.5"
       />
-      <CheckboxIndicator checked={checked} className="mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
       <div className="flex flex-col gap-0.5">
-        <span className="text-sm font-semibold text-[#374151]">{label}{showInfoIcon ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}</span>
-        {description && <span className="text-[13px] text-[#9ca3af] leading-snug">{description}</span>}
+        <span className="text-sm font-semibold text-[var(--life-neutral-700)]">{label}{showInfoIcon ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}</span>
+        {description && <span className="text-[13px] text-[var(--life-neutral-400)] leading-snug">{description}</span>}
       </div>
     </label>
   );
@@ -316,7 +315,7 @@ function A11yNumberField({
         step={1}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full px-3 py-2 text-sm rounded-lg border border-[#e5e7eb] bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent transition-colors"
+        className="life-field"
       />
     </div>
   );
@@ -341,17 +340,15 @@ function A11yJsonField({
 
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-sm font-bold text-[#111827]">{label}{showInfoIcon ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}</span>
-      {help && <span className="text-[13px] text-[#9ca3af] leading-snug mb-1">{help}</span>}
+      <span className="text-sm font-bold text-[var(--life-neutral-850)]">{label}{showInfoIcon ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}</span>
+      {help && <span className="text-[13px] text-[var(--life-neutral-400)] leading-snug mb-1">{help}</span>}
       <textarea
         aria-label={label}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         spellCheck={false}
         rows={5}
-        className={`w-full px-3 py-2 text-sm font-mono rounded-lg border bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent transition-colors resize-y ${
-          invalid ? "border-[var(--life-critical-500)]" : "border-[#e5e7eb]"
-        }`}
+        className={`life-field font-mono resize-y ${invalid ? "!border-[var(--life-critical-500)]" : ""}`}
       />
       {invalid && <span className="text-[12px] text-[var(--life-critical-500)]">Enter valid JSON (e.g. {"{}"}).</span>}
     </div>
@@ -626,11 +623,11 @@ export function AccessibilityPage({
   );
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#f7f9fb]">
-      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-center gap-4">
+    <div className="flex flex-col h-full w-full bg-[var(--life-neutral-020)]">
+      <div className="shrink-0 px-6 py-5 bg-white border-b border-[var(--life-neutral-100)] flex items-center gap-4">
         <div>
-          <h2 className="text-xl font-bold text-[#111827]">Accessibility</h2>
-          <p className="text-sm text-[#6b7280] mt-0.5">
+          <h2 className="text-xl font-bold text-[var(--life-neutral-850)]">Accessibility</h2>
+          <p className="text-sm text-[var(--life-neutral-600)] mt-0.5">
             Configure basic accessibility settings, ARIA labels grouped by area, and advanced options.
           </p>
         </div>
@@ -642,23 +639,23 @@ export function AccessibilityPage({
       <div className="flex-1 overflow-y-auto min-h-0">
       <div className="max-w-2xl px-6 py-6">
       {loading ? (
-        <div className="flex items-center justify-center py-12 text-[#6b7280]">
+        <div className="flex items-center justify-center py-12 text-[var(--life-neutral-600)]">
           <svg className="animate-spin mr-2" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M21 12a9 9 0 1 1-6.219-8.56" strokeLinecap="round" />
           </svg>
           Loading settings…
         </div>
       ) : !courseId ? (
-        <div className="rounded-lg border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm text-[#991b1b]">
+        <div className="rounded-lg border border-[var(--life-critical-100)] bg-[var(--life-critical-050)] px-4 py-3 text-sm text-[var(--life-critical-600)]">
           No course is associated with this setup flow, so accessibility settings cannot be loaded.
         </div>
       ) : loadError ? (
-        <div className="rounded-lg border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm text-[#991b1b]">
+        <div className="rounded-lg border border-[var(--life-critical-100)] bg-[var(--life-critical-050)] px-4 py-3 text-sm text-[var(--life-critical-600)]">
           Couldn't load the accessibility settings. Reload the page to try again — saving is disabled until they load
           successfully to avoid overwriting your existing settings.
         </div>
       ) : !hasAnything ? (
-        <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-4 py-3 text-sm text-[#6b7280]">
+        <div className="rounded-lg border border-[var(--life-neutral-100)] bg-[var(--life-neutral-020)] px-4 py-3 text-sm text-[var(--life-neutral-600)]">
           No accessibility strings are defined for this course yet. They appear here once the course and its plugins are set up.
         </div>
       ) : (
@@ -675,8 +672,8 @@ export function AccessibilityPage({
                   onChange={setEnabled}
                 />
                 <div>
-                  <p className="text-sm font-bold text-[#111827] mt-1">ARIA Levels</p>
-                  <p className="text-[13px] text-[#9ca3af] mb-2 leading-snug">
+                  <p className="text-sm font-bold text-[var(--life-neutral-850)] mt-1">ARIA Levels</p>
+                  <p className="text-[13px] text-[var(--life-neutral-400)] mb-2 leading-snug">
                     Set the heading level applied to each structural element.
                   </p>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-3">

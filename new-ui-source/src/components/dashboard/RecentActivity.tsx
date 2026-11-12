@@ -55,7 +55,7 @@ export default function RecentActivity() {
   return (
     <div className="bg-white rounded-xl border border-[#d0d0dc] overflow-hidden">
       <div className="px-6 py-4 border-b border-[#e8e8f0] flex items-center justify-between">
-        <h2 className="text-base font-semibold text-[#1a1a2e]">Recent Activity</h2>
+        <h2 className="text-base font-semibold text-[var(--life-neutral-850)]">Recent Activity</h2>
         <button className="text-sm text-[#0072ce] font-medium hover:text-[#005ea6] transition-colors">
           View all
         </button>
@@ -68,12 +68,12 @@ export default function RecentActivity() {
               {item.initials}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm text-[#1a1a2e] truncate">
+              <p className="text-sm text-[var(--life-neutral-850)] truncate">
                 <span className="font-medium">{item.learner}</span>
                 {" "}
-                <span className={actionColors[item.action] ?? "text-[#6b6b8a]"}>{item.action}</span>
+                <span className={actionColors[item.action] ?? "text-[var(--life-neutral-600)]"}>{item.action}</span>
                 {" "}
-                <span className="text-[#6b6b8a]">{item.module}</span>
+                <span className="text-[var(--life-neutral-600)]">{item.module}</span>
               </p>
               <p className="text-xs text-[#8e8ea0] mt-0.5">{item.time}</p>
             </div>
