@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
-# Runs ON an instance (by hand over Session Manager today, by SSM from the pipeline later).
+# Runs ON an instance (by hand over Session Manager, or by SSM from the pipeline).
 # Usage: deploy-release.sh <release-id> [--dry-run] [--no-rollback]
+# Safety: one deploy at a time (flock) | first deploy backs up the current code | the framework plugin import is retried once and
+#         then verified (verify-install.js) | any failure after the code is live rolls back to .deploy/previous.
 # Env:   BUCKET (required)  ENV_NAME=dev  APP_DIR=/efs-mount/opt/adapt-dev  PM2_NAME=adapt
 #        AWS_DEFAULT_REGION=eu-west-1 (root has no default region on these hosts)
 set -euo pipefail
+ORIG_ARGS=("$@") # kept for the single-deploy lock below
 
 # SSM shells are non-interactive and skip nvm; on these hosts node/npm live under root's nvm (pm2 is in /usr/bin)
 export HOME="${HOME:-/root}"
@@ -24,6 +27,18 @@ export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-eu-west-1}"
 REPOS_DIR="$APP_DIR/repos"
 STATE="$APP_DIR/.deploy"
 S3="s3://$BUCKET/$ENV_NAME"
+
+# One deploy at a time per instance (a pipeline run racing a manual run, or two pipeline runs). The lock is held by the
+# flock process itself and closed for the script's children (-o), so pm2's daemon or the background rm below can never keep
+# it alive past this deploy. A rollback re-enters this script and skips the lock through the env flag. Dry runs do not lock.
+if [ "$DRY" = 0 ] && [ -z "${ADAPT_DEPLOY_LOCK_HELD:-}" ]; then
+  command -v flock >/dev/null || { echo "ERROR: flock not installed (util-linux)" >&2; exit 1; }
+  mkdir -p "$STATE"
+  rc=0
+  ADAPT_DEPLOY_LOCK_HELD=1 flock -n -o -E 75 "$STATE/lock" bash "$0" "${ORIG_ARGS[@]}" || rc=$?
+  [ "$rc" = 75 ] && echo "ERROR: another deploy is already running on this instance (lock: $STATE/lock)" >&2
+  exit "$rc"
+fi
 # ponytail: staged on local disk (EFS is slow for many small files); needs ~2x the app size free in /var/tmp
 STAGE=$(mktemp -d /var/tmp/adapt-deploy.XXXXXX)
 trap 'rm -rf "$STAGE"' EXIT
@@ -125,7 +140,8 @@ fail() {
   notify_teams "❌ Deploy $ID to $ENV_NAME FAILED at: $1${PREVIOUS:+ (rolling back to $PREVIOUS)}"
   if [ "$ROLLBACK" = 1 ] && [ -n "$PREVIOUS" ] && [ "$PREVIOUS" != "$ID" ]; then
     log "rolling back to $PREVIOUS"
-    "$0" "$PREVIOUS" --no-rollback || log "ROLLBACK ALSO FAILED - manual intervention needed"
+    # via bash: the pipeline downloads this script with `aws s3 cp` (no exec bit), so "$0" alone would be "Permission denied"
+    bash "$0" "$PREVIOUS" --no-rollback || log "ROLLBACK ALSO FAILED - manual intervention needed"
   fi
   exit 1 # a rolled-back deploy is still a failed deploy
 }
@@ -138,6 +154,17 @@ wait_healthy() { # up to ~90s; 200, or 401/403 (server answering) counts as up
   done
   return 1
 }
+
+# First pipeline deploy on this instance: there is no earlier release to roll back to, so keep a copy of what is there now.
+# (Restore by hand: tar -xzf <file> -C $APP_DIR. Take an EBS snapshot/AMI too; this only covers the managed code folders.)
+if [ -z "$PREVIOUS" ]; then
+  BACKUP="$STATE/pre-pipeline-$(date +%Y%m%d-%H%M%S).tgz"
+  log "first deploy on this instance: backing up the current code to $BACKUP"
+  tar -czf "$BACKUP" -C "$APP_DIR" --ignore-failed-read --exclude=node_modules --exclude='*/versions' --exclude='*/componentcache' \
+    --exclude='*/extensioncache' --exclude='*/bowercache' --exclude=public/assets \
+    lib routes frontend migrations scripts plugins public conf package.json package-lock.json 2>/dev/null \
+    || [ "$?" = 1 ] || { log "ERROR: backup failed, nothing was changed"; exit 1; } # tar exit 1 = a file changed while reading: fine
+fi
 
 log "applying files"; apply_files >/dev/null || fail "file sync"
 
@@ -193,11 +220,21 @@ align_git
 
 # Framework plugins live in the DB + temp/, not in the artifact: re-import them from the pinned clone.
 # No ?branch= so the webhook skips its own git step and imports exactly what is checked out. Synchronous.
+import_plugins() { curl -fsS -m 2400 "http://127.0.0.1:$PORT/api/webhooks/force/frameworkplugins" >/dev/null; }
 log "importing framework plugins"
-curl -fsS -m 2400 "http://127.0.0.1:$PORT/api/webhooks/force/frameworkplugins" >/dev/null \
+import_plugins || { log "import failed, retrying once in 20s (it is a full re-import, safe to repeat)"; sleep 20; import_plugins; } \
   || { log "framework plugin import FAILED (code is deployed; not rolling back — a rollback would not undo the DB import)"
        notify_teams "⚠️ Deploy $ID to $ENV_NAME: code is live, framework plugin import FAILED"; exit 1; }
 wait_healthy || fail "health check after import"
+
+# The import can end half-done without failing (Oct 2026, SD: themes registered in the DB but missing on disk).
+# Prove every plugin has its folder, its versions copy and one DB row; re-import once; otherwise roll back.
+verify_plugins() {
+  [ -f "$APP_DIR/scripts/release/verify-install.js" ] || { log "WARN: this release has no verify-install.js, skipping the plugin check"; return 0; }
+  (cd "$APP_DIR" && node scripts/release/verify-install.js)
+}
+log "verifying plugin install"
+verify_plugins || { log "plugin check failed, re-importing once"; import_plugins || true; verify_plugins; } || fail "plugin verification"
 
 notify_teams "✅ Deployed $ID to $ENV_NAME"
 log "OK. Reminder: DB scripts in adapt-build/database-helpers are still manual."

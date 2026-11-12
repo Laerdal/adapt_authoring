@@ -6,6 +6,9 @@ name: adapt-pipeline
 #  - workflow_dispatch                    -> what the plugin repos call when THEY change (see docs/centralized-cicd.md);
 #                                            run with `ref: develop|master` so the workflow file of that branch is used.
 # Branch -> environment: develop=dev, release/*=tryout, master=prod. Always builds the latest heads of every repo.
+# Deploys are switched on per environment with the repo variable DEPLOY_ENVS (default "dev"), e.g. "dev tryout prod", and each
+# environment has its own GitHub environment (approvers, role, DEPLOY_WAVES). E2E: repo variable E2E_ENVS (default "dev").
+# See scripts/release/README.md for the production setup and the per-instance cutover.
 
 on:
   push:
@@ -22,6 +25,10 @@ on:
         description: 'Dry run: upload to S3 and run deploy-release.sh --dry-run on the instance (nothing on the instance changes, no E2E)'
         type: boolean
         default: false
+      wave:
+        description: 'Only deploy this wave (instances tagged wave=N). Empty = every wave in the environment variable DEPLOY_WAVES, in order. Use it to cut instances over one at a time.'
+        type: string
+        default: ''
       trigger:
         description: 'Who triggered this (shown in the Teams card), e.g. adapt-framework-plugins@abc1234'
         type: string
@@ -116,7 +123,7 @@ jobs:
           node-version: 18
           cache: npm
       - run: npm ci --ignore-scripts # postinstall (installPlugins.js) needs a conf/config.json; tests do not
-      - run: ./node_modules/.bin/mocha ./test/storyboard.commentStatus.js
+      - run: ./node_modules/.bin/mocha ./test/storyboard.commentStatus.js ./test/release.verifyInstall.js
 
   test-new-ui:
     runs-on: ubuntu-22.04
@@ -210,23 +217,36 @@ jobs:
           retention-days: 7
           compression-level: 0 # already .tgz
 
-  # AWS hop. Stays skipped until the OIDC role exists and repo variable AWS_DEPLOY_ENABLED=true.
-  # Until then: download the artifact, upload to S3 by hand, run deploy-release.sh on the instance (docs/centralized-cicd.md).
-  # ponytail: dev only. tryout (release/*) and prod (master) get added once their instance layouts are confirmed.
+  # AWS hop, for any environment (dev / tryout / prod) that is listed in the repo variable DEPLOY_ENVS (default "dev") and while
+  # AWS_DEPLOY_ENABLED=true. The GitHub environment of the same name carries what differs per environment: required reviewers
+  # (prod), the AWS_DEPLOY_ROLE_ARN of that environment and DEPLOY_WAVES. A feature branch resolves to env=none and never deploys.
+  # Until an environment is enabled: download the artifact, upload to S3 by hand, run deploy-release.sh on the instance.
   deploy:
     needs: [resolve, build, test-backend, test-new-ui]
     if: >-
-      needs.resolve.outputs.env == 'dev' && github.event_name != 'pull_request' &&
-      vars.AWS_DEPLOY_ENABLED == 'true' && (github.event_name != 'workflow_dispatch' || inputs.deploy)
+      needs.resolve.outputs.env != 'none' && github.event_name != 'pull_request' &&
+      vars.AWS_DEPLOY_ENABLED == 'true' && (github.event_name != 'workflow_dispatch' || inputs.deploy) &&
+      contains(format(' {0} ', vars.DEPLOY_ENVS || 'dev'), format(' {0} ', needs.resolve.outputs.env))
     runs-on: ubuntu-22.04
-    timeout-minutes: 75
-    environment: dev
+    timeout-minutes: 120 # two waves of up to an hour each in the worst case; the approval wait does not count
+    environment: ${{ needs.resolve.outputs.env }}
     outputs:
       detail: ${{ steps.ssm.outputs.detail }} # the server's own failure line, shown on the Teams card
     env:
       BUCKET: ${{ vars.RELEASE_BUCKET }}
       RELEASE_ID: ${{ needs.resolve.outputs.release_id }}
+      ENV_NAME: ${{ needs.resolve.outputs.env }}
     steps:
+      # A prod run must never fall back to the dev role (a repo-level variable is used when the environment sets none).
+      - name: Guard - the deploy role must be this environment's own role
+        env:
+          ROLE: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+        run: |
+          case "$ROLE" in
+            *"-$ENV_NAME") ;;
+            *) echo "ERROR: AWS_DEPLOY_ROLE_ARN ('$ROLE') is not a '$ENV_NAME' role. Set it on the '$ENV_NAME' GitHub environment (role names end in -$ENV_NAME)." >&2; exit 1 ;;
+          esac
+
       - uses: actions/download-artifact@v4
         with:
           name: adapt-release-${{ needs.resolve.outputs.release_id }}
@@ -240,7 +260,7 @@ jobs:
       - name: Upload release to S3
         run: |
           set -euo pipefail
-          P="s3://$BUCKET/dev"
+          P="s3://$BUCKET/$ENV_NAME"
           cd release-out
           deps=$(ls deps-*.tgz)
           aws s3 ls "$P/$deps" >/dev/null 2>&1 || aws s3 cp "$deps" "$P/$deps" --only-show-errors # unchanged lockfile = already there
@@ -248,52 +268,71 @@ jobs:
           aws s3 cp "manifest-$RELEASE_ID.json" "$P/" --only-show-errors
           aws s3 cp deploy-release.sh "$P/" --only-show-errors
 
-      - name: Deploy to instances tagged app=adapt,env=dev (SSM)
+      - name: Deploy to instances tagged app=adapt,env=<env> (SSM), wave by wave
         id: ssm
         env:
           DRY_FLAG: ${{ inputs.dry_run && ' --dry-run' || '' }}
+          INPUT_WAVE: ${{ inputs.wave }}
+          DEPLOY_WAVES: ${{ vars.DEPLOY_WAVES }}
         run: |
           set -euo pipefail
           # Whatever happens, hand a one-line reason to the Teams card (overwritten below once the server has answered).
           DETAIL="the deploy failed before the server answered (see the run log)"
           trap 'echo "detail=$DETAIL" >> "$GITHUB_OUTPUT"' EXIT
-          # deploy-release.sh loads root's nvm itself (SSM shells skip it); only HOME needs setting here
-          PARAMS=$(jq -nc --arg b "$BUCKET" --arg id "$RELEASE_ID" --arg flag "$DRY_FLAG" '{commands: [
-            "export HOME=/root",
-            "aws s3 cp s3://\($b)/dev/deploy-release.sh /tmp/deploy-release.sh --only-show-errors",
-            "BUCKET=\($b) ENV_NAME=dev bash /tmp/deploy-release.sh \($id)\($flag)"]}')
-          CMD_ID=$(aws ssm send-command --document-name AWS-RunShellScript \
-            --targets Key=tag:app,Values=adapt Key=tag:env,Values=dev \
-            --parameters "$PARAMS" --timeout-seconds 3600 --comment "adapt $RELEASE_ID" \
-            --query Command.CommandId --output text)
-          echo "SSM command: $CMD_ID"
 
-          for i in $(seq 1 240); do
-            st=$(aws ssm list-command-invocations --command-id "$CMD_ID" --query 'CommandInvocations[].Status' --output text)
-            if [ -z "$st" ] && [ "$i" -gt 8 ]; then
-              DETAIL="no instance matched tags app=adapt,env=dev, or none is Online in SSM"
-              echo "$DETAIL"; exit 1
-            fi
-            case "$st" in ""|*Pending*|*InProgress*|*Delayed*) sleep 15 ;; *) break ;; esac
-          done
+          # Waves (environment variable DEPLOY_WAVES, e.g. "1 2"): wave 1 is the canary and the next wave only starts once the
+          # previous one succeeded. Only instances carrying a wave=N tag are touched, so tagging an instance opts it in (an
+          # instance still on the old webhooks stays untagged). No DEPLOY_WAVES (dev) = one pass over every app=adapt,env=<env>.
+          WAVES="${INPUT_WAVE:-$DEPLOY_WAVES}"
+          # a dry run is a rehearsal on the canary only, unless one specific wave was asked for
+          if [ -n "$DRY_FLAG" ] && [ -z "$INPUT_WAVE" ]; then WAVES="${WAVES%% *}"; fi
 
-          # full script output per instance (list-command-invocations truncates to 2500 chars; this keeps up to 24000)
-          for iid in $(aws ssm list-command-invocations --command-id "$CMD_ID" --query 'CommandInvocations[].InstanceId' --output text); do
-            echo "===== $iid ====="
-            aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$iid" \
-              --query '[Status,StandardOutputContent,StandardErrorContent]' --output text | tee -a "$RUNNER_TEMP/ssm.out" || true
+          for W in ${WAVES:-_all}; do
+            TARGETS=(Key=tag:app,Values=adapt "Key=tag:env,Values=$ENV_NAME")
+            [ "$W" = _all ] || TARGETS+=("Key=tag:wave,Values=$W")
+            echo "########## $ENV_NAME wave: ${W/_all/all instances}${DRY_FLAG:+ (dry run)} ##########"
+            OUT="$RUNNER_TEMP/ssm-$W.out"
+
+            # deploy-release.sh loads root's nvm itself (SSM shells skip it); only HOME needs setting here
+            PARAMS=$(jq -nc --arg b "$BUCKET" --arg env "$ENV_NAME" --arg id "$RELEASE_ID" --arg flag "$DRY_FLAG" '{commands: [
+              "export HOME=/root",
+              "aws s3 cp s3://\($b)/\($env)/deploy-release.sh /tmp/deploy-release.sh --only-show-errors",
+              "BUCKET=\($b) ENV_NAME=\($env) bash /tmp/deploy-release.sh \($id)\($flag)"]}')
+            CMD_ID=$(aws ssm send-command --document-name AWS-RunShellScript \
+              --targets "${TARGETS[@]}" \
+              --parameters "$PARAMS" --timeout-seconds 3600 --comment "adapt $RELEASE_ID $ENV_NAME wave $W" \
+              --query Command.CommandId --output text)
+            echo "SSM command: $CMD_ID"
+
+            for i in $(seq 1 240); do
+              st=$(aws ssm list-command-invocations --command-id "$CMD_ID" --query 'CommandInvocations[].Status' --output text)
+              if [ -z "$st" ] && [ "$i" -gt 8 ]; then
+                DETAIL="no instance matched tags ${TARGETS[*]#Key=tag:}, or none is Online in SSM"
+                echo "$DETAIL"; exit 1
+              fi
+              case "$st" in ""|*Pending*|*InProgress*|*Delayed*) sleep 15 ;; *) break ;; esac
+            done
+
+            # full script output per instance (list-command-invocations truncates to 2500 chars; this keeps up to 24000)
+            for iid in $(aws ssm list-command-invocations --command-id "$CMD_ID" --query 'CommandInvocations[].InstanceId' --output text); do
+              echo "===== $iid ====="
+              aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$iid" \
+                --query '[Status,StandardOutputContent,StandardErrorContent]' --output text | tee -a "$OUT" || true
+            done
+            # the server's own reason: its last FAILED/WARN line, else its last status line
+            DETAIL=$(tr -d '\r' < "$OUT" 2>/dev/null | grep -E 'FAILED|WARN' | tail -1 | cut -c1-220 || true)
+            [ -n "$DETAIL" ] || DETAIL=$(tr -d '\r' < "$OUT" 2>/dev/null | grep -E '^\[deploy ' | tail -1 | cut -c1-220 || true)
+            for s in $st; do [ "$s" = Success ] || { echo "Deploy failed in wave $W: $st (later waves were not started)"; exit 1; }; done
           done
-          # the server's own reason: its last FAILED/WARN line, else its last status line
-          DETAIL=$(tr -d '\r' < "$RUNNER_TEMP/ssm.out" 2>/dev/null | grep -E 'FAILED|WARN' | tail -1 | cut -c1-220 || true)
-          [ -n "$DETAIL" ] || DETAIL=$(tr -d '\r' < "$RUNNER_TEMP/ssm.out" 2>/dev/null | grep -E '^\[deploy ' | tail -1 | cut -c1-220 || true)
-          for s in $st; do [ "$s" = Success ] || { echo "Deploy failed: $st"; exit 1; }; done
 
   # Runs after a successful deploy and NEVER fails the pipeline: every path exits 0 and reports through `result`
   # (shown in the Teams card). It dispatches only the @smoke suite (smoke.yml); the full regression stays in QA's own workflows.
   # Needs secret STUDIO_E2E_TOKEN (dispatch + read on the E2E repo); without it the job reports "skipped".
   e2e:
     needs: [resolve, deploy]
-    if: needs.deploy.result == 'success' && !inputs.dry_run
+    if: >-
+      needs.deploy.result == 'success' && !inputs.dry_run &&
+      contains(format(' {0} ', vars.E2E_ENVS || 'dev'), format(' {0} ', needs.resolve.outputs.env))
     runs-on: ubuntu-22.04
     timeout-minutes: 40
     outputs:
