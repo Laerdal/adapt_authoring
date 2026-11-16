@@ -443,6 +443,24 @@ function flattenBehaviourSchema(
   return { schemas: outSchemas, values: outValues, parents: outParents };
 }
 
+// Layers an object's own flattened fields over the ambient (item / extension /
+// component) scope. Keys the object defines itself win over same-named keys
+// elsewhere in the ambient scope, so two sibling objects (e.g. a flipcard's
+// _sideA and _sideB, each with its own _contentType / _graphic / title) each
+// resolve their conditions against their own controller. Keys the object does
+// not define still fall back to the ambient scope.
+function mergeConditionalScope(ambient: ConditionalContext, own: ConditionalContext): ConditionalContext {
+  const parents = { ...ambient.parents };
+  Object.keys(own.schemas).forEach((key) => {
+    if (!(key in own.parents)) delete parents[key];
+  });
+  return {
+    schemas: { ...ambient.schemas, ...own.schemas },
+    values: { ...ambient.values, ...own.values },
+    parents: { ...parents, ...own.parents },
+  };
+}
+
 function isBehaviourFieldConditionallyVisible(
   key: string,
   context: ConditionalContext,
@@ -807,7 +825,10 @@ function BehaviourField({
     // Reuse the ambient scope (whole array item / extension / component) if
     // given, so a dependent nested arbitrarily deep can still find a
     // controller declared as a flat sibling elsewhere in that same scope.
-    const localContext = conditionalContext ?? flattenBehaviourSchema(fieldSchema.properties, objectValue);
+    // This object's own fields are layered on top so they take precedence over
+    // same-named fields of sibling objects in that scope.
+    const ownContext = flattenBehaviourSchema(fieldSchema.properties, objectValue);
+    const localContext = conditionalContext ? mergeConditionalScope(conditionalContext, ownContext) : ownContext;
     const objectFields = filterVisibleBehaviourFieldKeys(
       Object.keys(fieldSchema.properties).filter((childKey) =>
         !(hasEnabledToggle && childKey === "_isEnabled") && !(hasAssetSrc && childKey === "src")
