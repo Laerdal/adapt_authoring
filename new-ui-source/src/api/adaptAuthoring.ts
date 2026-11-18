@@ -5845,7 +5845,8 @@ export async function importStoryboardDocument(
   });
   if (!res.ok) {
     const body = await res.json().catch(() => null) as { error?: string } | null;
-    throw new Error((body && body.error) || `Import failed — ${res.statusText}`);
+    // The status travels with the error so callers can word it for the author.
+    throw Object.assign(new Error((body && body.error) || `Import failed — ${res.statusText}`), { status: res.status });
   }
   return res.json() as Promise<ImportResult>;
 }
