@@ -1263,7 +1263,7 @@
     "properties._media.ogg": "",
     "properties._media.source": "",
     "properties._media.type": "",
-    "properties._media.poster": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer-3.png",
+    "properties._media.poster": "https://cdn-dams.laerdal.io/DEV/Studio/video_poster_placeholder_0b73086186-mwm9jx21.png",
     "properties._media.cc.items._srcType": "captions",
     "properties._media.cc.items._srcTypeCaption.label": "English",
     "properties._media.cc.items._srcTypeCaption.srclang": "en",
