@@ -106,7 +106,7 @@ import {
 } from "../../constants/structureDefaults";
 import { useAuth } from "../../context/AuthContext";
 import { getSchemaHint, getSchemaLabel, getSchemaNode } from "../../helpers/setupInfoSchema";
-import { getOnScreenClassOptions, serializeOnScreenSettings, type OnScreenSettings } from "../../helpers/onScreenSettings";
+import { ON_SCREEN_CLASS_LABELS, getOnScreenClassLabel, getOnScreenClassOptions, resolveOnScreenInheritance, serializeOnScreenSettings, type GlobalOnScreenConfig, type OnScreenLevel, type OnScreenSettings } from "../../helpers/onScreenSettings";
 
 interface PreviewBuildResponse {
   success?: boolean;
@@ -2170,6 +2170,7 @@ function TopicSelect({
   value,
   onChange,
   options,
+  optionLabels,
   emptyOptionLabel = "",
   required = false,
 }: {
@@ -2178,6 +2179,7 @@ function TopicSelect({
   value: string;
   onChange: (value: string) => void;
   options: readonly string[];
+  optionLabels?: Record<string, string>;
   emptyOptionLabel?: string;
   required?: boolean;
 }) {
@@ -2197,12 +2199,41 @@ function TopicSelect({
         >
           {needsBlankOption && <option value={value}>{emptyOptionLabel}</option>}
           {options.map((option) => (
-            <option key={option} value={option}>{option || emptyOptionLabel}</option>
+            <option key={option} value={option}>{(optionLabels?.[option] ?? option) || emptyOptionLabel}</option>
           ))}
         </select>
       </div>
     </div>
   );
+}
+
+// AC7 (ADAPT-3947): tells the author whether the on-screen class in effect
+// comes from the theme-level default or a local override on this item.
+function OnScreenInheritanceNote({
+  global,
+  localClasses,
+  level,
+}: {
+  global?: GlobalOnScreenConfig;
+  localClasses?: string;
+  level: OnScreenLevel;
+}) {
+  const info = resolveOnScreenInheritance(global, localClasses, level);
+  if (info.state === "inherited") {
+    return (
+      <p className="text-xs text-[var(--life-neutral-600)]">
+        Inherited from theme default: {getOnScreenClassLabel(info.classes)}
+      </p>
+    );
+  }
+  if (info.state === "overridden") {
+    return (
+      <p className="text-xs text-[var(--life-neutral-600)]">
+        Overridden — theme default ({getOnScreenClassLabel(info.inheritedClasses)}) is not used
+      </p>
+    );
+  }
+  return null;
 }
 
 function TopicCheckbox({
@@ -3388,6 +3419,9 @@ export default function CourseEditor({
   // the other way round.
   const [courseTheme, setCourseTheme] = useState(initialTheme);
   const [courseMenu, setCourseMenu] = useState(initialMenu);
+  // Theme-level on-screen defaults (themeSettings[themeKey]._onScreen) used
+  // to show inherited/overridden hints on the per-item on-screen selects.
+  const [courseOnScreenDefaults, setCourseOnScreenDefaults] = useState<GlobalOnScreenConfig | undefined>(undefined);
   useEffect(() => {
     if (!courseId || courseId === "new-course") return;
     let cancelled = false;
@@ -3396,6 +3430,10 @@ export default function CourseEditor({
         if (cancelled) return;
         if (data.themeName) setCourseTheme(data.themeName);
         if (data.menuName) setCourseMenu(data.menuName);
+        const onScreen = data.themeSettings?._onScreen;
+        setCourseOnScreenDefaults(
+          onScreen && typeof onScreen === "object" ? onScreen as GlobalOnScreenConfig : undefined
+        );
       })
       .catch(() => {});
     return () => {
@@ -13140,8 +13178,10 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                     },
                                   })}
                                   options={getOnScreenClassOptions(courseTheme, page.onScreen?._classes)}
+                                  optionLabels={ON_SCREEN_CLASS_LABELS}
                                   emptyOptionLabel=""
                                 />
+                                <OnScreenInheritanceNote global={courseOnScreenDefaults} localClasses={page.onScreen?._classes} level="page" />
                                 <TopicTextInput
                                   label={getSchemaLabel(getContentFieldSchema("contentobject", "_onScreen", "_percentInviewVertical"), "Percent in view")}
                                   hint={getSchemaHint(getContentFieldSchema("contentobject", "_onScreen", "_percentInviewVertical"))}
@@ -13389,8 +13429,10 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                       value={asString(article.onScreen?._classes)}
                                       onChange={(value) => updateArticle(page!.id, article.id, { onScreen: { ...(article.onScreen ?? {}), _classes: value } })}
                                       options={getOnScreenClassOptions(courseTheme, article.onScreen?._classes)}
+                                      optionLabels={ON_SCREEN_CLASS_LABELS}
                                       emptyOptionLabel=""
                                     />
+                                    <OnScreenInheritanceNote global={courseOnScreenDefaults} localClasses={article.onScreen?._classes} level="article" />
                                     <TopicTextInput
                                       label={getSchemaLabel(getContentFieldSchema("article", "_onScreen", "_percentInviewVertical"), "Percent in view")}
                                       hint={getSchemaHint(getContentFieldSchema("article", "_onScreen", "_percentInviewVertical"))}
@@ -13628,8 +13670,10 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                       value={asString(block.onScreen?._classes)}
                                       onChange={(value) => updateBlock(page!.id, article!.id, block.id, { onScreen: { ...(block.onScreen ?? {}), _classes: value } })}
                                       options={getOnScreenClassOptions(courseTheme, block.onScreen?._classes)}
+                                      optionLabels={ON_SCREEN_CLASS_LABELS}
                                       emptyOptionLabel=""
                                     />
+                                    <OnScreenInheritanceNote global={courseOnScreenDefaults} localClasses={block.onScreen?._classes} level="block" />
                                     <TopicTextInput
                                       label={getSchemaLabel(getContentFieldSchema("block", "_onScreen", "_percentInviewVertical"), "Percent in view")}
                                       hint={getSchemaHint(getContentFieldSchema("block", "_onScreen", "_percentInviewVertical"))}
@@ -13853,8 +13897,10 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                       value={asString(component.onScreen?._classes)}
                                       onChange={(value) => updateComponent(page.id, article.id, block.id, component.id, { onScreen: { ...(component.onScreen ?? {}), _classes: value } })}
                                       options={getOnScreenClassOptions(courseTheme, component.onScreen?._classes)}
+                                      optionLabels={ON_SCREEN_CLASS_LABELS}
                                       emptyOptionLabel=""
                                     />
+                                    <OnScreenInheritanceNote global={courseOnScreenDefaults} localClasses={component.onScreen?._classes} level="component" />
                                     <TopicTextInput
                                       label={getSchemaLabel(getContentFieldSchema("component", "_onScreen", "_percentInviewVertical"), "Percent in view")}
                                       hint={getSchemaHint(getContentFieldSchema("component", "_onScreen", "_percentInviewVertical"))}
