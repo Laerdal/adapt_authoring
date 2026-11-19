@@ -5,6 +5,7 @@
 
 import { apiClient } from "./client";
 import { stripHtmlToText } from "@/utils/format";
+import { migrateLegacyFlipcardProperties } from "@/helpers/flipcardLegacy";
 import type { ImportResult } from "../types/storyboardImport";
 import {
   buildGraphicField,
@@ -2746,7 +2747,13 @@ export async function getCourseStructure(
               extensions: objectValue(block._extensions),
               components: componentsOf(block._id).map(
                 (comp): SComponent => {
-                  const componentProperties = objectValue(comp.properties);
+                  const rawComponentProperties = objectValue(comp.properties);
+                  // Old flipcards only have frontImage/backTitle/backBody; map them
+                  // onto _sideA/_sideB so the Properties panel shows the content.
+                  const componentProperties =
+                    comp._component === "laerdal-flipcard"
+                      ? migrateLegacyFlipcardProperties(rawComponentProperties, comp._id)
+                      : rawComponentProperties;
                   const componentOnScreen = objectValue(comp._onScreen);
                   return {
                     id: comp._id,
