@@ -8,7 +8,7 @@ export const ON_SCREEN_CLASS_OPTIONS = [
 // Friendly display names for class values (ADAPT-3947). Classes without an
 // entry are displayed as their raw CSS class name.
 export const ON_SCREEN_CLASS_LABELS: Record<string, string> = {
-  [SMOOTH_ENTRANCE_CLASS]: "Smooth Entrance",
+  [SMOOTH_ENTRANCE_CLASS]: "smooth-entrance",
 };
 
 export function getOnScreenClassLabel(className: string): string {
