@@ -7,7 +7,7 @@ import { SaveChangesButton } from "./SaveChangesButton";
 import { SaveStatusToast } from "./SaveStatusToast";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
-import { ON_SCREEN_CLASS_OPTIONS } from "../../helpers/onScreenSettings";
+import { ON_SCREEN_CLASS_OPTIONS, getOnScreenClassLabel } from "../../helpers/onScreenSettings";
 import { updateCustomThemeSetting } from "./customThemeSettings";
 import { calcDesktopSizes } from "./customThemeTypography";
 
@@ -2826,7 +2826,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           <div className="space-y-5">
             <p className="text-xs text-[var(--life-neutral-600)] leading-relaxed">
               These settings allow you to attach classes when content is within the browser viewport.
-              Supported classes include fade-in, fade-in-left, fade-in-right, fade-in-top, and fade-in-bottom.
+              Supported classes include fade-in, fade-in-left, fade-in-right, fade-in-top, fade-in-bottom, and Smooth Entrance.
               {" "}A configured local class uses that item's settings; an empty local class uses the course defaults.
               {" "}Use 1-100 for an explicit viewport percentage; the current framework treats 0 as 33%.
             </p>
@@ -2861,7 +2861,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                           >
                             <option value="">Select a class</option>
                             {ON_SCREEN_CLASS_OPTIONS.filter((option) => option !== '').map((option) => (
-                              <option key={option} value={option}>{option}</option>
+                              <option key={option} value={option}>{getOnScreenClassLabel(option)}</option>
                             ))}
                           </select>
                         </div>
