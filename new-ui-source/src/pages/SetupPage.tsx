@@ -2912,7 +2912,7 @@ function CourseCreationCenterContent() {
       case "completion":
         return <CompletionProgressPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
       case "technical-settings":
-        return <TechnicalSettingPage courseId={courseId} courseTitle={title} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+        return <TechnicalSettingPage courseId={courseId} courseTitle={title} onNavigationRequest={performNavigation} onRequestNavigation={handleNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
       case "cdn-deployment":
         return <CdnDeploymentPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
       case "translation":

@@ -14,6 +14,9 @@ import { SaveStatusToast } from "./SaveStatusToast";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 import { CheckboxIndicator } from "../../components/common/Checkbox";
+import { StylingHelpPanel, type InsertCssRequest } from "../../components/samaritan/StylingHelpPanel";
+import { courseScopeLabel, reportStylingOutcome } from "../../api/stylingAssist";
+import { appendBlock, newBlockId, parseBlocks, removeBlock } from "../../utils/customCssBlocks";
 import {
   getConfigRootSchema,
   getCourseRootSchema,
@@ -313,12 +316,15 @@ export function TechnicalSettingPage({
   courseId,
   courseTitle,
   onNavigationRequest,
+  onRequestNavigation,
   pendingNavigation,
   onPendingNavigationHandled,
 }: {
   courseId?: string;
   courseTitle?: string;
   onNavigationRequest?: (nav: string) => void;
+  /** Guarded navigation (asks about unsaved changes first); used by Samaritan "Open Setting". */
+  onRequestNavigation?: (nav: string) => void;
   pendingNavigation?: string | null;
   onPendingNavigationHandled?: () => void;
 }) {
@@ -359,6 +365,9 @@ export function TechnicalSettingPage({
   const [supportedBrowsersOverride, setSupportedBrowsersOverride] = useState("");
   const [customCss, setCustomCss] = useState("");
   const [cssExpanded, setCssExpanded] = useState(false);
+  const [showStylingHelp, setShowStylingHelp] = useState(false);
+  // block id -> styling-assist requestId, for blocks inserted this session (undo telemetry).
+  const insertedRequestIds = useRef<Record<string, string>>({});
   const [openAccordion, setOpenAccordion] = useState<TechnicalAccordion | "">("display");
 
   const [originalValues, setOriginalValues] = useState({
@@ -589,6 +598,33 @@ export function TechnicalSettingPage({
     if (navTarget) onNavigationRequest?.(navTarget);
   };
 
+  // Samaritan styling help: Insert only appends to editor state. Saving stays an explicit user action.
+  const handleInsertStylingCss = (request: InsertCssRequest) => {
+    const id = newBlockId();
+    insertedRequestIds.current[id] = request.requestId;
+    setCustomCss((prev) =>
+      appendBlock(prev, request.css, {
+        id,
+        component: request.component,
+        scope: request.scope,
+        fw: request.frameworkVersion,
+        className: request.className,
+        appliesTo: request.appliesTo,
+      })
+    );
+  };
+
+  const handleRemoveStylingBlock = (id: string) => {
+    setCustomCss((prev) => removeBlock(prev, id));
+    const requestId = insertedRequestIds.current[id];
+    if (requestId) {
+      delete insertedRequestIds.current[id];
+      void reportStylingOutcome(requestId, "undo");
+    }
+  };
+
+  const stylingBlocks = parseBlocks(customCss);
+
   const handleExportCss = () => {
     if (!customCss) {
       alert("No custom CSS found for this course.");
@@ -731,6 +767,13 @@ export function TechnicalSettingPage({
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
+                    onClick={() => setShowStylingHelp(true)}
+                    className="life-btn life-btn--secondary"
+                  >
+                    Ask Samaritan for Styling Help
+                  </button>
+                  <button
+                    type="button"
                     aria-label="Export CSS"
                     onClick={handleExportCss}
                     className="life-btn life-btn--primary"
@@ -766,8 +809,48 @@ export function TechnicalSettingPage({
                 <div className={`border border-[var(--life-neutral-200)] rounded-[8px] bg-white overflow-hidden focus-within:ring-2 focus-within:ring-[var(--life-primary-500)] focus-within:border-transparent ${cssExpanded ? "h-full" : ""}`}>
                   <CustomCssEditor value={customCss} onChange={setCustomCss} expanded={cssExpanded} />
                 </div>
+                {stylingBlocks.length > 0 && (
+                  <div className="mt-3 flex flex-col gap-1.5" aria-label="AI-inserted CSS blocks">
+                    <span className="text-xs font-semibold text-[var(--life-neutral-600)]">AI-inserted CSS blocks</span>
+                    {stylingBlocks.map((block) => (
+                      <div key={block.id} className="flex items-center justify-between gap-3 rounded-[8px] border border-[var(--life-neutral-200)] bg-[var(--life-neutral-020)] px-3 py-1.5">
+                        <span className="text-xs text-[var(--life-neutral-850)] truncate">
+                          {block.className
+                            ? `Class .${block.className} (add to a ${block.appliesTo ?? "block"})`
+                            : block.appliesTo === "course"
+                              ? `${courseScopeLabel(block.component)} - applies to every instance`
+                              : block.scope === "component"
+                              ? `Component: ${block.component}`
+                              : "Course-wide"}{" "}
+                          (framework {block.fw}) - {block.css.trim().slice(0, 60)}
+                        </span>
+                        <button
+                          type="button"
+                          className="life-btn life-btn--ghost life-btn--sm"
+                          aria-label={`Remove AI CSS block ${block.id}`}
+                          onClick={() => handleRemoveStylingBlock(block.id)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
+
+            {showStylingHelp && courseId && (
+              <StylingHelpPanel
+                courseId={courseId}
+                currentCss={customCss}
+                onClose={() => setShowStylingHelp(false)}
+                onInsertCss={handleInsertStylingCss}
+                onOpenSetting={(panel) => {
+                  setShowStylingHelp(false);
+                  (onRequestNavigation ?? onNavigationRequest)?.(panel);
+                }}
+              />
+            )}
 
             <div className="flex items-start gap-2.5 rounded-lg bg-[#fff7ed] border border-[#fed7aa] px-4 py-3">
               <span className="text-base leading-none mt-0.5" aria-hidden="true">💡</span>
