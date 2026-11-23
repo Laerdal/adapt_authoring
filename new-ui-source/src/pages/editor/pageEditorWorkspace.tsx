@@ -5031,7 +5031,7 @@ export default function CourseEditor({
         display: none !important;
       }
 
-      /* section collapse (syncSectionCollapseControls). Only the
+      /* Section collapse (syncSectionCollapseControls). Only the
          section content below the header is hidden (CSS-only, so inline
          editors stay mounted); the header is never restyled. The toggle is the
          last icon of the section's level-actions group. A collapsed section
@@ -5044,12 +5044,20 @@ export default function CourseEditor({
       }
       /* Headless collapsed section: keep a small host so the toggle is reachable. */
       .adapt-authoring-section-collapsed .article__header-inner.adapt-authoring-preview-headless-header,
-      .adapt-authoring-section-collapsed .article__header[data-preview-injected="true"]:has(> .adapt-authoring-preview-headless-header) {
+      .adapt-authoring-section-collapsed .article__header[data-preview-injected="true"]:has(> .adapt-authoring-preview-headless-header),
+      .article__header-inner.adapt-authoring-preview-headless-header:focus-within,
+      .article__header[data-preview-injected="true"]:has(> .adapt-authoring-preview-headless-header:focus-within) {
         display: block !important;
       }
+      /* ...and stay visible while they hold keyboard focus (e.g. just after the
+         toggle expanded the section), until focus leaves. */
       .adapt-authoring-section-collapsed .article__header-inner[data-preview-injected="true"],
-      .adapt-authoring-section-collapsed .article__header-inner.adapt-authoring-preview-headless-header {
+      .adapt-authoring-section-collapsed .article__header-inner.adapt-authoring-preview-headless-header,
+      .article__header-inner.adapt-authoring-preview-headless-header:focus-within {
         min-height: 32px;
+      }
+      .article__header-inner.adapt-authoring-preview-headless-header:focus-within {
+        position: relative;
       }
       .adapt-authoring-level-actions[data-preview-actions-collapsed-only="true"] > :not([data-preview-section-collapse-btn]) {
         display: none !important;
