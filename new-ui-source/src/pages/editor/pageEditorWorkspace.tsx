@@ -3547,7 +3547,7 @@ export default function CourseEditor({
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
-  // ADAPT-3948: view-only section collapse state (per topic, in memory only).
+  //view-only section collapse state (per topic, in memory only).
   const sectionCollapse = useSectionCollapse();
   const [hasCanvasSelection, setHasCanvasSelection] = useState(false);
   const [savedContentPages, setSavedContentPages] = useState<ContentPageData[]>([]);
@@ -5618,7 +5618,7 @@ export default function CourseEditor({
       deleteBtn.title = `Delete ${toBadgeLabel(level)}`;
       deleteBtn.setAttribute("aria-label", deleteBtn.title);
 
-      // ADAPT-3948: Section collapse toggle is the last icon of the group.
+      // Section collapse toggle is the last icon of the group.
       // Hover/selection shows the full group, so drop the toggle-only marker.
       if (level === "section") {
         if (actions.hasAttribute("data-preview-actions-collapsed-only")) {
@@ -5902,7 +5902,7 @@ export default function CourseEditor({
     // swap-positions control above).
     doc.querySelectorAll("[data-preview-level-actions]").forEach((node) => {
       if (node !== activeActionsHost && node !== hoverActionsHost) {
-        // ADAPT-3948: a collapsed section keeps its group (toggle only) so it
+        // a collapsed section keeps its group (toggle only) so it
         // can always be re-expanded.
         const sweepArticleId = node.getAttribute("data-preview-action-article-id");
         const sweepPageId = node.getAttribute("data-preview-action-page-id");
@@ -5919,6 +5919,9 @@ export default function CourseEditor({
           }
           return;
         }
+        // Never detach a group that holds keyboard focus; the focusout
+        // listener re-runs this sweep once focus has left.
+        if (node.contains(doc.activeElement)) return;
         node.remove();
       }
     });
@@ -8147,7 +8150,7 @@ export default function CourseEditor({
     syncSwapPositionsControlsRef.current = syncSwapPositionsControls;
   }, [syncSwapPositionsControls]);
 
-  // ADAPT-3948: per-section collapse toggles. Reads the mirrored ref so the
+  // per-section collapse toggles. Reads the mirrored ref so the
   // observer/iframe callbacks always see current state; DOM writes are
   // diffed inside syncSectionCollapseControls to avoid observer feedback.
   const { collapsedByTopic, collapsedRef: sectionCollapsedRef } = sectionCollapse;
@@ -8168,6 +8171,10 @@ export default function CourseEditor({
 
   useEffect(() => {
     syncSectionCollapse();
+    // A pending left-panel scroll is skipped while its target is hidden; retry
+    // once the collapse state (and so visibility) has been applied.
+    const rafId = window.requestAnimationFrame(() => syncPreviewScrollFromLeftPanelRef.current());
+    return () => window.cancelAnimationFrame(rafId);
   }, [syncSectionCollapse, collapsedByTopic]);
 
   // Drop collapsed ids for sections that no longer exist in the current topic.
@@ -8295,7 +8302,7 @@ export default function CourseEditor({
 
       const target = blockNode.querySelector(".block__header-inner.adapt-authoring-preview-active");
       if (!target) return;
-      // ADAPT-3948: hidden by a collapsed section — keep the pending target
+      // hidden by a collapsed section — keep the pending target
       // so it scrolls once the section is expanded.
       if (target.closest(".adapt-authoring-section-collapsed") || target.getClientRects().length === 0) return;
 
@@ -8754,7 +8761,7 @@ export default function CourseEditor({
       const target = getEventElement(event.target);
       if (!target) return;
 
-      // ADAPT-3948: section collapse toggle — view-only, never changes selection.
+      // section collapse toggle — view-only, never changes selection.
       const sectionCollapseBtn = target.closest("[data-preview-section-collapse-btn]") as HTMLElement | null;
       if (sectionCollapseBtn) {
         event.preventDefault();
@@ -9777,6 +9784,19 @@ export default function CourseEditor({
     doc.addEventListener("paste", onPaste, true);
     doc.addEventListener("input", onInput, true);
     doc.addEventListener("focusout", onFocusOut, true);
+    // ADAPT-3948: groups holding keyboard focus are protected from removal;
+    // clean them up once focus has actually left (after the new focus lands).
+    let focusCleanupRafId: number | null = null;
+    const onSectionToggleFocusOut = (event: Event) => {
+      if (!(event.target as Element | null)?.closest?.("[data-preview-level-actions]")) return;
+      if (focusCleanupRafId !== null) return;
+      focusCleanupRafId = window.requestAnimationFrame(() => {
+        focusCleanupRafId = null;
+        syncSectionCollapseRef.current();
+        applyPreviewSelectionStylesRef.current();
+      });
+    };
+    doc.addEventListener("focusout", onSectionToggleFocusOut, true);
 
     applyPreviewSelectionStyles();
     syncPreviewInlineEditorsRef.current();
@@ -9956,6 +9976,8 @@ export default function CourseEditor({
       doc.removeEventListener("paste", onPaste, true);
       doc.removeEventListener("input", onInput, true);
       doc.removeEventListener("focusout", onFocusOut, true);
+      doc.removeEventListener("focusout", onSectionToggleFocusOut, true);
+      if (focusCleanupRafId !== null) window.cancelAnimationFrame(focusCleanupRafId);
     };
 
     return cleanupPreviewListenersRef.current;
@@ -10569,6 +10591,8 @@ export default function CourseEditor({
     setHasCanvasSelection(true);
     setRightPanelOpen(true);
     setRightPanelType("block");
+    // ADAPT-3948: also for same-ID reselection (selection effect won't re-run).
+    sectionCollapse.expandForArticle(pageId, articleId);
     if (!isSameSelection) {
       setOpenBlockAccordions(DEFAULT_BLOCK_ACCORDIONS);
     }
@@ -12338,6 +12362,8 @@ export default function CourseEditor({
     setHasCanvasSelection(true);
     setRightPanelOpen(true);
     setRightPanelType("component");
+    // ADAPT-3948: also for same-ID reselection (selection effect won't re-run).
+    sectionCollapse.expandForArticle(pageId, articleId);
     if (!isSameSelection) {
       // Written in ONE state update (not General first, then Behaviour) so
       // the panel never renders an intermediate open section.
@@ -12878,7 +12904,11 @@ export default function CourseEditor({
                   const articleIds = toolbarPage.articles.map((article) => article.id);
                   const collapsedCount = articleIds.filter((id) => topicCollapsed[id]).length;
                   return (
-                    <div className="flex shrink-0 items-center justify-end gap-2 px-3 pt-2" data-section-collapse-toolbar>
+                    <div
+                      className="flex shrink-0 items-center justify-end gap-2 px-3 pt-2"
+                      data-section-collapse-toolbar
+                      onClick={(event) => event.stopPropagation()}
+                    >
                       <button
                         type="button"
                         className="life-btn life-btn--sm life-btn--ghost"

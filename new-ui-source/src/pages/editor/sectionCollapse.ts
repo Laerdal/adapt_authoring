@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 
 /**
- * ADAPT-3948 — Page Editor section collapse/expand (view-only state).
+ * Page Editor section collapse/expand (view-only state).
  *
  * Collapsed sections are tracked per topic, in memory only. Nothing here is
  * persisted, saved, or merged into contentPages; collapse is a CSS-only
@@ -184,8 +184,12 @@ export function syncSectionCollapseControls(
 
     if (isOpen) {
       if (actions) {
-        if (actions.getAttribute("data-preview-actions-collapsed-only") === "true") {
-          // Nothing but the toggle was shown for the collapsed state.
+        if (
+          actions.getAttribute("data-preview-actions-collapsed-only") === "true" &&
+          !actions.contains(doc.activeElement)
+        ) {
+          // Nothing but the toggle was shown for the collapsed state. Kept
+          // while it holds keyboard focus (a focusout re-sync cleans it up).
           actions.remove();
         } else {
           ensureSectionToggleButton(doc, actions, article, true);
