@@ -30,7 +30,6 @@ Interested? [See what Adapt can do.](https://community.adaptlearning.org/demo2/i
 
 See [Contributing to the Adapt authoring tool](https://github.com/adaptlearning/adapt_authoring/blob/master/CONTRIBUTING.md).
 
-
 ## Troubleshooting, Bugs, and Feedback
 + For help with troubleshooting, visit the [Technical Discussion Forum](https://community.adaptlearning.org/mod/forum/view.php?id=4).
 + To report a bug, please [GitHub Issues](https://github.com/adaptlearning/adapt_authoring/issues).
