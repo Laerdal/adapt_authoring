@@ -5031,7 +5031,7 @@ export default function CourseEditor({
         display: none !important;
       }
 
-      /* ADAPT-3948 section collapse (syncSectionCollapseControls). Only the
+      /* section collapse (syncSectionCollapseControls). Only the
          section content below the header is hidden (CSS-only, so inline
          editors stay mounted); the header is never restyled. The toggle is the
          last icon of the section's level-actions group. A collapsed section
@@ -5977,7 +5977,7 @@ export default function CourseEditor({
     // half-width and would squeeze Topic/Section to the left half too.
     const insetContainer = doc.querySelector(".page__inner") as HTMLElement | null;
     // The reference must be actually rendered: inside a collapsed section
-    // (ADAPT-3948) every block is display:none, so its rect is 0x0 and the
+    //  every block is display:none, so its rect is 0x0 and the
     // measurement below would yield a ~full-width right inset that squeezes
     // the Topic/Section headers to a one-word-per-line column. With nothing
     // visible, skip and keep the last applied insets.
@@ -9784,7 +9784,7 @@ export default function CourseEditor({
     doc.addEventListener("paste", onPaste, true);
     doc.addEventListener("input", onInput, true);
     doc.addEventListener("focusout", onFocusOut, true);
-    // ADAPT-3948: groups holding keyboard focus are protected from removal;
+    // groups holding keyboard focus are protected from removal;
     // clean them up once focus has actually left (after the new focus lands).
     let focusCleanupRafId: number | null = null;
     const onSectionToggleFocusOut = (event: Event) => {
@@ -10591,7 +10591,7 @@ export default function CourseEditor({
     setHasCanvasSelection(true);
     setRightPanelOpen(true);
     setRightPanelType("block");
-    // ADAPT-3948: also for same-ID reselection (selection effect won't re-run).
+    // Also for same-ID reselection (selection effect won't re-run).
     sectionCollapse.expandForArticle(pageId, articleId);
     if (!isSameSelection) {
       setOpenBlockAccordions(DEFAULT_BLOCK_ACCORDIONS);
@@ -12362,7 +12362,7 @@ export default function CourseEditor({
     setHasCanvasSelection(true);
     setRightPanelOpen(true);
     setRightPanelType("component");
-    // ADAPT-3948: also for same-ID reselection (selection effect won't re-run).
+    // Also for same-ID reselection (selection effect won't re-run).
     sectionCollapse.expandForArticle(pageId, articleId);
     if (!isSameSelection) {
       // Written in ONE state update (not General first, then Behaviour) so
