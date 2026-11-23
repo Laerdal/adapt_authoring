@@ -17,6 +17,7 @@ import {
 } from "../../api/stylingAssist";
 import { COMPATIBILITY_WARNING } from "../../utils/customCssBlocks";
 import Button from "../common/Button";
+import { useDialogFocus } from "../common/useDialogFocus";
 
 const MAX_INTENT = 500;
 
@@ -102,6 +103,10 @@ export function StylingHelpPanel({ courseId, currentCss, onClose, onInsertCss, o
   const [classCopied, setClassCopied] = useState(false);
   const [inserted, setInserted] = useState(false);
   const settled = useRef(false);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  // The control that opened the panel (read during the first render, before focus moves).
+  const triggerRef = useRef<HTMLElement | null>(typeof document !== "undefined" ? (document.activeElement as HTMLElement | null) : null);
   // Components the curated whole-course list already covers (incl. Laerdal aliases of core types).
   const curatedComponentKeys = new Set([...STYLING_COURSE_TARGETS.map((t) => t.key), "laerdal-narrative", "laerdal-slider", "laerdal-text"]);
 
@@ -125,6 +130,29 @@ export function StylingHelpPanel({ courseId, currentCss, onClose, onInsertCss, o
     }
     onClose();
   };
+
+  // Initial focus inside the panel, Tab/Shift+Tab trap, focus returned to the trigger on close.
+  // Escape is handled below (it needs the latest result to report a cancel), so it is not passed here.
+  useDialogFocus(dialogRef);
+
+  // Background inertness: everything else under <body> is inert while the modal is open.
+  // Declared after useDialogFocus: on close its focus restore runs first, then (here) the
+  // background becomes interactive again and the trigger is focused.
+  useEffect(() => {
+    const overlay = overlayRef.current;
+    if (!overlay) return undefined;
+    const states = new Map<HTMLElement, boolean>();
+    for (const child of Array.from(document.body.children)) {
+      if (child === overlay || !(child instanceof HTMLElement)) continue;
+      states.set(child, child.inert);
+      child.inert = true;
+    }
+    return () => {
+      for (const [element, wasInert] of states) element.inert = wasInert;
+      const trigger = triggerRef.current;
+      if (trigger?.isConnected) requestAnimationFrame(() => trigger.focus());
+    };
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -215,12 +243,14 @@ export function StylingHelpPanel({ courseId, currentCss, onClose, onInsertCss, o
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-[rgba(26,26,26,0.5)]" onMouseDown={(e) => e.target === e.currentTarget && close()}>
+    <div ref={overlayRef} className="fixed inset-0 z-[60] flex items-center justify-center bg-[rgba(26,26,26,0.5)]" onMouseDown={(e) => e.target === e.currentTarget && close()}>
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-label="Ask Samaritan for Styling Help"
-        className="w-[640px] max-w-[92vw] max-h-[88vh] overflow-y-auto rounded-lg bg-white shadow-xl p-5 flex flex-col gap-4"
+        className="w-[640px] max-w-[92vw] max-h-[88vh] overflow-y-auto rounded-lg bg-white shadow-xl p-5 flex flex-col gap-4 outline-none"
       >
         <div>
           <h2 className="text-lg font-bold text-[var(--life-neutral-850)]">Ask Samaritan for Styling Help</h2>
