@@ -36,7 +36,7 @@ import { UnsavedChangesModal } from "../setup/unsavedChangesModal";
 import PublishCourseDialog, { type PublishCoursePhase } from "../../components/publish/PublishCourseDialog";
 import PageEditorTopBar from "./pageEditorTopBar";
 import PageEditorNavigation from "./pageEditorNavigation";
-import { ensureSectionToggleButton, syncSectionCollapseControls, useSectionCollapse } from "./sectionCollapse";
+import { areAllCollapsed, ensureSectionToggleButton, syncSectionCollapseControls, useSectionCollapse } from "./sectionCollapse";
 // Samaritan workspace - see its own file header for why selection state
 // is passed as props rather than the (non-functional, in embedded mode)
 // studio:selected postMessage event.
@@ -5036,7 +5036,12 @@ export default function CourseEditor({
          editors stay mounted); the header is never restyled. The toggle is the
          last icon of the section's level-actions group. A collapsed section
          always keeps that group, showing only the toggle until hover/selection. */
-      .adapt-authoring-section-collapsed .block__container {
+      /* Collapsed hides the section body, instruction (inline editors in the
+         header) and all blocks; title, colour label and the action group stay.
+         display:none keeps editors mounted, so unsaved edits are preserved. */
+      .adapt-authoring-section-collapsed .block__container,
+      .adapt-authoring-section-collapsed .article__header .article__body,
+      .adapt-authoring-section-collapsed .article__header .article__instruction {
         display: none !important;
       }
       .adapt-authoring-section-collapsed .article__header-inner {
@@ -12908,31 +12913,34 @@ export default function CourseEditor({
                 {selectedPageId && !menuSelected && previewSrc && (() => {
                   const toolbarPage = contentPages.find((page) => page.id === selectedPageId);
                   if (!toolbarPage) return null;
-                  const topicCollapsed = collapsedByTopic[toolbarPage.id] ?? {};
                   const articleIds = toolbarPage.articles.map((article) => article.id);
-                  const collapsedCount = articleIds.filter((id) => topicCollapsed[id]).length;
+                  if (articleIds.length === 0) return null;
+                  // Switch is ON only when EVERY section is collapsed; a mixed
+                  // state is OFF. Derived each render, so it never drifts from
+                  // the per-section toggles.
+                  const allCollapsed = areAllCollapsed(collapsedByTopic, toolbarPage.id, articleIds);
                   return (
                     <div
                       className="flex shrink-0 items-center justify-end gap-2 px-3 pt-2"
                       data-section-collapse-toolbar
                       onClick={(event) => event.stopPropagation()}
                     >
-                      <button
-                        type="button"
-                        className="life-btn life-btn--sm life-btn--ghost"
-                        disabled={articleIds.length === 0 || collapsedCount === articleIds.length}
-                        onClick={() => sectionCollapse.collapseAllIn(toolbarPage.id, articleIds)}
+                      <label
+                        htmlFor="section-collapse-all-switch"
+                        className="cursor-pointer select-none text-sm text-[var(--life-neutral-850)]"
                       >
                         Collapse all sections
-                      </button>
+                      </label>
                       <button
+                        id="section-collapse-all-switch"
                         type="button"
-                        className="life-btn life-btn--sm life-btn--ghost"
-                        disabled={collapsedCount === 0}
-                        onClick={() => sectionCollapse.expandAllIn(toolbarPage.id)}
-                      >
-                        Expand all sections
-                      </button>
+                        role="switch"
+                        aria-checked={allCollapsed}
+                        className="life-switch motion-reduce:!transition-none"
+                        onClick={() => (allCollapsed
+                          ? sectionCollapse.expandAllIn(toolbarPage.id)
+                          : sectionCollapse.collapseAllIn(toolbarPage.id, articleIds))}
+                      />
                     </div>
                   );
                 })()}

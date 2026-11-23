@@ -46,6 +46,11 @@ export const collapseAll = (state: CollapsedByTopic, topicId: string, articleIds
 export const expandAll = (state: CollapsedByTopic, topicId: string): CollapsedByTopic =>
   withTopic(state, topicId, {});
 
+/** True only when the topic has sections and EVERY one is collapsed. */
+export const areAllCollapsed = (state: CollapsedByTopic, topicId: string, articleIds: string[]): boolean =>
+  articleIds.length > 0 && articleIds.every((id) => isCollapsed(state, topicId, id));
+
+
 /** Expands the article holding a selection. Returns the same object if nothing changes. */
 export const expandForSelection = (state: CollapsedByTopic, topicId: string | null, articleId: string | null): CollapsedByTopic => {
   if (!topicId || !articleId || !isCollapsed(state, topicId, articleId)) return state;
@@ -83,9 +88,11 @@ export const getToggleLabel = (title: string | null | undefined, collapsed: bool
 
 export function useSectionCollapse() {
   const [collapsedByTopic, setCollapsedByTopic] = useState<CollapsedByTopic>({});
-  // Mirror for observers / iframe click callbacks that outlive a render.
-  const collapsedRef = useRef<CollapsedByTopic>(collapsedByTopic);
-  collapsedRef.current = collapsedByTopic;
+  // The ref is the source of truth for observers / iframe callbacks; state only
+  // mirrors it to trigger renders. update() is the single writer, so a render
+  // that runs before a pending state update commits can never put a stale value
+  // back into the ref (which would show the wrong +/- icon or class).
+  const collapsedRef = useRef<CollapsedByTopic>({});
 
   const update = useCallback((fn: (state: CollapsedByTopic) => CollapsedByTopic) => {
     const next = fn(collapsedRef.current);
@@ -139,9 +146,11 @@ export function ensureSectionToggleButton(
   const label = getToggleLabel(article.title, !isOpen);
   setAttr(btn, "aria-label", label);
   setAttr(btn, "title", label);
-  const icon = isOpen ? "minus" : "plus";
-  if (btn.getAttribute("data-icon") !== icon) {
-    setAttr(btn, "data-icon", icon);
+  // Single source of truth: icon markup is always derived from isOpen and
+  // rewritten whenever the recorded state differs (minus = expanded, plus = collapsed).
+  const state = isOpen ? "expanded" : "collapsed";
+  if (btn.getAttribute("data-state") !== state || !btn.firstElementChild) {
+    setAttr(btn, "data-state", state);
     btn.innerHTML = isOpen ? MINUS_SVG : PLUS_SVG;
   }
   const body = actions.closest(".article")?.querySelector<HTMLElement>(".block__container");
@@ -180,23 +189,29 @@ export function syncSectionCollapseControls(
     }
 
     let host = inner.querySelector<HTMLElement>(".article__header-inner");
-    let actions = host?.querySelector<HTMLElement>(":scope > [data-preview-level-actions]") ?? null;
+    // Every section-level group inside this article (not only the one under the
+    // first header host), so no toggle can be left showing a stale state.
+    const groups = Array.from(
+      articleNode.querySelectorAll<HTMLElement>('[data-preview-level-actions][data-preview-action-level="section"]')
+    );
+    let actions: HTMLElement | null = groups[0] ?? null;
 
     if (isOpen) {
-      if (actions) {
+      groups.forEach((group) => {
         if (
-          actions.getAttribute("data-preview-actions-collapsed-only") === "true" &&
-          !actions.contains(doc.activeElement)
+          group.getAttribute("data-preview-actions-collapsed-only") === "true" &&
+          !group.contains(doc.activeElement)
         ) {
           // Nothing but the toggle was shown for the collapsed state. Kept
           // while it holds keyboard focus (a focusout re-sync cleans it up).
-          actions.remove();
+          group.remove();
         } else {
-          ensureSectionToggleButton(doc, actions, article, true);
+          ensureSectionToggleButton(doc, group, article, true);
         }
-      }
+      });
       return;
     }
+    groups.forEach((group) => ensureSectionToggleButton(doc, group, article, false));
 
     // Collapsed: make sure there is a header host (headless sections may have none).
     if (!host) {
