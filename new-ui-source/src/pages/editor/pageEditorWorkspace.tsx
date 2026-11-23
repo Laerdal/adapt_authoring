@@ -36,6 +36,7 @@ import { UnsavedChangesModal } from "../setup/unsavedChangesModal";
 import PublishCourseDialog, { type PublishCoursePhase } from "../../components/publish/PublishCourseDialog";
 import PageEditorTopBar from "./pageEditorTopBar";
 import PageEditorNavigation from "./pageEditorNavigation";
+import { ensureSectionToggleButton, syncSectionCollapseControls, useSectionCollapse } from "./sectionCollapse";
 // Samaritan workspace - see its own file header for why selection state
 // is passed as props rather than the (non-functional, in embedded mode)
 // studio:selected postMessage event.
@@ -3546,6 +3547,8 @@ export default function CourseEditor({
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
+  // ADAPT-3948: view-only section collapse state (per topic, in memory only).
+  const sectionCollapse = useSectionCollapse();
   const [hasCanvasSelection, setHasCanvasSelection] = useState(false);
   const [savedContentPages, setSavedContentPages] = useState<ContentPageData[]>([]);
   const [dirtyNodeKeys, setDirtyNodeKeys] = useState<Record<string, true>>({});
@@ -5028,6 +5031,34 @@ export default function CourseEditor({
         display: none !important;
       }
 
+      /* ADAPT-3948 section collapse (syncSectionCollapseControls). Only the
+         section content below the header is hidden (CSS-only, so inline
+         editors stay mounted); the header is never restyled. The toggle is the
+         last icon of the section's level-actions group. A collapsed section
+         always keeps that group, showing only the toggle until hover/selection. */
+      .adapt-authoring-section-collapsed .block__container {
+        display: none !important;
+      }
+      .adapt-authoring-section-collapsed .article__header-inner {
+        position: relative;
+      }
+      /* Headless collapsed section: keep a small host so the toggle is reachable. */
+      .adapt-authoring-section-collapsed .article__header-inner.adapt-authoring-preview-headless-header,
+      .adapt-authoring-section-collapsed .article__header[data-preview-injected="true"]:has(> .adapt-authoring-preview-headless-header) {
+        display: block !important;
+      }
+      .adapt-authoring-section-collapsed .article__header-inner[data-preview-injected="true"],
+      .adapt-authoring-section-collapsed .article__header-inner.adapt-authoring-preview-headless-header {
+        min-height: 32px;
+      }
+      .adapt-authoring-level-actions[data-preview-actions-collapsed-only="true"] > :not([data-preview-section-collapse-btn]) {
+        display: none !important;
+      }
+      /* The toggle stays clickable even while the group is only a hover preview. */
+      .adapt-authoring-level-actions .adapt-authoring-section-collapse-btn {
+        pointer-events: auto !important;
+      }
+
       .adapt-authoring-selection-active .adapt-authoring-swap-positions-row {
         position: static !important;
         flex: 0 0 100% !important;
@@ -5587,6 +5618,20 @@ export default function CourseEditor({
       deleteBtn.title = `Delete ${toBadgeLabel(level)}`;
       deleteBtn.setAttribute("aria-label", deleteBtn.title);
 
+      // ADAPT-3948: Section collapse toggle is the last icon of the group.
+      // Hover/selection shows the full group, so drop the toggle-only marker.
+      if (level === "section") {
+        if (actions.hasAttribute("data-preview-actions-collapsed-only")) {
+          actions.removeAttribute("data-preview-actions-collapsed-only");
+        }
+        const sectionArticle = contentPagesRef.current
+          .find((candidate) => candidate.id === ids.pageId)
+          ?.articles.find((candidate) => candidate.id === ids.articleId);
+        if (sectionArticle) {
+          ensureSectionToggleButton(doc, actions, sectionArticle, !sectionCollapse.collapsedRef.current[ids.pageId]?.[sectionArticle.id]);
+        }
+      }
+
       return actions;
     };
 
@@ -5857,6 +5902,23 @@ export default function CourseEditor({
     // swap-positions control above).
     doc.querySelectorAll("[data-preview-level-actions]").forEach((node) => {
       if (node !== activeActionsHost && node !== hoverActionsHost) {
+        // ADAPT-3948: a collapsed section keeps its group (toggle only) so it
+        // can always be re-expanded.
+        const sweepArticleId = node.getAttribute("data-preview-action-article-id");
+        const sweepPageId = node.getAttribute("data-preview-action-page-id");
+        if (
+          node.getAttribute("data-preview-action-level") === "section" &&
+          sweepArticleId && sweepPageId &&
+          sectionCollapse.collapsedRef.current[sweepPageId]?.[sweepArticleId]
+        ) {
+          if (node.getAttribute("data-preview-actions-collapsed-only") !== "true") {
+            node.setAttribute("data-preview-actions-collapsed-only", "true");
+          }
+          if (node.getAttribute("data-preview-actions-selected") !== "false") {
+            node.setAttribute("data-preview-actions-selected", "false");
+          }
+          return;
+        }
         node.remove();
       }
     });
@@ -5911,8 +5973,14 @@ export default function CourseEditor({
     // once a Content Group has two components, that node is intentionally
     // half-width and would squeeze Topic/Section to the left half too.
     const insetContainer = doc.querySelector(".page__inner") as HTMLElement | null;
-    const insetReference = (doc.querySelector(".component__container") ??
-      doc.querySelector(".block__header-inner")) as HTMLElement | null;
+    // The reference must be actually rendered: inside a collapsed section
+    // (ADAPT-3948) every block is display:none, so its rect is 0x0 and the
+    // measurement below would yield a ~full-width right inset that squeezes
+    // the Topic/Section headers to a one-word-per-line column. With nothing
+    // visible, skip and keep the last applied insets.
+    const isRendered = (node: HTMLElement) => node.getClientRects().length > 0;
+    const insetReference = (Array.from(doc.querySelectorAll<HTMLElement>(".component__container")).find(isRendered) ??
+      Array.from(doc.querySelectorAll<HTMLElement>(".block__header-inner")).find(isRendered) ?? null) as HTMLElement | null;
     if (insetContainer && insetReference) {
       // Measure against the theme's own padding, never against whatever this
       // same block added on a previous run.
@@ -8079,6 +8147,48 @@ export default function CourseEditor({
     syncSwapPositionsControlsRef.current = syncSwapPositionsControls;
   }, [syncSwapPositionsControls]);
 
+  // ADAPT-3948: per-section collapse toggles. Reads the mirrored ref so the
+  // observer/iframe callbacks always see current state; DOM writes are
+  // diffed inside syncSectionCollapseControls to avoid observer feedback.
+  const { collapsedByTopic, collapsedRef: sectionCollapsedRef } = sectionCollapse;
+  const syncSectionCollapse = useCallback(() => {
+    const doc = previewFrameRef.current?.contentDocument;
+    if (!doc || !selectedPageId) return;
+    const page = contentPages.find((candidate) => candidate.id === selectedPageId);
+    if (!page) return;
+    syncSectionCollapseControls(doc, { page, collapsed: sectionCollapsedRef.current[page.id] });
+  }, [contentPages, selectedPageId, sectionCollapsedRef]);
+
+  const syncSectionCollapseRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    syncSectionCollapseRef.current = syncSectionCollapse;
+  }, [syncSectionCollapse]);
+  const toggleSectionRef = useRef<(topicId: string, articleId: string) => void>(() => {});
+  toggleSectionRef.current = sectionCollapse.toggle;
+
+  useEffect(() => {
+    syncSectionCollapse();
+  }, [syncSectionCollapse, collapsedByTopic]);
+
+  // Drop collapsed ids for sections that no longer exist in the current topic.
+  useEffect(() => {
+    const page = contentPages.find((candidate) => candidate.id === selectedPageId);
+    if (page) sectionCollapse.prune(page.id, page.articles.map((article) => article.id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contentPages, selectedPageId]);
+
+  // AC8: a selection inside a collapsed section expands that section.
+  useEffect(() => {
+    if (!selectedPageId || (!selectedBlockId && !selectedComponentId)) return;
+    const page = contentPages.find((candidate) => candidate.id === selectedPageId);
+    const article = page?.articles.find((candidate) => candidate.blocks.some((block) =>
+      block.id === selectedBlockId || block.components.some((component) => component.id === selectedComponentId)));
+    if (article) sectionCollapse.expandForArticle(selectedPageId, article.id);
+    // Keyed on selection only: collapsing a section that holds the selection
+    // must keep the selection without immediately re-expanding.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPageId, selectedBlockId, selectedComponentId]);
+
   // Old-tool parity (editorPasteZoneView.js showPasteZones), extended per
   // explicit user instruction: a "Paste" bar at EVERY sibling gap in the
   // copied node's own parent (before the first, between each, after the
@@ -8185,6 +8295,9 @@ export default function CourseEditor({
 
       const target = blockNode.querySelector(".block__header-inner.adapt-authoring-preview-active");
       if (!target) return;
+      // ADAPT-3948: hidden by a collapsed section — keep the pending target
+      // so it scrolls once the section is expanded.
+      if (target.closest(".adapt-authoring-section-collapsed") || target.getClientRects().length === 0) return;
 
       target.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
       if (clearTarget) pendingLeftPanelScrollTargetRef.current = null;
@@ -8202,6 +8315,7 @@ export default function CourseEditor({
       const target = componentNode.querySelector(".laerdal-h5p__container") ??
                      componentNode.querySelector(".component__inner") ??
                      componentNode;
+      if (target.closest(".adapt-authoring-section-collapsed") || target.getClientRects().length === 0) return;
       target.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
       if (clearTarget) pendingLeftPanelScrollTargetRef.current = null;
       return;
@@ -8639,6 +8753,17 @@ export default function CourseEditor({
     const onClick = (event: Event) => {
       const target = getEventElement(event.target);
       if (!target) return;
+
+      // ADAPT-3948: section collapse toggle — view-only, never changes selection.
+      const sectionCollapseBtn = target.closest("[data-preview-section-collapse-btn]") as HTMLElement | null;
+      if (sectionCollapseBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        const articleId = sectionCollapseBtn.getAttribute("data-preview-section-article-id");
+        const topicId = liveSelectionRef.current.selectedPageId;
+        if (articleId && topicId) toggleSectionRef.current(topicId, articleId);
+        return;
+      }
 
       const mediaTarget = target.closest("video, audio, .mejs__container, .mejs-container, .plyr, .video-js, iframe");
       if (mediaTarget) {
@@ -9659,6 +9784,7 @@ export default function CourseEditor({
     syncNavigationFooterPreview();
     syncSwapPositionsControls();
     syncPasteZones();
+    syncSectionCollapseRef.current();
     primePreviewMediaFrames(doc);
     if (!pendingLeftPanelScrollTargetRef.current && !menuSelected) {
       pendingLeftPanelScrollTargetRef.current = selectedComponentId
@@ -9748,6 +9874,7 @@ export default function CourseEditor({
       swapObserverRafId = window.requestAnimationFrame(() => {
         swapObserverRafId = null;
         syncSwapPositionsControlsRef.current();
+        syncSectionCollapseRef.current();
         syncPreviewScrollFromLeftPanelRef.current();
         primePreviewMediaFrames(doc);
       });
@@ -12743,8 +12870,35 @@ export default function CourseEditor({
             </div>
           ) : (
             <div className="h-full flex flex-col min-h-0 p-2">
-              <div className="relative flex-1 min-h-0 overflow-hidden rounded-[18px] border border-[var(--life-neutral-200)] bg-white">
-                <div className="h-full w-full box-border p-2">
+              <div className="relative flex-1 min-h-0 overflow-hidden rounded-[18px] border border-[var(--life-neutral-200)] bg-white flex flex-col">
+                {selectedPageId && !menuSelected && previewSrc && (() => {
+                  const toolbarPage = contentPages.find((page) => page.id === selectedPageId);
+                  if (!toolbarPage) return null;
+                  const topicCollapsed = collapsedByTopic[toolbarPage.id] ?? {};
+                  const articleIds = toolbarPage.articles.map((article) => article.id);
+                  const collapsedCount = articleIds.filter((id) => topicCollapsed[id]).length;
+                  return (
+                    <div className="flex shrink-0 items-center justify-end gap-2 px-3 pt-2" data-section-collapse-toolbar>
+                      <button
+                        type="button"
+                        className="life-btn life-btn--sm life-btn--ghost"
+                        disabled={articleIds.length === 0 || collapsedCount === articleIds.length}
+                        onClick={() => sectionCollapse.collapseAllIn(toolbarPage.id, articleIds)}
+                      >
+                        Collapse all sections
+                      </button>
+                      <button
+                        type="button"
+                        className="life-btn life-btn--sm life-btn--ghost"
+                        disabled={collapsedCount === 0}
+                        onClick={() => sectionCollapse.expandAllIn(toolbarPage.id)}
+                      >
+                        Expand all sections
+                      </button>
+                    </div>
+                  );
+                })()}
+                <div className="w-full flex-1 min-h-0 box-border p-2">
                   {previewSrc ? (
                     <iframe
                       ref={previewFrameRef}
