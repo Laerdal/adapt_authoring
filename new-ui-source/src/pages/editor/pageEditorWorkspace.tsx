@@ -7483,7 +7483,7 @@ export default function CourseEditor({
       const existing = Array.from(host.querySelectorAll<HTMLMediaElement>(kind));
       let element =
         host.querySelector<HTMLMediaElement>(`${kind}[data-preview-asset-key="${key}"]`) ??
-        (previousSrc ? existing.find((candidate) => hasSrc(candidate, previousSrc)) ?? null : null) ??
+        (previousSrc ? existing.find((candidate) => hasSrc(candidate, previousSrc)) : null) ??
         (itemIndex !== null ? existing[itemIndex] ?? null : existing[0] ?? null);
 
       if (!element && src) {
