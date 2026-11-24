@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { consumeMigratedFlipcardIds } from "@/helpers/flipcardLegacy";
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Replace } from "lucide-react";
@@ -3553,7 +3552,6 @@ export default function CourseEditor({
   const [savedContentPages, setSavedContentPages] = useState<ContentPageData[]>([]);
   const [dirtyNodeKeys, setDirtyNodeKeys] = useState<Record<string, true>>({});
   const [isSavingSelection, setIsSavingSelection] = useState(false);
-  const [legacyFlipcardAutoSavePending, setLegacyFlipcardAutoSavePending] = useState(false);
   const [showUnsavedChangesModal, setShowUnsavedChangesModal] = useState(false);
   const [editorToast, setEditorToast] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
   const [deletionError, setDeletionError] = useState<EditorDeletionError | null>(null);
@@ -3940,12 +3938,6 @@ export default function CourseEditor({
   }, []);
 
   const hasUnsavedChanges = useMemo(() => hasStructureDraft || Object.keys(dirtyNodeKeys).length > 0, [dirtyNodeKeys, hasStructureDraft]);
-  useEffect(() => {
-    if (!legacyFlipcardAutoSavePending || isSavingSelection || !hasUnsavedChanges) return;
-    setLegacyFlipcardAutoSavePending(false);
-    void saveDraftChanges();
-  }, [legacyFlipcardAutoSavePending, isSavingSelection, hasUnsavedChanges]);
-
   const outlineContentPages = hasStructureDraft && courseStructure ? projectEditorStructure(courseStructure, contentPages) : contentPages;
 
   const loadStructureFromDatabase = useCallback(async (selection?: {
@@ -4019,11 +4011,7 @@ export default function CourseEditor({
 
       setContentPages(pages);
       setSavedContentPages(cloneContentPages(pages));
-      // Old flipcards were converted to _sideA/_sideB while loading: mark them
-      // changed and save them once automatically (see the effect below).
-      const migratedFlipcardIds = consumeMigratedFlipcardIds();
-      setDirtyNodeKeys(Object.fromEntries(migratedFlipcardIds.map((id) => [`component:${id}`, true])));
-      setLegacyFlipcardAutoSavePending(migratedFlipcardIds.length > 0);
+      setDirtyNodeKeys({});
       topicBodyTargetRef.current = null;
       setPendingExtensionDisableNames(new Set());
       setMenuPageCreated(pages.length > 0);
