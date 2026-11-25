@@ -12,6 +12,8 @@ export function UnsavedChangesModal({
   discardLabel = "Discard",
   saveLabel = "Save",
   savingLabel = "Saving...",
+  stayLabel,
+  onStay,
 }: {
   isOpen: boolean;
   isSaving?: boolean;
@@ -23,6 +25,9 @@ export function UnsavedChangesModal({
   discardLabel?: string;
   saveLabel?: string;
   savingLabel?: string;
+  /** Optional visible "stay on this page" button; rendered only when both are provided. */
+  stayLabel?: string;
+  onStay?: () => void;
 }) {
   useEffect(() => {
     if (!isOpen) return;
@@ -64,6 +69,16 @@ export function UnsavedChangesModal({
           >
             {discardLabel}
           </button>
+          {stayLabel && onStay && (
+            <button
+              type="button"
+              onClick={onStay}
+              disabled={isSaving}
+              className="life-btn life-btn--secondary"
+            >
+              {stayLabel}
+            </button>
+          )}
           <button
             type="button"
             onClick={onSave}

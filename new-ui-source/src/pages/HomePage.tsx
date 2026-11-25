@@ -775,7 +775,8 @@ export default function HomePage() {
           onClose={() => setIsAiWizardOpen(false)}
           onComplete={(courseId) => {
             setIsAiWizardOpen(false)
-            navigate(`/course/${courseId}`)
+            // The wizard promises a storyboard, so that is where the author lands.
+            navigate(`/course/${courseId}/storyboard`)
           }}
         />
       )}

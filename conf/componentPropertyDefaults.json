@@ -927,32 +927,71 @@
     "displayTitle": "Explore the cards below",
     "properties._items": [
       {
-        "frontImage": {
-          "alt": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer-2.png",
-          "src": "",
-          "attribution": ""
+        "_sideA": {
+          "_contentType": "graphic",
+          "_graphic": {
+            "src": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer-2.png",
+            "alt": "",
+            "attribution": "",
+            "graphicTitle": ""
+          },
+          "title": "",
+          "body": ""
         },
-        "backTitle": "Card Title 1",
-        "backBody": "<p>Add description here</p>"
+        "_sideB": {
+          "_contentType": "text",
+          "_graphic": {
+            "src": "",
+            "alt": "",
+            "attribution": "",
+            "graphicTitle": ""
+          },
+          "title": "Card Title 1",
+          "body": "Add description here"
+        }
       },
       {
-        "frontImage": {
-          "alt": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer-2.png",
-          "src": "",
-          "attribution": ""
+        "_sideA": {
+          "_contentType": "graphic",
+          "_graphic": {
+            "src": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer-2.png",
+            "alt": "",
+            "attribution": "",
+            "graphicTitle": ""
+          },
+          "title": "",
+          "body": ""
         },
-        "backTitle": "Card Title 2",
-        "backBody": "<p>Add description here</p>"
+        "_sideB": {
+          "_contentType": "text",
+          "_graphic": {
+            "src": "",
+            "alt": "",
+            "attribution": "",
+            "graphicTitle": ""
+          },
+          "title": "Card Title 2",
+          "body": "Add description here"
+        }
       }
     ],
     "properties._supportedLayout": "full-width",
     "properties.instruction": "",
     "properties._flipType": "allFlip",
-    "properties._items.items.frontImage.alt": "",
-    "properties._items.items.frontImage.src": "",
-    "properties._items.items.frontImage.attribution": "",
-    "properties._items.items.backTitle": "",
-    "properties._items.items.backBody": ""
+    "properties._items.items._sideA._contentType": "graphic",
+    "properties._items.items._sideA._graphic.src": "",
+    "properties._items.items._sideA._graphic.alt": "",
+    "properties._items.items._sideA._graphic.attribution": "",
+    "properties._items.items._sideA._graphic.graphicTitle": "",
+    "properties._items.items._sideA.title": "",
+    "properties._items.items._sideA.body": "",
+    "properties._items.items._sideB._contentType": "text",
+    "properties._items.items._sideB._graphic.src": "",
+    "properties._items.items._sideB._graphic.alt": "",
+    "properties._items.items._sideB._graphic.attribution": "",
+    "properties._items.items._sideB._graphic.graphicTitle": "",
+    "properties._items.items._sideB.title": "",
+    "properties._items.items._sideB.body": ""
   },
   "laerdal-form": {
     "title": "Enter form title",
@@ -1263,7 +1302,7 @@
     "properties._media.ogg": "",
     "properties._media.source": "",
     "properties._media.type": "",
-    "properties._media.poster": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer-3.png",
+    "properties._media.poster": "https://cdn-dams.laerdal.io/DEV/Studio/video_poster_placeholder_0b73086186-mwm9jx21.png",
     "properties._media.cc.items._srcType": "captions",
     "properties._media.cc.items._srcTypeCaption.label": "English",
     "properties._media.cc.items._srcTypeCaption.srclang": "en",

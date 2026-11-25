@@ -39,9 +39,12 @@ export type ProposeResponse =
   | { requestId: string; status: "ANSWERED"; answer: { text: string; sources: string[] } }
   | { requestId: string; status: "CLARIFICATION_REQUIRED"; clarification: { question: string } }
   | { requestId: string; status: "DECLINED"; declined: { reason: string; category: string } }
-  | { requestId: string; status: "PROPOSED"; actionId: string; intent: SamaritanIntent; plan: SamaritanAction; risk: string; requiresApproval: boolean }
-  | { requestId: string; status: "PLAN_PROPOSED"; intent: SamaritanIntent; plan: { actions: SamaritanAction[] }; risk: string; requiresApproval: boolean }
-  | { requestId: string; status: "OBJECTIVES_DRAFTED"; objectives: string[]; title?: string };
+  | { requestId: string; status: "PROPOSED"; actionId: string; intent: SamaritanIntent; plan: SamaritanAction; risk: string; riskReasons?: string[]; requiresApproval: boolean }
+  | { requestId: string; status: "PLAN_PROPOSED"; intent: SamaritanIntent; plan: { actions: SamaritanAction[] }; risk: string; riskReasons?: string[]; requiresApproval: boolean }
+  | { requestId: string; status: "OBJECTIVES_DRAFTED"; objectives: string[]; title?: string; sourceUse?: SourceUse; sourceNote?: string };
+
+// How much of the attached source material the objectives could use.
+export type SourceUse = "used" | "partly" | "unrelated" | "unusable";
 
 export interface ApproveResponse {
   actionId: string;

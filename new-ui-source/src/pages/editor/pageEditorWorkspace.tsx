@@ -35,6 +35,7 @@ import { UnsavedChangesModal } from "../setup/unsavedChangesModal";
 import PublishCourseDialog, { type PublishCoursePhase } from "../../components/publish/PublishCourseDialog";
 import PageEditorTopBar from "./pageEditorTopBar";
 import PageEditorNavigation from "./pageEditorNavigation";
+import { areAllCollapsed, ensureSectionToggleButton, syncSectionCollapseControls, useSectionCollapse } from "./sectionCollapse";
 // Samaritan workspace - see its own file header for why selection state
 // is passed as props rather than the (non-functional, in embedded mode)
 // studio:selected postMessage event.
@@ -106,7 +107,7 @@ import {
 } from "../../constants/structureDefaults";
 import { useAuth } from "../../context/AuthContext";
 import { getSchemaHint, getSchemaLabel, getSchemaNode } from "../../helpers/setupInfoSchema";
-import { getOnScreenClassOptions, serializeOnScreenSettings, type OnScreenSettings } from "../../helpers/onScreenSettings";
+import { ON_SCREEN_CLASS_LABELS, getOnScreenClassLabel, getOnScreenClassOptions, resolveOnScreenInheritance, serializeOnScreenSettings, type GlobalOnScreenConfig, type OnScreenLevel, type OnScreenSettings } from "../../helpers/onScreenSettings";
 
 interface PreviewBuildResponse {
   success?: boolean;
@@ -441,6 +442,24 @@ function flattenBehaviourSchema(
     }
   });
   return { schemas: outSchemas, values: outValues, parents: outParents };
+}
+
+// Layers an object's own flattened fields over the ambient (item / extension /
+// component) scope. Keys the object defines itself win over same-named keys
+// elsewhere in the ambient scope, so two sibling objects (e.g. a flipcard's
+// _sideA and _sideB, each with its own _contentType / _graphic / title) each
+// resolve their conditions against their own controller. Keys the object does
+// not define still fall back to the ambient scope.
+function mergeConditionalScope(ambient: ConditionalContext, own: ConditionalContext): ConditionalContext {
+  const parents = { ...ambient.parents };
+  Object.keys(own.schemas).forEach((key) => {
+    if (!(key in own.parents)) delete parents[key];
+  });
+  return {
+    schemas: { ...ambient.schemas, ...own.schemas },
+    values: { ...ambient.values, ...own.values },
+    parents: { ...parents, ...own.parents },
+  };
 }
 
 function isBehaviourFieldConditionallyVisible(
@@ -807,7 +826,10 @@ function BehaviourField({
     // Reuse the ambient scope (whole array item / extension / component) if
     // given, so a dependent nested arbitrarily deep can still find a
     // controller declared as a flat sibling elsewhere in that same scope.
-    const localContext = conditionalContext ?? flattenBehaviourSchema(fieldSchema.properties, objectValue);
+    // This object's own fields are layered on top so they take precedence over
+    // same-named fields of sibling objects in that scope.
+    const ownContext = flattenBehaviourSchema(fieldSchema.properties, objectValue);
+    const localContext = conditionalContext ? mergeConditionalScope(conditionalContext, ownContext) : ownContext;
     const objectFields = filterVisibleBehaviourFieldKeys(
       Object.keys(fieldSchema.properties).filter((childKey) =>
         !(hasEnabledToggle && childKey === "_isEnabled") && !(hasAssetSrc && childKey === "src")
@@ -2170,6 +2192,7 @@ function TopicSelect({
   value,
   onChange,
   options,
+  optionLabels,
   emptyOptionLabel = "",
   required = false,
 }: {
@@ -2178,6 +2201,7 @@ function TopicSelect({
   value: string;
   onChange: (value: string) => void;
   options: readonly string[];
+  optionLabels?: Record<string, string>;
   emptyOptionLabel?: string;
   required?: boolean;
 }) {
@@ -2197,12 +2221,41 @@ function TopicSelect({
         >
           {needsBlankOption && <option value={value}>{emptyOptionLabel}</option>}
           {options.map((option) => (
-            <option key={option} value={option}>{option || emptyOptionLabel}</option>
+            <option key={option} value={option}>{(optionLabels?.[option] ?? option) || emptyOptionLabel}</option>
           ))}
         </select>
       </div>
     </div>
   );
+}
+
+// AC7 (ADAPT-3947): tells the author whether the on-screen class in effect
+// comes from the theme-level default or a local override on this item.
+function OnScreenInheritanceNote({
+  global,
+  localClasses,
+  level,
+}: {
+  global?: GlobalOnScreenConfig;
+  localClasses?: string;
+  level: OnScreenLevel;
+}) {
+  const info = resolveOnScreenInheritance(global, localClasses, level);
+  if (info.state === "inherited") {
+    return (
+      <p className="text-xs text-[var(--life-neutral-600)]">
+        Inherited from theme default: {getOnScreenClassLabel(info.classes)}
+      </p>
+    );
+  }
+  if (info.state === "overridden") {
+    return (
+      <p className="text-xs text-[var(--life-neutral-600)]">
+        Overridden — theme default ({getOnScreenClassLabel(info.inheritedClasses)}) is not used
+      </p>
+    );
+  }
+  return null;
 }
 
 function TopicCheckbox({
@@ -3388,6 +3441,9 @@ export default function CourseEditor({
   // the other way round.
   const [courseTheme, setCourseTheme] = useState(initialTheme);
   const [courseMenu, setCourseMenu] = useState(initialMenu);
+  // Theme-level on-screen defaults (themeSettings[themeKey]._onScreen) used
+  // to show inherited/overridden hints on the per-item on-screen selects.
+  const [courseOnScreenDefaults, setCourseOnScreenDefaults] = useState<GlobalOnScreenConfig | undefined>(undefined);
   useEffect(() => {
     if (!courseId || courseId === "new-course") return;
     let cancelled = false;
@@ -3396,6 +3452,10 @@ export default function CourseEditor({
         if (cancelled) return;
         if (data.themeName) setCourseTheme(data.themeName);
         if (data.menuName) setCourseMenu(data.menuName);
+        const onScreen = data.themeSettings?._onScreen;
+        setCourseOnScreenDefaults(
+          onScreen && typeof onScreen === "object" ? onScreen as GlobalOnScreenConfig : undefined
+        );
       })
       .catch(() => {});
     return () => {
@@ -3486,6 +3546,8 @@ export default function CourseEditor({
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
+  //view-only section collapse state (per topic, in memory only).
+  const sectionCollapse = useSectionCollapse();
   const [hasCanvasSelection, setHasCanvasSelection] = useState(false);
   const [savedContentPages, setSavedContentPages] = useState<ContentPageData[]>([]);
   const [dirtyNodeKeys, setDirtyNodeKeys] = useState<Record<string, true>>({});
@@ -4957,6 +5019,47 @@ export default function CourseEditor({
         display: none !important;
       }
 
+      /* Section collapse (syncSectionCollapseControls). Only the
+         section content below the header is hidden (CSS-only, so inline
+         editors stay mounted); the header is never restyled. The toggle is the
+         last icon of the section's level-actions group. A collapsed section
+         always keeps that group, showing only the toggle until hover/selection. */
+      /* Collapsed hides the section body, instruction (inline editors in the
+         header) and all blocks; title, colour label and the action group stay.
+         display:none keeps editors mounted, so unsaved edits are preserved. */
+      .adapt-authoring-section-collapsed .block__container,
+      .adapt-authoring-section-collapsed .article__header .article__body,
+      .adapt-authoring-section-collapsed .article__header .article__instruction {
+        display: none !important;
+      }
+      .adapt-authoring-section-collapsed .article__header-inner {
+        position: relative;
+      }
+      /* Headless collapsed section: keep a small host so the toggle is reachable. */
+      .adapt-authoring-section-collapsed .article__header-inner.adapt-authoring-preview-headless-header,
+      .adapt-authoring-section-collapsed .article__header[data-preview-injected="true"]:has(> .adapt-authoring-preview-headless-header),
+      .article__header-inner.adapt-authoring-preview-headless-header:focus-within,
+      .article__header[data-preview-injected="true"]:has(> .adapt-authoring-preview-headless-header:focus-within) {
+        display: block !important;
+      }
+      /* ...and stay visible while they hold keyboard focus (e.g. just after the
+         toggle expanded the section), until focus leaves. */
+      .adapt-authoring-section-collapsed .article__header-inner[data-preview-injected="true"],
+      .adapt-authoring-section-collapsed .article__header-inner.adapt-authoring-preview-headless-header,
+      .article__header-inner.adapt-authoring-preview-headless-header:focus-within {
+        min-height: 32px;
+      }
+      .article__header-inner.adapt-authoring-preview-headless-header:focus-within {
+        position: relative;
+      }
+      .adapt-authoring-level-actions[data-preview-actions-collapsed-only="true"] > :not([data-preview-section-collapse-btn]) {
+        display: none !important;
+      }
+      /* The toggle stays clickable even while the group is only a hover preview. */
+      .adapt-authoring-level-actions .adapt-authoring-section-collapse-btn {
+        pointer-events: auto !important;
+      }
+
       .adapt-authoring-selection-active .adapt-authoring-swap-positions-row {
         position: static !important;
         flex: 0 0 100% !important;
@@ -5516,6 +5619,20 @@ export default function CourseEditor({
       deleteBtn.title = `Delete ${toBadgeLabel(level)}`;
       deleteBtn.setAttribute("aria-label", deleteBtn.title);
 
+      // Section collapse toggle is the last icon of the group.
+      // Hover/selection shows the full group, so drop the toggle-only marker.
+      if (level === "section") {
+        if (actions.hasAttribute("data-preview-actions-collapsed-only")) {
+          actions.removeAttribute("data-preview-actions-collapsed-only");
+        }
+        const sectionArticle = contentPagesRef.current
+          .find((candidate) => candidate.id === ids.pageId)
+          ?.articles.find((candidate) => candidate.id === ids.articleId);
+        if (sectionArticle) {
+          ensureSectionToggleButton(doc, actions, sectionArticle, !sectionCollapse.collapsedRef.current[ids.pageId]?.[sectionArticle.id]);
+        }
+      }
+
       return actions;
     };
 
@@ -5786,6 +5903,26 @@ export default function CourseEditor({
     // swap-positions control above).
     doc.querySelectorAll("[data-preview-level-actions]").forEach((node) => {
       if (node !== activeActionsHost && node !== hoverActionsHost) {
+        // a collapsed section keeps its group (toggle only) so it
+        // can always be re-expanded.
+        const sweepArticleId = node.getAttribute("data-preview-action-article-id");
+        const sweepPageId = node.getAttribute("data-preview-action-page-id");
+        if (
+          node.getAttribute("data-preview-action-level") === "section" &&
+          sweepArticleId && sweepPageId &&
+          sectionCollapse.collapsedRef.current[sweepPageId]?.[sweepArticleId]
+        ) {
+          if (node.getAttribute("data-preview-actions-collapsed-only") !== "true") {
+            node.setAttribute("data-preview-actions-collapsed-only", "true");
+          }
+          if (node.getAttribute("data-preview-actions-selected") !== "false") {
+            node.setAttribute("data-preview-actions-selected", "false");
+          }
+          return;
+        }
+        // Never detach a group that holds keyboard focus; the focusout
+        // listener re-runs this sweep once focus has left.
+        if (node.contains(doc.activeElement)) return;
         node.remove();
       }
     });
@@ -5840,8 +5977,14 @@ export default function CourseEditor({
     // once a Content Group has two components, that node is intentionally
     // half-width and would squeeze Topic/Section to the left half too.
     const insetContainer = doc.querySelector(".page__inner") as HTMLElement | null;
-    const insetReference = (doc.querySelector(".component__container") ??
-      doc.querySelector(".block__header-inner")) as HTMLElement | null;
+    // The reference must be actually rendered: inside a collapsed section
+    //  every block is display:none, so its rect is 0x0 and the
+    // measurement below would yield a ~full-width right inset that squeezes
+    // the Topic/Section headers to a one-word-per-line column. With nothing
+    // visible, skip and keep the last applied insets.
+    const isRendered = (node: HTMLElement) => node.getClientRects().length > 0;
+    const insetReference = (Array.from(doc.querySelectorAll<HTMLElement>(".component__container")).find(isRendered) ??
+      Array.from(doc.querySelectorAll<HTMLElement>(".block__header-inner")).find(isRendered) ?? null) as HTMLElement | null;
     if (insetContainer && insetReference) {
       // Measure against the theme's own padding, never against whatever this
       // same block added on a previous run.
@@ -7340,7 +7483,7 @@ export default function CourseEditor({
       const existing = Array.from(host.querySelectorAll<HTMLMediaElement>(kind));
       let element =
         host.querySelector<HTMLMediaElement>(`${kind}[data-preview-asset-key="${key}"]`) ??
-        (previousSrc ? existing.find((candidate) => hasSrc(candidate, previousSrc)) ?? null : null) ??
+        (previousSrc ? existing.find((candidate) => hasSrc(candidate, previousSrc)) : null) ??
         (itemIndex !== null ? existing[itemIndex] ?? null : existing[0] ?? null);
 
       if (!element && src) {
@@ -8008,6 +8151,52 @@ export default function CourseEditor({
     syncSwapPositionsControlsRef.current = syncSwapPositionsControls;
   }, [syncSwapPositionsControls]);
 
+  // per-section collapse toggles. Reads the mirrored ref so the
+  // observer/iframe callbacks always see current state; DOM writes are
+  // diffed inside syncSectionCollapseControls to avoid observer feedback.
+  const { collapsedByTopic, collapsedRef: sectionCollapsedRef } = sectionCollapse;
+  const syncSectionCollapse = useCallback(() => {
+    const doc = previewFrameRef.current?.contentDocument;
+    if (!doc || !selectedPageId) return;
+    const page = contentPages.find((candidate) => candidate.id === selectedPageId);
+    if (!page) return;
+    syncSectionCollapseControls(doc, { page, collapsed: sectionCollapsedRef.current[page.id] });
+  }, [contentPages, selectedPageId, sectionCollapsedRef]);
+
+  const syncSectionCollapseRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    syncSectionCollapseRef.current = syncSectionCollapse;
+  }, [syncSectionCollapse]);
+  const toggleSectionRef = useRef<(topicId: string, articleId: string) => void>(() => {});
+  toggleSectionRef.current = sectionCollapse.toggle;
+
+  useEffect(() => {
+    syncSectionCollapse();
+    // A pending left-panel scroll is skipped while its target is hidden; retry
+    // once the collapse state (and so visibility) has been applied.
+    const rafId = window.requestAnimationFrame(() => syncPreviewScrollFromLeftPanelRef.current());
+    return () => window.cancelAnimationFrame(rafId);
+  }, [syncSectionCollapse, collapsedByTopic]);
+
+  // Drop collapsed ids for sections that no longer exist in the current topic.
+  useEffect(() => {
+    const page = contentPages.find((candidate) => candidate.id === selectedPageId);
+    if (page) sectionCollapse.prune(page.id, page.articles.map((article) => article.id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contentPages, selectedPageId]);
+
+  // AC8: a selection inside a collapsed section expands that section.
+  useEffect(() => {
+    if (!selectedPageId || (!selectedBlockId && !selectedComponentId)) return;
+    const page = contentPages.find((candidate) => candidate.id === selectedPageId);
+    const article = page?.articles.find((candidate) => candidate.blocks.some((block) =>
+      block.id === selectedBlockId || block.components.some((component) => component.id === selectedComponentId)));
+    if (article) sectionCollapse.expandForArticle(selectedPageId, article.id);
+    // Keyed on selection only: collapsing a section that holds the selection
+    // must keep the selection without immediately re-expanding.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPageId, selectedBlockId, selectedComponentId]);
+
   // Old-tool parity (editorPasteZoneView.js showPasteZones), extended per
   // explicit user instruction: a "Paste" bar at EVERY sibling gap in the
   // copied node's own parent (before the first, between each, after the
@@ -8114,6 +8303,9 @@ export default function CourseEditor({
 
       const target = blockNode.querySelector(".block__header-inner.adapt-authoring-preview-active");
       if (!target) return;
+      // hidden by a collapsed section — keep the pending target
+      // so it scrolls once the section is expanded.
+      if (target.closest(".adapt-authoring-section-collapsed") || target.getClientRects().length === 0) return;
 
       target.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
       if (clearTarget) pendingLeftPanelScrollTargetRef.current = null;
@@ -8131,6 +8323,7 @@ export default function CourseEditor({
       const target = componentNode.querySelector(".laerdal-h5p__container") ??
                      componentNode.querySelector(".component__inner") ??
                      componentNode;
+      if (target.closest(".adapt-authoring-section-collapsed") || target.getClientRects().length === 0) return;
       target.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
       if (clearTarget) pendingLeftPanelScrollTargetRef.current = null;
       return;
@@ -8568,6 +8761,17 @@ export default function CourseEditor({
     const onClick = (event: Event) => {
       const target = getEventElement(event.target);
       if (!target) return;
+
+      // section collapse toggle — view-only, never changes selection.
+      const sectionCollapseBtn = target.closest("[data-preview-section-collapse-btn]") as HTMLElement | null;
+      if (sectionCollapseBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        const articleId = sectionCollapseBtn.getAttribute("data-preview-section-article-id");
+        const topicId = liveSelectionRef.current.selectedPageId;
+        if (articleId && topicId) toggleSectionRef.current(topicId, articleId);
+        return;
+      }
 
       const mediaTarget = target.closest("video, audio, .mejs__container, .mejs-container, .plyr, .video-js, iframe");
       if (mediaTarget) {
@@ -9581,6 +9785,19 @@ export default function CourseEditor({
     doc.addEventListener("paste", onPaste, true);
     doc.addEventListener("input", onInput, true);
     doc.addEventListener("focusout", onFocusOut, true);
+    // groups holding keyboard focus are protected from removal;
+    // clean them up once focus has actually left (after the new focus lands).
+    let focusCleanupRafId: number | null = null;
+    const onSectionToggleFocusOut = (event: Event) => {
+      if (!(event.target as Element | null)?.closest?.("[data-preview-level-actions]")) return;
+      if (focusCleanupRafId !== null) return;
+      focusCleanupRafId = window.requestAnimationFrame(() => {
+        focusCleanupRafId = null;
+        syncSectionCollapseRef.current();
+        applyPreviewSelectionStylesRef.current();
+      });
+    };
+    doc.addEventListener("focusout", onSectionToggleFocusOut, true);
 
     applyPreviewSelectionStyles();
     syncPreviewInlineEditorsRef.current();
@@ -9588,6 +9805,7 @@ export default function CourseEditor({
     syncNavigationFooterPreview();
     syncSwapPositionsControls();
     syncPasteZones();
+    syncSectionCollapseRef.current();
     primePreviewMediaFrames(doc);
     if (!pendingLeftPanelScrollTargetRef.current && !menuSelected) {
       pendingLeftPanelScrollTargetRef.current = selectedComponentId
@@ -9677,6 +9895,7 @@ export default function CourseEditor({
       swapObserverRafId = window.requestAnimationFrame(() => {
         swapObserverRafId = null;
         syncSwapPositionsControlsRef.current();
+        syncSectionCollapseRef.current();
         syncPreviewScrollFromLeftPanelRef.current();
         primePreviewMediaFrames(doc);
       });
@@ -9758,6 +9977,8 @@ export default function CourseEditor({
       doc.removeEventListener("paste", onPaste, true);
       doc.removeEventListener("input", onInput, true);
       doc.removeEventListener("focusout", onFocusOut, true);
+      doc.removeEventListener("focusout", onSectionToggleFocusOut, true);
+      if (focusCleanupRafId !== null) window.cancelAnimationFrame(focusCleanupRafId);
     };
 
     return cleanupPreviewListenersRef.current;
@@ -10371,6 +10592,8 @@ export default function CourseEditor({
     setHasCanvasSelection(true);
     setRightPanelOpen(true);
     setRightPanelType("block");
+    // Also for same-ID reselection (selection effect won't re-run).
+    sectionCollapse.expandForArticle(pageId, articleId);
     if (!isSameSelection) {
       setOpenBlockAccordions(DEFAULT_BLOCK_ACCORDIONS);
     }
@@ -12140,6 +12363,8 @@ export default function CourseEditor({
     setHasCanvasSelection(true);
     setRightPanelOpen(true);
     setRightPanelType("component");
+    // Also for same-ID reselection (selection effect won't re-run).
+    sectionCollapse.expandForArticle(pageId, articleId);
     if (!isSameSelection) {
       // Written in ONE state update (not General first, then Behaviour) so
       // the panel never renders an intermediate open section.
@@ -12672,8 +12897,42 @@ export default function CourseEditor({
             </div>
           ) : (
             <div className="h-full flex flex-col min-h-0 p-2">
-              <div className="relative flex-1 min-h-0 overflow-hidden rounded-[18px] border border-[var(--life-neutral-200)] bg-white">
-                <div className="h-full w-full box-border p-2">
+              <div className="relative flex-1 min-h-0 overflow-hidden rounded-[18px] border border-[var(--life-neutral-200)] bg-white flex flex-col">
+                {selectedPageId && !menuSelected && previewSrc && (() => {
+                  const toolbarPage = contentPages.find((page) => page.id === selectedPageId);
+                  if (!toolbarPage) return null;
+                  const articleIds = toolbarPage.articles.map((article) => article.id);
+                  if (articleIds.length === 0) return null;
+                  // Switch is ON only when EVERY section is collapsed; a mixed
+                  // state is OFF. Derived each render, so it never drifts from
+                  // the per-section toggles.
+                  const allCollapsed = areAllCollapsed(collapsedByTopic, toolbarPage.id, articleIds);
+                  return (
+                    <div
+                      className="flex shrink-0 items-center justify-end gap-2 px-3 pt-2"
+                      data-section-collapse-toolbar
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <label
+                        htmlFor="section-collapse-all-switch"
+                        className="cursor-pointer select-none text-sm text-[var(--life-neutral-850)]"
+                      >
+                        Collapse all sections
+                      </label>
+                      <button
+                        id="section-collapse-all-switch"
+                        type="button"
+                        role="switch"
+                        aria-checked={allCollapsed}
+                        className="life-switch motion-reduce:!transition-none"
+                        onClick={() => (allCollapsed
+                          ? sectionCollapse.expandAllIn(toolbarPage.id)
+                          : sectionCollapse.collapseAllIn(toolbarPage.id, articleIds))}
+                      />
+                    </div>
+                  );
+                })()}
+                <div className="w-full flex-1 min-h-0 box-border p-2">
                   {previewSrc ? (
                     <iframe
                       ref={previewFrameRef}
@@ -13140,8 +13399,10 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                     },
                                   })}
                                   options={getOnScreenClassOptions(courseTheme, page.onScreen?._classes)}
+                                  optionLabels={ON_SCREEN_CLASS_LABELS}
                                   emptyOptionLabel=""
                                 />
+                                <OnScreenInheritanceNote global={courseOnScreenDefaults} localClasses={page.onScreen?._classes} level="page" />
                                 <TopicTextInput
                                   label={getSchemaLabel(getContentFieldSchema("contentobject", "_onScreen", "_percentInviewVertical"), "Percent in view")}
                                   hint={getSchemaHint(getContentFieldSchema("contentobject", "_onScreen", "_percentInviewVertical"))}
@@ -13389,8 +13650,10 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                       value={asString(article.onScreen?._classes)}
                                       onChange={(value) => updateArticle(page!.id, article.id, { onScreen: { ...(article.onScreen ?? {}), _classes: value } })}
                                       options={getOnScreenClassOptions(courseTheme, article.onScreen?._classes)}
+                                      optionLabels={ON_SCREEN_CLASS_LABELS}
                                       emptyOptionLabel=""
                                     />
+                                    <OnScreenInheritanceNote global={courseOnScreenDefaults} localClasses={article.onScreen?._classes} level="article" />
                                     <TopicTextInput
                                       label={getSchemaLabel(getContentFieldSchema("article", "_onScreen", "_percentInviewVertical"), "Percent in view")}
                                       hint={getSchemaHint(getContentFieldSchema("article", "_onScreen", "_percentInviewVertical"))}
@@ -13628,8 +13891,10 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                       value={asString(block.onScreen?._classes)}
                                       onChange={(value) => updateBlock(page!.id, article!.id, block.id, { onScreen: { ...(block.onScreen ?? {}), _classes: value } })}
                                       options={getOnScreenClassOptions(courseTheme, block.onScreen?._classes)}
+                                      optionLabels={ON_SCREEN_CLASS_LABELS}
                                       emptyOptionLabel=""
                                     />
+                                    <OnScreenInheritanceNote global={courseOnScreenDefaults} localClasses={block.onScreen?._classes} level="block" />
                                     <TopicTextInput
                                       label={getSchemaLabel(getContentFieldSchema("block", "_onScreen", "_percentInviewVertical"), "Percent in view")}
                                       hint={getSchemaHint(getContentFieldSchema("block", "_onScreen", "_percentInviewVertical"))}
@@ -13853,8 +14118,10 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                       value={asString(component.onScreen?._classes)}
                                       onChange={(value) => updateComponent(page.id, article.id, block.id, component.id, { onScreen: { ...(component.onScreen ?? {}), _classes: value } })}
                                       options={getOnScreenClassOptions(courseTheme, component.onScreen?._classes)}
+                                      optionLabels={ON_SCREEN_CLASS_LABELS}
                                       emptyOptionLabel=""
                                     />
+                                    <OnScreenInheritanceNote global={courseOnScreenDefaults} localClasses={component.onScreen?._classes} level="component" />
                                     <TopicTextInput
                                       label={getSchemaLabel(getContentFieldSchema("component", "_onScreen", "_percentInviewVertical"), "Percent in view")}
                                       hint={getSchemaHint(getContentFieldSchema("component", "_onScreen", "_percentInviewVertical"))}

@@ -32,6 +32,8 @@ import {
   type ConversationTurn
 } from "@/api/samaritan";
 import { actionDetail } from "./actionDetail";
+import { actionKindLabel, describeAction, riskHeadline, riskMeaning, statusLabel, summarizePlan } from "./reviewText";
+import { friendlyError } from "./friendlyError";
 
 interface Props {
   courseId: string;
@@ -69,8 +71,8 @@ type Turn =
   | { kind: "answer"; text: string; sources: string[] }
   | { kind: "clarification"; question: string }
   | { kind: "declined"; reason: string; category: string }
-  | { kind: "proposal"; requestId: string; actionId: string; plan: SamaritanAction; risk: string }
-  | { kind: "plan-proposal"; requestId: string; actions: SamaritanAction[]; risk: string; assumptions: string[] }
+  | { kind: "proposal"; requestId: string; actionId: string; plan: SamaritanAction; risk: string; riskReasons: string[] }
+  | { kind: "plan-proposal"; requestId: string; actions: SamaritanAction[]; risk: string; riskReasons: string[]; assumptions: string[] }
   | { kind: "result"; text: string }
   | { kind: "plan-result"; response: ApprovePlanResponse }
   | { kind: "objectives"; objectives: string[] }
@@ -158,7 +160,7 @@ function summarizeForHistory(response: ProposeResponse): string {
   if (response.status === "DECLINED") return `Declined: ${response.declined.reason}`;
   if (response.status === "PROPOSED") return `Proposed: ${describeChanges(response.plan)} - ${response.plan.reason}`;
   if (response.status === "OBJECTIVES_DRAFTED") return `Drafted objectives: ${response.objectives.join("; ")}`;
-  return `Proposed a plan of ${response.plan.actions.length} actions: ${response.plan.actions.map((a) => a.actionType).join(", ")}`;
+  return `Proposed a plan of ${response.plan.actions.length} changes: ${response.plan.actions.map((a) => describeAction(a)).join("; ")}`;
 }
 
 function plainPreview(html: unknown, max = 140): string {
@@ -166,40 +168,39 @@ function plainPreview(html: unknown, max = 140): string {
   return text.length > max ? `${text.slice(0, max)}...` : text;
 }
 
-// One readable line per action in a plan card, instead of the raw action type.
+// One readable line per action in a plan card, instead of the raw action type. The
+// wording is shared with the Build with AI review (see reviewText.ts).
 function describePlanAction(a: SamaritanAction): string {
   const p = a.parameters as Record<string, any>;
-  switch (a.actionType) {
-    case "CREATE_PAGE": return `Add page "${p.title}"`;
-    case "CREATE_ARTICLE": return `Add article "${p.title}"`;
-    case "CREATE_BLOCK": return `Add block "${p.title}"`;
-    case "ADD_COMPONENT": {
-      const preview = plainPreview(p.displayTitle ?? p.body);
-      return `Add ${p._component} "${p.title}"${preview ? ` - ${preview}` : ""}`;
-    }
-    case "REWRITE_CONTENT": return `Rewrite text: ${plainPreview(p.content, 200)}`;
-    case "CREATE_COURSE": return `Create course "${p.title}"`;
-    default: return `${a.actionType}: ${a.reason}`;
+  const base = describeAction(a);
+  if (a.actionType === "ADD_COMPONENT") {
+    const preview = plainPreview(p.displayTitle ?? p.body);
+    return preview ? `${base} - ${preview}` : base;
   }
+  if (a.actionType === "REWRITE_CONTENT") return `${base}: ${plainPreview(p.content, 200)}`;
+  return base;
 }
 
-function describeChanges(plan: SamaritanAction): string {
-  switch (plan.actionType) {
-    case "ADD_COMPONENT":
-      return `Add a ${(plan.parameters as any)._component} component`;
-    case "REWRITE_CONTENT":
-      return "Rewrite the selected content";
-    case "REMOVE_COMPONENT":
-      return "Remove the selected component";
-    case "REPLACE_COMPONENT":
-      return `Replace with a ${(plan.parameters as any).targetComponentType} component`;
-    case "ENABLE_PLUGIN":
-      return "Enable plugin for this course";
-    case "DISABLE_PLUGIN":
-      return "Disable plugin for this course";
-    default:
-      return plan.actionType;
-  }
+const describeChanges = describeAction;
+
+// Why the change is rated as it is, and what that rating means, instead of a bare "Risk: HIGH".
+function RiskNote({ risk, reasons }: { risk: string; reasons: string[] }) {
+  return (
+    <div className="text-xs mb-2">
+      <p>
+        <strong>{riskHeadline(risk)}</strong>
+        {riskMeaning(risk) && ` - ${riskMeaning(risk)}`}
+      </p>
+      {reasons.length > 0 && (
+        <ul className="list-disc pl-4 text-gray-600">
+          {reasons.map((r) => (
+            <li key={r}>{r}</li>
+          ))}
+        </ul>
+      )}
+      <p className="text-gray-500">Nothing is saved until you approve.</p>
+    </div>
+  );
 }
 
 function HeartIcon({ size = 18, inverted = false }: { size?: number; inverted?: boolean }) {
@@ -299,7 +300,7 @@ export default function SamaritanWorkspace({
       history.current = [...history.current, { role: "user", content: text }, { role: "assistant", content: summarizeForHistory(response) }];
       appendResponseTurn(response);
     } catch (err) {
-      setTurns((t) => [...t, { kind: "error", text: err instanceof Error ? err.message : "Failed to reach Samaritan" }]);
+      setTurns((t) => [...t, { kind: "error", text: friendlyError(err, "Couldn't reach Samaritan. Try again in a moment.") }]);
     } finally {
       setBusy(false);
     }
@@ -313,11 +314,11 @@ export default function SamaritanWorkspace({
     } else if (response.status === "DECLINED") {
       setTurns((t) => [...t, { kind: "declined", reason: response.declined.reason, category: response.declined.category }]);
     } else if (response.status === "PROPOSED") {
-      setTurns((t) => [...t, { kind: "proposal", requestId: response.requestId, actionId: response.actionId, plan: response.plan, risk: response.risk }]);
+      setTurns((t) => [...t, { kind: "proposal", requestId: response.requestId, actionId: response.actionId, plan: response.plan, risk: response.risk, riskReasons: response.riskReasons ?? [] }]);
     } else if (response.status === "PLAN_PROPOSED") {
       setTurns((t) => [
         ...t,
-        { kind: "plan-proposal", requestId: response.requestId, actions: response.plan.actions, risk: response.risk, assumptions: response.intent.assumptions }
+        { kind: "plan-proposal", requestId: response.requestId, actions: response.plan.actions, risk: response.risk, riskReasons: response.riskReasons ?? [], assumptions: response.intent.assumptions }
       ]);
     } else if (response.status === "OBJECTIVES_DRAFTED") {
       setTurns((t) => [...t, { kind: "objectives", objectives: response.objectives }]);
@@ -372,7 +373,7 @@ export default function SamaritanWorkspace({
         else await reloadHost(onStructureChanged);
       }
     } catch (err) {
-      setTurns((t) => [...t, { kind: "error", text: err instanceof Error ? err.message : "Failed to execute action" }]);
+      setTurns((t) => [...t, { kind: "error", text: friendlyError(err, "The change couldn't be applied. Check the course before trying again.") }]);
       if (approved) await reloadHost(onStructureChanged);
     } finally {
       if (approved && !pendingReload.current) setLock(false);
@@ -391,7 +392,7 @@ export default function SamaritanWorkspace({
       // completed, rolled_back or partial_failure: all can leave persisted changes.
       if (approved) await reloadHost(onStructureChanged);
     } catch (err) {
-      setTurns((t) => [...t, { kind: "error", text: err instanceof Error ? err.message : "Failed to execute plan" }]);
+      setTurns((t) => [...t, { kind: "error", text: friendlyError(err, "The plan couldn't be applied. Check the course before trying again.") }]);
       if (approved) await reloadHost(onStructureChanged);
     } finally {
       if (approved && !pendingReload.current) setLock(false);
@@ -573,7 +574,7 @@ export default function SamaritanWorkspace({
                     {actionDetail(turn.plan) && (
                       <pre className="text-xs whitespace-pre-wrap font-sans bg-white border border-[#e5e7eb] rounded p-2 mb-2 max-h-48 overflow-y-auto">{actionDetail(turn.plan)}</pre>
                     )}
-                    <p className="text-xs mb-2">Risk: <strong>{turn.risk}</strong></p>
+                    <RiskNote risk={turn.risk} reasons={turn.riskReasons} />
                     <div className="flex gap-2">
                       <button className="px-2 py-1 bg-green-600 text-white rounded text-xs" disabled={busy || reloadFailed || !!writeBlockedReason} onClick={() => decide(turn.actionId, true)}>Approve</button>
                       <button className="px-2 py-1 bg-gray-200 rounded text-xs" disabled={busy} onClick={() => decide(turn.actionId, false)}>Cancel</button>
@@ -583,7 +584,8 @@ export default function SamaritanWorkspace({
 
                 {turn.kind === "plan-proposal" && (
                   <div className="border rounded p-2 bg-gray-50">
-                    <p className="font-medium">Proposed plan ({turn.actions.length} actions)</p>
+                    <p className="font-medium">Proposed plan ({turn.actions.length} {turn.actions.length === 1 ? "change" : "changes"})</p>
+                    {summarizePlan(turn.actions) && <p className="text-xs text-gray-600">{summarizePlan(turn.actions)}</p>}
                     {turn.assumptions.length > 0 && (
                       <ul className="text-xs text-amber-700 list-disc pl-4 my-1">
                         {turn.assumptions.map((a, j) => <li key={j}>{a}</li>)}
@@ -603,7 +605,7 @@ export default function SamaritanWorkspace({
                         </li>
                       ))}
                     </ul>
-                    <p className="text-xs mb-2">Risk: <strong>{turn.risk}</strong></p>
+                    <RiskNote risk={turn.risk} reasons={turn.riskReasons} />
                     <div className="flex gap-2">
                       <button className="px-2 py-1 bg-green-600 text-white rounded text-xs" disabled={busy || reloadFailed || !!writeBlockedReason} onClick={() => decidePlan(turn.requestId, true)}>Approve plan</button>
                       <button className="px-2 py-1 bg-gray-200 rounded text-xs" disabled={busy} onClick={() => decidePlan(turn.requestId, false)}>Cancel</button>
@@ -624,10 +626,16 @@ export default function SamaritanWorkspace({
 
                 {turn.kind === "plan-result" && (
                   <div>
-                    <p className="font-medium">Plan {turn.response.status}</p>
+                    <p className="font-medium">
+                      {turn.response.status === "completed"
+                        ? "All changes were applied."
+                        : turn.response.status === "rolled_back"
+                          ? "The changes couldn't be completed, so they were undone."
+                          : "Some changes were applied but not all of them finished. Check the course before trying again."}
+                    </p>
                     <ul className="text-xs">
                       {(turn.response.actions ?? []).map((a) => (
-                        <li key={a.actionId}>- {a.actionType}: {a.status}{a.verificationResult && !a.verificationResult.passed ? " (verification issues)" : ""}</li>
+                        <li key={a.actionId}>- {actionKindLabel(a.actionType)}: {statusLabel(a.status)}{a.verificationResult && !a.verificationResult.passed ? " (needs a check: the saved result didn't match the plan)" : ""}</li>
                       ))}
                     </ul>
                   </div>
