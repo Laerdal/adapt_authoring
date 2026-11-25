@@ -16,7 +16,8 @@ import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationG
 import { CheckboxIndicator } from "../../components/common/Checkbox";
 import { StylingHelpPanel, type InsertCssRequest } from "../../components/samaritan/StylingHelpPanel";
 import { courseScopeLabel, reportStylingOutcome } from "../../api/stylingAssist";
-import { appendBlock, newBlockId, parseBlocks, removeBlock } from "../../utils/customCssBlocks";
+import { appendBlock, newBlockId, parseBlocks, removeBlock, removeMarkerOnly } from "../../utils/customCssBlocks";
+import { clearDraft, loadDraft, registerDraft } from "../../helpers/draftStore";
 import {
   getConfigRootSchema,
   getCourseRootSchema,
@@ -366,6 +367,9 @@ export function TechnicalSettingPage({
   const [customCss, setCustomCss] = useState("");
   const [cssExpanded, setCssExpanded] = useState(false);
   const [showStylingHelp, setShowStylingHelp] = useState(false);
+  const [draftRestored, setDraftRestored] = useState(false);
+  // Damaged block awaiting "Remove block" confirmation (shows a preview of the CSS to be removed).
+  const [pendingRemovalId, setPendingRemovalId] = useState<string | null>(null);
   // block id -> styling-assist requestId, for blocks inserted this session (undo telemetry).
   const insertedRequestIds = useRef<Record<string, string>>({});
   const [openAccordion, setOpenAccordion] = useState<TechnicalAccordion | "">("display");
@@ -392,6 +396,18 @@ export function TechnicalSettingPage({
     originalValues.customCss !== customCss ||
     originalValues.strictMode !== strictMode;
 
+  // Keep unsaved Custom CSS if the session expires (api/client.ts saves registered drafts on a 401).
+  const draftRef = useRef<{ courseId?: string; dirty: boolean; value: string }>({ dirty: false, value: "" });
+  draftRef.current = { courseId, dirty: originalValues.customCss !== customCss, value: customCss };
+  useEffect(
+    () =>
+      registerDraft(() => {
+        const d = draftRef.current;
+        return d.courseId && d.dirty ? { courseId: d.courseId, key: "customCss", value: d.value } : null;
+      }),
+    []
+  );
+
   useEffect(() => {
     if (!toast) return;
     const timer = window.setTimeout(() => setToast(null), 3500);
@@ -416,6 +432,10 @@ export function TechnicalSettingPage({
       return;
     }
 
+    // Ignore a load that was superseded (React StrictMode runs effects twice in development): a stale load
+    // must not consume the restored draft or overwrite state.
+    let cancelled = false;
+
     const loadSettings = async () => {
       console.log("[TechnicalSettings] Loading settings for courseId:", courseId);
       try {
@@ -424,6 +444,7 @@ export function TechnicalSettingPage({
           getCourseTechnicalSettings(courseId),
           getCourseCstyle(courseId),
         ]);
+        if (cancelled) return;
         console.log("[TechnicalSettings] DB config:", config, "customStyle length:", style?.length);
 
         if (config._id) setConfigId(config._id);
@@ -459,6 +480,15 @@ export function TechnicalSettingPage({
         const customCssValue = style || "";
         setCustomCss(customCssValue);
 
+        const draft = loadDraft(courseId, "customCss");
+        if (draft !== null) {
+          clearDraft(courseId, "customCss");
+          if (draft !== customCssValue) {
+            setCustomCss(draft);
+            setDraftRestored(true);
+          }
+        }
+
         setOriginalValues({
           smallBp: small, mediumBp: medium, largeBp: large, xlBp: xlarge,
           optimizedScroll: optimized,
@@ -470,13 +500,17 @@ export function TechnicalSettingPage({
           supportedBrowsersOverride: config.build?.targets ?? "",
         });
       } catch (err) {
+        if (cancelled) return;
         console.error("Failed to load technical settings", err);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     };
 
     loadSettings();
+    return () => {
+      cancelled = true;
+    };
   }, [courseId]);
 
   useEffect(() => {
@@ -552,6 +586,7 @@ export function TechnicalSettingPage({
         logToConsole, warnFirstOnly, supportedBrowsersOverride,
       });
       setBuildSettings((current) => ({ ...current, strictMode }));
+      setDraftRestored(false);
       setToast({ type: "success", message: "Changes saved successfully" });
       if (navTarget) onNavigationRequest?.(navTarget);
     } catch (err) {
@@ -623,7 +658,12 @@ export function TechnicalSettingPage({
     }
   };
 
+  const handleRemoveMarkerOnly = (id: string) => {
+    setCustomCss((prev) => removeMarkerOnly(prev, id));
+  };
+
   const stylingBlocks = parseBlocks(customCss);
+  const pendingRemoval = stylingBlocks.find((b) => b.id === pendingRemovalId && b.broken);
 
   const handleExportCss = () => {
     if (!customCss) {
@@ -809,29 +849,82 @@ export function TechnicalSettingPage({
                 <div className={`border border-[var(--life-neutral-200)] rounded-[8px] bg-white overflow-hidden focus-within:ring-2 focus-within:ring-[var(--life-primary-500)] focus-within:border-transparent ${cssExpanded ? "h-full" : ""}`}>
                   <CustomCssEditor value={customCss} onChange={setCustomCss} expanded={cssExpanded} />
                 </div>
+                {draftRestored && (
+                  <div role="status" className="mt-3 flex items-center justify-between gap-3 rounded-[8px] border border-[#fed7aa] bg-[#fff7ed] px-3 py-2 text-sm text-[#9a3412]">
+                    <span>We restored your unsaved Custom CSS. Save your changes to keep it.</span>
+                    <button type="button" className="life-btn life-btn--ghost life-btn--sm" onClick={() => setDraftRestored(false)}>
+                      Dismiss
+                    </button>
+                  </div>
+                )}
                 {stylingBlocks.length > 0 && (
                   <div className="mt-3 flex flex-col gap-1.5" aria-label="AI-inserted CSS blocks">
                     <span className="text-xs font-semibold text-[var(--life-neutral-600)]">AI-inserted CSS blocks</span>
                     {stylingBlocks.map((block) => (
-                      <div key={block.id} className="flex items-center justify-between gap-3 rounded-[8px] border border-[var(--life-neutral-200)] bg-[var(--life-neutral-020)] px-3 py-1.5">
-                        <span className="text-xs text-[var(--life-neutral-850)] truncate">
-                          {block.className
-                            ? `Class .${block.className} (add to a ${block.appliesTo ?? "block"})`
-                            : block.appliesTo === "course"
-                              ? `${courseScopeLabel(block.component)} - applies to every instance`
-                              : block.scope === "component"
-                              ? `Component: ${block.component}`
-                              : "Course-wide"}{" "}
-                          (framework {block.fw}) - {block.css.trim().slice(0, 60)}
-                        </span>
-                        <button
-                          type="button"
-                          className="life-btn life-btn--ghost life-btn--sm"
-                          aria-label={`Remove AI CSS block ${block.id}`}
-                          onClick={() => handleRemoveStylingBlock(block.id)}
-                        >
-                          Remove
-                        </button>
+                      <div key={`${block.id}-${block.start}`} className="flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between gap-3 rounded-[8px] border border-[var(--life-neutral-200)] bg-[var(--life-neutral-020)] px-3 py-1.5">
+                          <span className="text-xs text-[var(--life-neutral-850)] truncate">
+                            {block.broken && <span className="font-semibold text-[#9a3412]">Marker damaged - </span>}
+                            {block.className
+                              ? `Class .${block.className} (add to a ${block.appliesTo ?? "block"})`
+                              : block.appliesTo === "course"
+                                ? `${courseScopeLabel(block.component)} - applies to every instance`
+                                : block.scope === "component"
+                                ? `Component: ${block.component}`
+                                : "Course-wide"}{" "}
+                            (framework {block.fw}) - {block.css.trim().slice(0, 60)}
+                          </span>
+                          {block.broken ? (
+                            <span className="flex shrink-0 gap-1.5">
+                              <button
+                                type="button"
+                                className="life-btn life-btn--ghost life-btn--sm"
+                                aria-label={`Remove marker only for AI CSS block ${block.id}`}
+                                onClick={() => handleRemoveMarkerOnly(block.id)}
+                              >
+                                Remove marker only
+                              </button>
+                              <button
+                                type="button"
+                                className="life-btn life-btn--ghost life-btn--sm"
+                                aria-label={`Remove AI CSS block ${block.id}`}
+                                onClick={() => setPendingRemovalId(block.id)}
+                              >
+                                Remove block
+                              </button>
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="life-btn life-btn--ghost life-btn--sm"
+                              aria-label={`Remove AI CSS block ${block.id}`}
+                              onClick={() => handleRemoveStylingBlock(block.id)}
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </div>
+                        {block.broken && pendingRemoval?.id === block.id && (
+                          <div role="alert" className="rounded-[8px] border border-[#fed7aa] bg-[#fff7ed] px-3 py-2 flex flex-col gap-2">
+                            <p className="text-xs font-semibold text-[#9a3412]">This CSS will be removed (the end marker is missing, so the extent is a best guess):</p>
+                            <pre className="text-xs bg-white border border-[var(--life-neutral-200)] rounded-[8px] p-2 max-h-40 overflow-auto whitespace-pre-wrap">{block.css || "(empty)"}</pre>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                className="life-btn life-btn--primary life-btn--sm"
+                                onClick={() => {
+                                  handleRemoveStylingBlock(block.id);
+                                  setPendingRemovalId(null);
+                                }}
+                              >
+                                Remove block
+                              </button>
+                              <button type="button" className="life-btn life-btn--ghost life-btn--sm" onClick={() => setPendingRemovalId(null)}>
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -868,6 +961,8 @@ export function TechnicalSettingPage({
             onDiscard={handleDiscard}
             onSave={handleSave}
             onClose={clearPendingNavigation}
+            stayLabel="Stay"
+            onStay={clearPendingNavigation}
           />
         </>
       )}

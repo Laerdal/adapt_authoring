@@ -1,7 +1,7 @@
 // Marker blocks that let the Custom CSS editor track AI-inserted CSS so each
 // block can be listed and removed individually:
 //
-//   /* samaritan-css:start id=.. component=.. scope=.. fw=.. [class=.. applies=..] */
+//   /* samaritan-css:start id=.. component=.. scope=.. fw=.. [class=..] [applies=<block|article|component|course>] */
 //   ...css...
 //   /* samaritan-css:end id=.. */
 //
@@ -16,7 +16,7 @@ export interface CssBlockMeta {
   fw: string;
   /** Generated reusable utility class this block defines (class-based blocks only). */
   className?: string;
-  /** Level the author was told to add the class to. */
+  /** Level the change applies to (absent on legacy markers). */
   appliesTo?: StylingLevel;
 }
 
@@ -37,6 +37,10 @@ export interface CssBlock extends CssBlockMeta {
   /** Offsets of the whole block (markers included) inside the source text. */
   start: number;
   end: number;
+  /** Offset just after the start marker comment. */
+  markerEnd: number;
+  /** True when the end marker is missing (hand-deleted); extent is a best guess. */
+  broken?: boolean;
 }
 
 export const COMPATIBILITY_WARNING =
@@ -46,6 +50,10 @@ export const COMPATIBILITY_WARNING =
 // with component=<type>). Legacy markers without them still parse.
 const BLOCK_RE =
   /\/\* samaritan-css:start id=(\S+) component=(\S+) scope=(\S+) fw=(\S+)(?: class=(\S+))?(?: applies=(\S+))? \*\/\r?\n?([\s\S]*?)\r?\n?\/\* samaritan-css:end id=\1 \*\//g;
+
+const START_RE = /\/\* samaritan-css:start id=(\S+) component=(\S+) scope=(\S+) fw=(\S+)(?: class=(\S+))?(?: applies=(\S+))? \*\//g;
+const ANY_MARKER_RE = /\/\* samaritan-css:(?:start|end) [^*]*\*\//g;
+const LEVELS = ["block", "article", "component", "course"];
 
 // Marker values are whitespace-delimited tokens; keep them to a safe charset.
 function token(value: string | undefined, fallback: string): string {
@@ -65,11 +73,8 @@ export function wrapBlock(css: string, meta: CssBlockInsertMeta): string {
   // The end marker must not be forgeable from inside the CSS body.
   const body = css.replace(/\/\*\s*samaritan-css:(start|end)[\s\S]*?\*\//g, "").trim();
   const cls = meta.className ? token(meta.className, "") : "";
-  const classPart = cls
-    ? ` class=${cls} applies=${token(meta.appliesTo, "block")}`
-    : meta.appliesTo === "course"
-      ? " applies=course"
-      : "";
+  const applies = meta.appliesTo ? ` applies=${token(meta.appliesTo, "block")}` : "";
+  const classPart = cls ? ` class=${cls}${applies || " applies=block"}` : applies;
   return `/* samaritan-css:start id=${id} component=${component} scope=${meta.scope} fw=${fw}${classPart} */\n${body}\n/* samaritan-css:end id=${id} */`;
 }
 
@@ -80,24 +85,59 @@ export function appendBlock(existing: string, css: string, meta: CssBlockInsertM
   return base ? `${base}\n\n${block}\n` : `${block}\n`;
 }
 
+function appliesOf(value: string | undefined): StylingLevel | undefined {
+  return value && LEVELS.includes(value) ? (value as StylingLevel) : undefined;
+}
+
 export function parseBlocks(text: string): CssBlock[] {
   const blocks: CssBlock[] = [];
   const re = new RegExp(BLOCK_RE.source, "g");
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))) {
+    const applies = appliesOf(m[6]);
     blocks.push({
       id: m[1],
       component: m[2],
       scope: m[3] === "component" ? "component" : "course",
       fw: m[4],
-      ...(m[5] ? { className: m[5], appliesTo: (["block", "article", "component", "course"].includes(m[6]) ? m[6] : "block") as StylingLevel } : {}),
-      ...(!m[5] && m[6] === "course" ? { appliesTo: "course" as StylingLevel } : {}),
+      ...(m[5] ? { className: m[5], appliesTo: applies ?? "block" } : {}),
+      ...(!m[5] && applies ? { appliesTo: applies } : {}),
       css: m[7],
       start: m.index,
       end: m.index + m[0].length,
+      markerEnd: m.index + m[0].indexOf("*/") + 2,
     });
   }
-  return blocks;
+
+  // Orphan start markers (end marker hand-deleted): not inside a complete block.
+  const markers = Array.from(text.matchAll(new RegExp(ANY_MARKER_RE.source, "g"))).map((x) => x.index ?? 0);
+  const starts = new RegExp(START_RE.source, "g");
+  while ((m = starts.exec(text))) {
+    const at = m.index;
+    if (blocks.some((b) => !b.broken && at >= b.start && at < b.end)) continue;
+    const markerEnd = at + m[0].length;
+    let end = text.length;
+    const nextMarker = markers.find((i) => i >= markerEnd);
+    if (nextMarker !== undefined) end = Math.min(end, nextMarker);
+    const blank = /\r?\n[ \t]*\r?\n/.exec(text.slice(markerEnd));
+    if (blank) end = Math.min(end, markerEnd + blank.index);
+    const body = text.slice(markerEnd, end);
+    const applies = appliesOf(m[6]);
+    blocks.push({
+      id: m[1],
+      component: m[2],
+      scope: m[3] === "component" ? "component" : "course",
+      fw: m[4],
+      ...(m[5] ? { className: m[5], appliesTo: applies ?? "block" } : {}),
+      ...(!m[5] && applies ? { appliesTo: applies } : {}),
+      css: body.replace(/^\r?\n/, "").replace(/\s+$/, ""),
+      start: at,
+      end: markerEnd + body.replace(/\s+$/, "").length,
+      markerEnd,
+      broken: true,
+    });
+  }
+  return blocks.sort((a, b) => a.start - b.start);
 }
 
 /** Removes one marker block (and the blank line it leaves behind). No-op if the id is absent. */
@@ -109,4 +149,11 @@ export function removeBlock(text: string, id: string): string {
   if (!before) return after;
   if (!after) return `${before}\n`;
   return `${before}\n\n${after}`;
+}
+
+/** For a damaged block (missing end marker): removes ONLY the start marker comment, keeping the CSS. */
+export function removeMarkerOnly(text: string, id: string): string {
+  const block = parseBlocks(text).find((b) => b.id === id && b.broken);
+  if (!block) return text;
+  return text.slice(0, block.start) + text.slice(block.markerEnd).replace(/^[ \t]*\r?\n/, "");
 }

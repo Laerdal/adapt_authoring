@@ -4,13 +4,19 @@ import { getAvailableComponents } from "../../api/adaptAuthoring";
 import {
   STYLING_APPLIES_TO,
   STYLING_COURSE_TARGETS,
-  classInstruction,
+  courseAlertText,
+  courseChangeHint,
   courseInstruction,
   courseScopeLabel,
   courseTargetLabel,
+  existingClassSelector,
+  friendlyStylingError,
+  insertClassSummary,
   levelLabel,
   reportStylingOutcome,
   resolveStyling,
+  scopeOfChangeText,
+  targetComponentText,
   type StylingAppliesTo,
   type StylingEnvironment,
   type StylingResolveResponse,
@@ -74,6 +80,16 @@ function Sources({ result }: { result: StylingResolveResponse }) {
         ))}
       </ul>
     </details>
+  );
+}
+
+/** A labelled read-only field ("Target component", "Class name", ...). */
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-wrap gap-x-2 text-sm text-[var(--life-neutral-850)]">
+      <dt className="font-semibold">{label}:</dt>
+      <dd>{children}</dd>
+    </div>
   );
 }
 
@@ -183,7 +199,7 @@ export function StylingHelpPanel({ courseId, currentCss, onClose, onInsertCss, o
         })
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Styling help is unavailable right now.");
+      setError(friendlyStylingError(e));
     } finally {
       setLoading(false);
     }
@@ -205,7 +221,8 @@ export function StylingHelpPanel({ courseId, currentCss, onClose, onInsertCss, o
       css: result.css,
       // Whole-course CSS is course-wide by definition; only the class-level fallback is marked "component".
       scope: result.usesDirectSelectors && result.appliesTo !== "course" ? "component" : "course",
-      component: result.targetComponent,
+      // Component-level and whole-course CSS record the chosen component in the marker.
+      component: result.targetComponent ?? ((appliesTo === "component" || appliesTo === "course") && component ? component : undefined),
       frameworkVersion: env.frameworkVersion,
       className: result.generatedClassName,
       appliesTo: result.appliesTo,
@@ -337,7 +354,7 @@ export function StylingHelpPanel({ courseId, currentCss, onClose, onInsertCss, o
           </div>
           {appliesTo === "course" ? (
             <p className="text-xs text-[#9a3412]">
-              Whole-course changes affect every {courseTargetLabel(component || undefined)} in this course and use custom CSS that may need review after framework updates.
+              {courseChangeHint(component || undefined)}
             </p>
           ) : (
             <p className="text-xs text-[var(--life-neutral-600)]">
@@ -401,7 +418,7 @@ export function StylingHelpPanel({ courseId, currentCss, onClose, onInsertCss, o
             <p className="text-sm text-[var(--life-neutral-850)]">{result.explanation}</p>
             {result.existingClass.effect && (
               <pre className="text-xs bg-white border border-[var(--life-neutral-200)] rounded-[8px] p-3 overflow-x-auto whitespace-pre-wrap">
-                {`.${result.reusedClassName} { ${result.existingClass.effect} }`}
+                {`${existingClassSelector(result.existingClass)} { ${result.existingClass.effect} }`}
               </pre>
             )}
             <ClassInstruction
@@ -426,6 +443,15 @@ export function StylingHelpPanel({ courseId, currentCss, onClose, onInsertCss, o
             tone="css"
           >
             <p className="text-sm text-[var(--life-neutral-850)]">{result.explanation}</p>
+            <dl className="flex flex-col gap-0.5">
+              <Field label="Target component">{targetComponentText(result.appliesTo, result.targetComponent)}</Field>
+              <Field label="Scope of change">{scopeOfChangeText(result.appliesTo, result.targetComponent, result.usesDirectSelectors)}</Field>
+              {result.generatedClassName && (
+                <Field label="Class name">
+                  <code className="font-mono font-semibold">{result.generatedClassName}</code>
+                </Field>
+              )}
+            </dl>
             {result.generatedClassName && (
               <ClassInstruction
                 className={result.generatedClassName}
@@ -439,7 +465,7 @@ export function StylingHelpPanel({ courseId, currentCss, onClose, onInsertCss, o
                 <p className="text-sm text-[var(--life-neutral-850)] font-semibold">{courseInstruction(result.targetComponent)}</p>
                 <div role="alert" className="rounded-[8px] border-2 border-[#ea580c] bg-[#ffedd5] px-3 py-2 flex flex-col gap-1">
                   <p className="text-sm font-bold text-[#9a3412]">
-                    Whole-course change: this affects every {courseTargetLabel(result.targetComponent)} in the course.
+                    {courseAlertText(result.targetComponent)}
                   </p>
                   <p className="text-sm text-[#9a3412]">
                     It targets framework class names directly, so it is more fragile than a class. {result.compatibilityWarning ?? COMPATIBILITY_WARNING}
@@ -452,13 +478,21 @@ export function StylingHelpPanel({ courseId, currentCss, onClose, onInsertCss, o
                 Fallback: a class could not express this change, so the CSS targets the {result.targetComponent ?? "component"} component directly. It affects every one of them in the course and no class is needed.
               </p>
             )}
-            <pre className="text-xs bg-white border border-[var(--life-neutral-200)] rounded-[8px] p-3 overflow-x-auto whitespace-pre-wrap">{result.css}</pre>
+            <p id="styling-suggested-css-label" className="text-sm font-semibold text-[var(--life-neutral-850)]">
+              Suggested CSS
+            </p>
+            <pre aria-labelledby="styling-suggested-css-label" className="text-xs bg-white border border-[var(--life-neutral-200)] rounded-[8px] p-3 overflow-x-auto whitespace-pre-wrap">{result.css}</pre>
             {!isGlobal && <p className="text-sm text-[#9a3412]">{COMPATIBILITY_WARNING}</p>}
             {inserted ? (
               <>
                 <p role="status" className="text-sm text-[var(--life-neutral-850)] font-semibold">
                   Inserted into the Custom CSS editor below. Save your changes to keep it.
-                  {result.generatedClassName ? ` Then add \`${result.generatedClassName}\` to the ${levelLabel(result.appliesTo)}.` : ""}
+                  {result.generatedClassName && (
+                    <>
+                      {" "}
+                      Then add <code className="font-mono">{result.generatedClassName}</code> to the {levelLabel(result.appliesTo === "course" ? "component" : result.appliesTo)}.
+                    </>
+                  )}
                 </p>
                 <div>
                   <Button variant="secondary" onClick={onClose}>
@@ -469,7 +503,7 @@ export function StylingHelpPanel({ courseId, currentCss, onClose, onInsertCss, o
             ) : (
               <>
                 <div className="flex flex-wrap gap-2">
-                  <Button onClick={insert}>{result.generatedClassName ? "Insert class definition" : "Insert CSS"}</Button>
+                  <Button onClick={insert}>Insert CSS</Button>
                   <Button variant="secondary" onClick={copy}>
                     {copied ? "Copied" : "Copy CSS"}
                   </Button>
@@ -479,7 +513,7 @@ export function StylingHelpPanel({ courseId, currentCss, onClose, onInsertCss, o
                 </div>
                 <p className="text-xs text-[var(--life-neutral-600)]">
                   {result.generatedClassName
-                    ? `Insert adds the class definition (course-wide) to the editor below. ${classInstruction(result.generatedClassName, result.appliesTo)} Nothing is saved until you save your changes.`
+                    ? `${insertClassSummary(result.appliesTo)} Nothing is saved until you save your changes.`
                     : isGlobal
                       ? `Insert adds this whole-course CSS (${courseScopeLabel(result.targetComponent)}) to the editor below. No class is needed. Nothing is saved until you save your changes.`
                       : "Insert adds the CSS to the editor below. Nothing is saved until you save your changes."}

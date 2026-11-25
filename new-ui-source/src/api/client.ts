@@ -5,6 +5,7 @@
 
 import { API_BASE_URL } from "@/utils/constants";
 import { redirectToLogin } from "@/utils/authRedirect";
+import { saveDraftsToSession } from "@/helpers/draftStore";
 
 export interface RequestOptions extends RequestInit {
   headers?: Record<string, string>;
@@ -42,6 +43,8 @@ class ApiClient {
         // with any other concurrent caller (e.g. AuthContext's initial check)
         // into a single redirect, so this is safe to call unconditionally.
         if (response.status === 401) {
+          // Keep unsaved drafts (e.g. Custom CSS) so the page can restore them after login.
+          saveDraftsToSession();
           redirectToLogin("Your session has expired. Please log in again.");
         }
         const error = await response.json().catch(() => ({ message: response.statusText }));
