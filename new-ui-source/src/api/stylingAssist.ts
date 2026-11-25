@@ -48,6 +48,8 @@ export interface StylingExistingClass {
   effect?: string;
   /** Levels the class works at; absent when it works at any level. */
   levels?: StylingClassLevel[];
+  /** Full compiled selectors for the class (e.g. ".block._bluelight"). */
+  selectors?: string[];
   responsive?: boolean;
 }
 
@@ -92,7 +94,7 @@ export type StylingResolveResponse =
       /** Always present for course-scope CSS (framework-update review warning). */
       compatibilityWarning?: string;
     })
-  | (StylingResultBase & { resolutionType: "no_solution"; status: "NO_SOLUTION"; notes?: string[] });
+  | (StylingResultBase & { resolutionType: "no_solution"; status: "NO_SOLUTION" });
 
 interface Envelope<T> {
   success: boolean;
@@ -112,9 +114,61 @@ export function courseTargetLabel(key?: string): string {
   return STYLING_COURSE_TARGETS.find((t) => t.key === key)?.label ?? key;
 }
 
-/** "Whole course (all Accordion)" - the Apply to option / block description. */
+/** "Whole course" - the Apply to option; with a chosen component it names it: "Whole course (all Accordion)". */
 export function courseScopeLabel(key?: string): string {
-  return key ? `Whole course (all ${courseTargetLabel(key)})` : "Whole course (all <component>)";
+  return key ? `Whole course (all ${courseTargetLabel(key)})` : "Whole course";
+}
+
+/** Pre-request hint for whole-course changes (names the component only when one is chosen). */
+export function courseChangeHint(key?: string): string {
+  const what = key ? `every ${courseTargetLabel(key)}` : "every component Samaritan picks from your request";
+  return `Whole-course changes affect ${what} in this course and use custom CSS that may need review after framework updates.`;
+}
+
+/** Bold alert shown with whole-course CSS. */
+export function courseAlertText(key?: string): string {
+  return `Whole-course change: this affects every ${key ? courseTargetLabel(key) : "matching component"} in the course.`;
+}
+
+/** Full selector to show for a reused class (first compiled selector, else ".name"). */
+export function existingClassSelector(ex: { name: string; selectors?: string[] }): string {
+  return ex.selectors && ex.selectors.length ? ex.selectors[0] : `.${ex.name}`;
+}
+
+/** Level-aware text for what "Insert" does with a class definition (the class styles only where it is added). */
+export function insertClassSummary(level: StylingAppliesTo): string {
+  const target = levelLabel(level === "course" ? "component" : level).toLowerCase();
+  return `Insert adds the class definition to the editor below. The class only styles a ${target} once you add it to that ${target}.`;
+}
+
+/** What the "Scope of change" field shows. */
+export function scopeOfChangeText(level: StylingAppliesTo, targetComponent?: string): string {
+  if (level === "course") return `${courseScopeLabel(targetComponent)} - every instance in the course`;
+  const target = levelLabel(level).toLowerCase();
+  return `${levelLabel(level)} - only a ${target} you add the class to`;
+}
+
+/** What the "Target component" field shows. */
+export function targetComponentText(level: StylingAppliesTo, targetComponent?: string): string {
+  if (targetComponent) return courseTargetLabel(targetComponent);
+  return level === "component" || level === "course" ? "Any component" : "Not component-specific";
+}
+
+const MSG_UNREACHABLE = "Samaritan could not be reached. Check your connection and try again.";
+const MSG_BUSY = "Samaritan is busy right now. Please try again in a moment.";
+
+/** Friendly text for an error from the styling-assist call; never exposes raw transport/upstream strings. */
+export function friendlyStylingError(e: unknown): string {
+  const status = (e as { status?: number } | null)?.status;
+  const raw = e instanceof Error ? e.message : "";
+  if (status === 400) return raw || "Please check your request and try again.";
+  if (status === 401) return "Your session has expired. Please log in again.";
+  if (status === 403 || status === 404) return "This course could not be found or you do not have access.";
+  if (status === 501) return "Samaritan is not set up on this server.";
+  if (typeof status === "number" && status >= 500) return MSG_BUSY;
+  if (e instanceof TypeError || /failed to fetch|networkerror|network request failed|load failed/i.test(raw)) return MSG_UNREACHABLE;
+  if (/timeout|timed out|abort|azure|openai/i.test(raw)) return MSG_BUSY;
+  return raw || "Styling help is unavailable right now.";
 }
 
 /** Course-scope CSS needs no class: it applies to every instance. */
@@ -125,7 +179,7 @@ export function courseInstruction(key?: string): string {
 /** The author-facing instruction. Studio never edits _classes itself. */
 export function classInstruction(className: string, level: StylingAppliesTo): string {
   // A class is only ever added to a Block, Article or Component; reusing one for "course" means a component.
-  return `Add class \`${className}\` to the ${levelLabel(level === "course" ? "component" : level)} in its Classes field.`;
+  return `Add class ${className} to the ${levelLabel(level === "course" ? "component" : level)} in its Classes field.`;
 }
 
 /** Cap on the editor CSS sent for reuse detection (the server caps at the same size). */
