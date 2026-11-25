@@ -28,7 +28,8 @@ export function saveDraftsToSession(): void {
   for (const getter of Array.from(getters)) {
     try {
       const draft = getter();
-      if (draft && draft.courseId && draft.value) sessionStorage.setItem(storageKey(draft.courseId, draft.key), draft.value);
+      // An empty string is a real draft (the author deleted all the CSS), so only skip non-strings.
+      if (draft && draft.courseId && typeof draft.value === "string") sessionStorage.setItem(storageKey(draft.courseId, draft.key), draft.value);
     } catch {
       // storage unavailable - nothing more we can do
     }

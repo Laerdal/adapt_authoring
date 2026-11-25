@@ -445,7 +445,7 @@ export function StylingHelpPanel({ courseId, currentCss, onClose, onInsertCss, o
             <p className="text-sm text-[var(--life-neutral-850)]">{result.explanation}</p>
             <dl className="flex flex-col gap-0.5">
               <Field label="Target component">{targetComponentText(result.appliesTo, result.targetComponent)}</Field>
-              <Field label="Scope of change">{scopeOfChangeText(result.appliesTo, result.targetComponent)}</Field>
+              <Field label="Scope of change">{scopeOfChangeText(result.appliesTo, result.targetComponent, result.usesDirectSelectors)}</Field>
               {result.generatedClassName && (
                 <Field label="Class name">
                   <code className="font-mono font-semibold">{result.generatedClassName}</code>

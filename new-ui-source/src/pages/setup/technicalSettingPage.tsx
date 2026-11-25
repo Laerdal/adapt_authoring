@@ -432,6 +432,10 @@ export function TechnicalSettingPage({
       return;
     }
 
+    // Ignore a load that was superseded (React StrictMode runs effects twice in development): a stale load
+    // must not consume the restored draft or overwrite state.
+    let cancelled = false;
+
     const loadSettings = async () => {
       console.log("[TechnicalSettings] Loading settings for courseId:", courseId);
       try {
@@ -440,6 +444,7 @@ export function TechnicalSettingPage({
           getCourseTechnicalSettings(courseId),
           getCourseCstyle(courseId),
         ]);
+        if (cancelled) return;
         console.log("[TechnicalSettings] DB config:", config, "customStyle length:", style?.length);
 
         if (config._id) setConfigId(config._id);
@@ -495,13 +500,17 @@ export function TechnicalSettingPage({
           supportedBrowsersOverride: config.build?.targets ?? "",
         });
       } catch (err) {
+        if (cancelled) return;
         console.error("Failed to load technical settings", err);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     };
 
     loadSettings();
+    return () => {
+      cancelled = true;
+    };
   }, [courseId]);
 
   useEffect(() => {

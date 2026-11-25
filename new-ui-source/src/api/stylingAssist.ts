@@ -142,8 +142,9 @@ export function insertClassSummary(level: StylingAppliesTo): string {
 }
 
 /** What the "Scope of change" field shows. */
-export function scopeOfChangeText(level: StylingAppliesTo, targetComponent?: string): string {
-  if (level === "course") return `${courseScopeLabel(targetComponent)} - every instance in the course`;
+export function scopeOfChangeText(level: StylingAppliesTo, targetComponent?: string, usesDirectSelectors = false): string {
+  // Direct selectors reach every instance of the component type, whatever level was chosen.
+  if (level === "course" || usesDirectSelectors) return `${courseScopeLabel(targetComponent)} - every instance in the course`;
   const target = levelLabel(level).toLowerCase();
   return `${levelLabel(level)} - only a ${target} you add the class to`;
 }
