@@ -59,6 +59,36 @@ export interface GlobalOnScreenConfig {
   _levels?: Partial<Record<OnScreenLevel, GlobalOnScreenLevelConfig>>;
 }
 
+// Values the editor should DISPLAY (and use as the base for edits) for one
+// item. When the item has no local class and the theme default for its level
+// applies, the theme default is returned as the effective setting so the
+// author sees it, can disable it or change it. Edits made against these values
+// are persisted as an explicit local override (non-empty local `_classes`
+// always wins in theme.js resolveOnScreen(), including `_isEnabled: false`).
+export function getEffectiveOnScreen(
+  global: GlobalOnScreenConfig | undefined,
+  local: OnScreenSettings | undefined,
+  level: OnScreenLevel
+): OnScreenSettings & { inherited: boolean } {
+  const info = resolveOnScreenInheritance(global, local?._classes, level);
+  if (info.state === "inherited") {
+    const percent = global?._levels?.[level]?._percentInviewVertical;
+    return {
+      _isEnabled: true,
+      _classes: info.classes,
+      _percentInviewVertical: typeof percent === "number" ? percent : 50,
+      inherited: true,
+    };
+  }
+  return { ...(local ?? {}), inherited: false };
+}
+
+export function toLocalOnScreen(effective: OnScreenSettings & { inherited?: boolean }): OnScreenSettings {
+  const { inherited: _inherited, ...rest } = effective;
+  void _inherited;
+  return rest;
+}
+
 export type OnScreenInheritance =
   | { state: "overridden"; classes: string; inheritedClasses: string }
   | { state: "local"; classes: string }

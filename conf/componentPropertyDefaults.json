@@ -1681,6 +1681,8 @@
     "title": "Enter title",
     "displayTitle": "Enter title",
     "body": "<p>Enter description here</p>",
+    "properties._animation._transitionDuration": 2000,
+    "properties._animation._percentInView": 30,
     "properties._characters": [
       {
         "name": "Avatar1",
