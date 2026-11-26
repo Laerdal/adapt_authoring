@@ -107,7 +107,7 @@ import {
 } from "../../constants/structureDefaults";
 import { useAuth } from "../../context/AuthContext";
 import { getSchemaHint, getSchemaLabel, getSchemaNode } from "../../helpers/setupInfoSchema";
-import { ON_SCREEN_CLASS_LABELS, getOnScreenClassLabel, getOnScreenClassOptions, resolveOnScreenInheritance, serializeOnScreenSettings, type GlobalOnScreenConfig, type OnScreenLevel, type OnScreenSettings } from "../../helpers/onScreenSettings";
+import { ON_SCREEN_CLASS_LABELS, getEffectiveOnScreen, toLocalOnScreen, getOnScreenClassLabel, getOnScreenClassOptions, resolveOnScreenInheritance, serializeOnScreenSettings, type GlobalOnScreenConfig, type OnScreenLevel, type OnScreenSettings } from "../../helpers/onScreenSettings";
 
 interface PreviewBuildResponse {
   success?: boolean;
@@ -3465,6 +3465,16 @@ export default function CourseEditor({
     // are corrected exactly once per course load, not on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId]);
+
+  // Effective on-screen values for one item: the theme default for its level
+  // when the item has no local class, otherwise the item's own settings.
+  // Edits are applied on top of these and saved as a local override.
+  const effOnScreen = (level: OnScreenLevel, local?: OnScreenSettings) =>
+    getEffectiveOnScreen(courseOnScreenDefaults, local, level);
+  const withOnScreen = (level: OnScreenLevel, local: OnScreenSettings | undefined, patch: OnScreenSettings): OnScreenSettings => ({
+    ...toLocalOnScreen(effOnScreen(level, local)),
+    ...patch,
+  });
 
   const [menuPageCreated, setMenuPageCreated] = useState(false);
   const [menuSelected, setMenuSelected] = useState(false);
@@ -13384,21 +13394,18 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                               <TopicCheckbox
                                 label={getSchemaLabel(getContentFieldSchema("contentobject", "_onScreen", "_isEnabled"), "Enabled?")}
                                 hint={getSchemaHint(getContentFieldSchema("contentobject", "_onScreen", "_isEnabled"))}
-                                checked={asBoolean(page.onScreen?._isEnabled)}
-                                onChange={(checked) => updatePageData(page.id, { onScreen: { ...page.onScreen, _isEnabled: checked } })}
+                                checked={asBoolean(effOnScreen("page", page.onScreen)._isEnabled)}
+                                onChange={(checked) => updatePageData(page.id, { onScreen: withOnScreen("page", page.onScreen, { _isEnabled: checked }) })}
                               />
                               <div className="space-y-3">
                                 <TopicSelect
                                   label={getSchemaLabel(getContentFieldSchema("contentobject", "_onScreen", "_classes"), "Classes")}
                                   hint={getSchemaHint(getContentFieldSchema("contentobject", "_onScreen", "_classes"))}
-                                  value={asString(page.onScreen?._classes)}
+                                  value={asString(effOnScreen("page", page.onScreen)._classes)}
                                   onChange={(value) => updatePageData(page.id, {
-                                    onScreen: {
-                                      ...(page.onScreen ?? {}),
-                                      _classes: value,
-                                    },
+                                    onScreen: withOnScreen("page", page.onScreen, { _classes: value }),
                                   })}
-                                  options={getOnScreenClassOptions(courseTheme, page.onScreen?._classes)}
+                                  options={getOnScreenClassOptions(courseTheme, effOnScreen("page", page.onScreen)._classes)}
                                   optionLabels={ON_SCREEN_CLASS_LABELS}
                                   emptyOptionLabel=""
                                 />
@@ -13407,12 +13414,9 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                   label={getSchemaLabel(getContentFieldSchema("contentobject", "_onScreen", "_percentInviewVertical"), "Percent in view")}
                                   hint={getSchemaHint(getContentFieldSchema("contentobject", "_onScreen", "_percentInviewVertical"))}
                                   type="number"
-                                  value={String(asNumberOrEmpty(page.onScreen?._percentInviewVertical))}
+                                  value={String(asNumberOrEmpty(effOnScreen("page", page.onScreen)._percentInviewVertical))}
                                   onChange={(value) => updatePageData(page.id, {
-                                    onScreen: {
-                                      ...(page.onScreen ?? {}),
-                                      _percentInviewVertical: parseNumberishInput(value),
-                                    },
+                                    onScreen: withOnScreen("page", page.onScreen, { _percentInviewVertical: parseNumberishInput(value) }),
                                   })}
                                 />
                               </div>
@@ -13640,16 +13644,16 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                   <TopicCheckbox
                                     label={getSchemaLabel(getContentFieldSchema("article", "_onScreen", "_isEnabled"), "Enabled?")}
                                     hint={getSchemaHint(getContentFieldSchema("article", "_onScreen", "_isEnabled"))}
-                                    checked={asBoolean(article.onScreen?._isEnabled)}
-                                    onChange={(checked) => updateArticle(page!.id, article.id, { onScreen: { ...article.onScreen, _isEnabled: checked } })}
+                                    checked={asBoolean(effOnScreen("article", article.onScreen)._isEnabled)}
+                                    onChange={(checked) => updateArticle(page!.id, article.id, { onScreen: withOnScreen("article", article.onScreen, { _isEnabled: checked }) })}
                                   />
                                   <div className="space-y-3">
                                     <TopicSelect
                                       label={getSchemaLabel(getContentFieldSchema("article", "_onScreen", "_classes"), "Classes")}
                                       hint={getSchemaHint(getContentFieldSchema("article", "_onScreen", "_classes"))}
-                                      value={asString(article.onScreen?._classes)}
-                                      onChange={(value) => updateArticle(page!.id, article.id, { onScreen: { ...(article.onScreen ?? {}), _classes: value } })}
-                                      options={getOnScreenClassOptions(courseTheme, article.onScreen?._classes)}
+                                      value={asString(effOnScreen("article", article.onScreen)._classes)}
+                                      onChange={(value) => updateArticle(page!.id, article.id, { onScreen: withOnScreen("article", article.onScreen, { _classes: value }) })}
+                                      options={getOnScreenClassOptions(courseTheme, effOnScreen("article", article.onScreen)._classes)}
                                       optionLabels={ON_SCREEN_CLASS_LABELS}
                                       emptyOptionLabel=""
                                     />
@@ -13658,8 +13662,8 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                       label={getSchemaLabel(getContentFieldSchema("article", "_onScreen", "_percentInviewVertical"), "Percent in view")}
                                       hint={getSchemaHint(getContentFieldSchema("article", "_onScreen", "_percentInviewVertical"))}
                                       type="number"
-                                      value={String(asNumberOrEmpty(article.onScreen?._percentInviewVertical))}
-                                      onChange={(value) => updateArticle(page!.id, article.id, { onScreen: { ...(article.onScreen ?? {}), _percentInviewVertical: parseNumberishInput(value) } })}
+                                      value={String(asNumberOrEmpty(effOnScreen("article", article.onScreen)._percentInviewVertical))}
+                                      onChange={(value) => updateArticle(page!.id, article.id, { onScreen: withOnScreen("article", article.onScreen, { _percentInviewVertical: parseNumberishInput(value) }) })}
                                     />
                                   </div>
                                 </TopicNestedAccordion>
@@ -13881,16 +13885,16 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                   <TopicCheckbox
                                     label={getSchemaLabel(getContentFieldSchema("block", "_onScreen", "_isEnabled"), "Enabled?")}
                                     hint={getSchemaHint(getContentFieldSchema("block", "_onScreen", "_isEnabled"))}
-                                    checked={asBoolean(block.onScreen?._isEnabled)}
-                                    onChange={(checked) => updateBlock(page!.id, article!.id, block.id, { onScreen: { ...block.onScreen, _isEnabled: checked } })}
+                                    checked={asBoolean(effOnScreen("block", block.onScreen)._isEnabled)}
+                                    onChange={(checked) => updateBlock(page!.id, article!.id, block.id, { onScreen: withOnScreen("block", block.onScreen, { _isEnabled: checked }) })}
                                   />
                                   <div className="space-y-3">
                                     <TopicSelect
                                       label={getSchemaLabel(getContentFieldSchema("block", "_onScreen", "_classes"), "Classes")}
                                       hint={getSchemaHint(getContentFieldSchema("block", "_onScreen", "_classes"))}
-                                      value={asString(block.onScreen?._classes)}
-                                      onChange={(value) => updateBlock(page!.id, article!.id, block.id, { onScreen: { ...(block.onScreen ?? {}), _classes: value } })}
-                                      options={getOnScreenClassOptions(courseTheme, block.onScreen?._classes)}
+                                      value={asString(effOnScreen("block", block.onScreen)._classes)}
+                                      onChange={(value) => updateBlock(page!.id, article!.id, block.id, { onScreen: withOnScreen("block", block.onScreen, { _classes: value }) })}
+                                      options={getOnScreenClassOptions(courseTheme, effOnScreen("block", block.onScreen)._classes)}
                                       optionLabels={ON_SCREEN_CLASS_LABELS}
                                       emptyOptionLabel=""
                                     />
@@ -13899,8 +13903,8 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                       label={getSchemaLabel(getContentFieldSchema("block", "_onScreen", "_percentInviewVertical"), "Percent in view")}
                                       hint={getSchemaHint(getContentFieldSchema("block", "_onScreen", "_percentInviewVertical"))}
                                       type="number"
-                                      value={String(asNumberOrEmpty(block.onScreen?._percentInviewVertical))}
-                                      onChange={(value) => updateBlock(page!.id, article!.id, block.id, { onScreen: { ...(block.onScreen ?? {}), _percentInviewVertical: parseNumberishInput(value) } })}
+                                      value={String(asNumberOrEmpty(effOnScreen("block", block.onScreen)._percentInviewVertical))}
+                                      onChange={(value) => updateBlock(page!.id, article!.id, block.id, { onScreen: withOnScreen("block", block.onScreen, { _percentInviewVertical: parseNumberishInput(value) }) })}
                                     />
                                   </div>
                                 </TopicNestedAccordion>
@@ -14108,16 +14112,16 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                   <TopicCheckbox
                                     label={getSchemaLabel(getContentFieldSchema("component", "_onScreen", "_isEnabled"), "Enabled?")}
                                     hint={getSchemaHint(getContentFieldSchema("component", "_onScreen", "_isEnabled"))}
-                                    checked={asBoolean(component.onScreen?._isEnabled)}
-                                    onChange={(checked) => updateComponent(page.id, article.id, block.id, component.id, { onScreen: { ...component.onScreen, _isEnabled: checked } })}
+                                    checked={asBoolean(effOnScreen("component", component.onScreen)._isEnabled)}
+                                    onChange={(checked) => updateComponent(page.id, article.id, block.id, component.id, { onScreen: withOnScreen("component", component.onScreen, { _isEnabled: checked }) })}
                                   />
                                   <div className="space-y-3">
                                     <TopicSelect
                                       label={getSchemaLabel(getContentFieldSchema("component", "_onScreen", "_classes"), "Classes")}
                                       hint={getSchemaHint(getContentFieldSchema("component", "_onScreen", "_classes"))}
-                                      value={asString(component.onScreen?._classes)}
-                                      onChange={(value) => updateComponent(page.id, article.id, block.id, component.id, { onScreen: { ...(component.onScreen ?? {}), _classes: value } })}
-                                      options={getOnScreenClassOptions(courseTheme, component.onScreen?._classes)}
+                                      value={asString(effOnScreen("component", component.onScreen)._classes)}
+                                      onChange={(value) => updateComponent(page.id, article.id, block.id, component.id, { onScreen: withOnScreen("component", component.onScreen, { _classes: value }) })}
+                                      options={getOnScreenClassOptions(courseTheme, effOnScreen("component", component.onScreen)._classes)}
                                       optionLabels={ON_SCREEN_CLASS_LABELS}
                                       emptyOptionLabel=""
                                     />
@@ -14126,8 +14130,8 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                       label={getSchemaLabel(getContentFieldSchema("component", "_onScreen", "_percentInviewVertical"), "Percent in view")}
                                       hint={getSchemaHint(getContentFieldSchema("component", "_onScreen", "_percentInviewVertical"))}
                                       type="number"
-                                      value={String(asNumberOrEmpty(component.onScreen?._percentInviewVertical))}
-                                      onChange={(value) => updateComponent(page.id, article.id, block.id, component.id, { onScreen: { ...(component.onScreen ?? {}), _percentInviewVertical: parseNumberishInput(value) } })}
+                                      value={String(asNumberOrEmpty(effOnScreen("component", component.onScreen)._percentInviewVertical))}
+                                      onChange={(value) => updateComponent(page.id, article.id, block.id, component.id, { onScreen: withOnScreen("component", component.onScreen, { _percentInviewVertical: parseNumberishInput(value) }) })}
                                     />
                                   </div>
                                 </TopicNestedAccordion>
