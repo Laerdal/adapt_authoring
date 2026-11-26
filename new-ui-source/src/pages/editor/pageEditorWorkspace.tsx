@@ -13954,6 +13954,8 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                           const componentProperties = asRecord(component.settings.properties);
                           const behaviourSchema = componentBehaviourSchemas[(component.settings.componentKey || "").toLowerCase()];
                           const isCopied = copiedComponentId === component.id;
+                          const isTalkComponent = (component.settings.componentKey || "").toLowerCase() === "talk";
+                          const talkAnimation = asRecord(componentProperties._animation);
 
                           return (
                             <div className="flex flex-col gap-2.5">
@@ -14017,7 +14019,7 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                   const fieldKeys = filterVisibleBehaviourFieldKeys(
                                     Object.keys(behaviourSchema).filter((key) => {
                                       const fieldSchema = behaviourSchema[key] as BehaviourFieldSchema;
-                                      return fieldSchema && !fieldSchema.editorOnly && !COMPONENT_BEHAVIOUR_EXCLUDED_FIELDS.has(key);
+                                      return fieldSchema && !fieldSchema.editorOnly && !COMPONENT_BEHAVIOUR_EXCLUDED_FIELDS.has(key) && !(isTalkComponent && key === "_animation");
                                     }),
                                     componentBehaviourContext
                                   );
@@ -14135,6 +14137,30 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                     />
                                   </div>
                                 </TopicNestedAccordion>
+                                {isTalkComponent && (
+                                  <TopicNestedAccordion title="Animation">
+                                    <TopicTextInput
+                                      label="Transition duration (ms)"
+                                      hint="Length in milliseconds of the animation that brings each message into view."
+                                      type="number"
+                                      value={String(asNumberOrEmpty(talkAnimation._transitionDuration ?? 2000))}
+                                      onChange={(value) => {
+                                        const parsed = parseNumberishInput(value);
+                                        updateComponentBehaviourProperty(page.id, article.id, block.id, component.id, "_animation._transitionDuration", parsed === "" ? 2000 : Math.max(0, parsed));
+                                      }}
+                                    />
+                                    <TopicTextInput
+                                      label="Percent in view"
+                                      hint="Percentage (0-100) of a message that must be in view before it animates in."
+                                      type="number"
+                                      value={String(asNumberOrEmpty(talkAnimation._percentInView ?? 30))}
+                                      onChange={(value) => {
+                                        const parsed = parseNumberishInput(value);
+                                        updateComponentBehaviourProperty(page.id, article.id, block.id, component.id, "_animation._percentInView", parsed === "" ? 30 : Math.min(100, Math.max(0, parsed)));
+                                      }}
+                                    />
+                                  </TopicNestedAccordion>
+                                )}
                               </TopicAccordion>
 
                               <TopicAccordion title="Advanced Settings" open={!!openComponentAccordions.advanced} onToggle={(triggerEl) => toggleComponentAccordion("advanced", triggerEl)}>
