@@ -14146,7 +14146,7 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                       value={String(asNumberOrEmpty(talkAnimation._transitionDuration ?? 2000))}
                                       onChange={(value) => {
                                         const parsed = parseNumberishInput(value);
-                                        updateComponentBehaviourProperty(page.id, article.id, block.id, component.id, "_animation._transitionDuration", parsed === "" ? 2000 : Math.max(0, parsed));
+                                        updateComponentBehaviourProperty(page.id, article.id, block.id, component.id, "_animation._transitionDuration", parsed === "" ? "" : Math.max(0, parsed));
                                       }}
                                     />
                                     <TopicTextInput
@@ -14156,7 +14156,7 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                       value={String(asNumberOrEmpty(talkAnimation._percentInView ?? 30))}
                                       onChange={(value) => {
                                         const parsed = parseNumberishInput(value);
-                                        updateComponentBehaviourProperty(page.id, article.id, block.id, component.id, "_animation._percentInView", parsed === "" ? 30 : Math.min(100, Math.max(0, parsed)));
+                                        updateComponentBehaviourProperty(page.id, article.id, block.id, component.id, "_animation._percentInView", parsed === "" ? "" : Math.min(100, Math.max(0, parsed)));
                                       }}
                                     />
                                   </TopicNestedAccordion>
